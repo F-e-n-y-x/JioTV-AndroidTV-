@@ -1,4 +1,4 @@
-# JTV (Android TV Client)
+# JioTV (Android TV Client)
 
 A highly optimized, lightweight Live TV streaming application specifically designed for Android TV and Android boxes (including low-end Amlogic chipsets).
 
@@ -32,6 +32,12 @@ You can sideload the app on your Android TV:
 adb connect <YOUR_TV_IP>
 adb install -r app-debug.apk
 ```
+
+## Credits & Acknowledgements
+
+This project was built with reference to and inspiration from the following open-source projects:
+- [dineshintry/plugin.kodi.jiotv](https://github.com/dineshintry/plugin.kodi.jiotv)
+- [JioTV-Go/jiotv_go](https://github.com/JioTV-Go/jiotv_go)
 
 ## Disclaimer
 
