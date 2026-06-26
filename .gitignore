@@ -14,3 +14,8 @@
 .cxx
 local.properties
 *.apk
+
+# Release signing — keep secrets out of version control
+keystore.properties
+*.keystore
+*.jks

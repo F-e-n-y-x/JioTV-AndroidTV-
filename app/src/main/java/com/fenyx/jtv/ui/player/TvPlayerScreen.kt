@@ -1,15 +1,6 @@
 package com.fenyx.jtv.ui.player
 
 import android.annotation.SuppressLint
-import android.view.View
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.webkit.PermissionRequest
-import android.os.Build
-import android.webkit.CookieManager
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -117,6 +108,15 @@ fun TvPlayerScreen(
     var showAudioSelector by remember { mutableStateOf(false) }
     var showQualitySelector by remember { mutableStateOf(false) }
 
+    // Sleep timer: 0 = off. When set, the player exits after the chosen number of minutes.
+    var sleepTimerMin by remember { mutableIntStateOf(0) }
+    LaunchedEffect(sleepTimerMin) {
+        if (sleepTimerMin > 0) {
+            delay(sleepTimerMin * 60_000L)
+            onBack()
+        }
+    }
+
     LaunchedEffect(Unit) {
         quality = settingsManager.defaultQualityFlow.first()
         language = settingsManager.defaultLanguageFlow.first()
@@ -125,54 +125,127 @@ fun TvPlayerScreen(
 
     // Player state
     var isBuffering by remember { mutableStateOf(true) }
-    // DRM fallback: when ExoPlayer fails twice on a channel, switch to WebView with /mpd/ URL
-    var useDrmWebView by remember { mutableStateOf(false) }
-    var drmWebViewUrl by remember { mutableStateOf("") }
+    // Non-null only when playback has failed and auto-recovery has been exhausted.
+    var playbackError by remember { mutableStateOf<String?>(null) }
 
-    // ExoPlayer with automatic DRM fallback (matching reference app logic)
+    // Stream auto-recovery: Jio live URLs carry a short-lived Akamai cookie (__hdnea__) that expires
+    // after a while, which surfaces as a sudden black screen. On error we re-fetch the stream URL
+    // (which regenerates the cookie). The counter resets every time playback recovers (STATE_READY),
+    // so a long session can recover indefinitely instead of dying after a fixed number of errors.
     val retryCount = remember { mutableIntStateOf(0) }
     var streamRefreshTrigger by remember { mutableIntStateOf(0) }
 
-    // ExoPlayer is built using our custom factory to ensure Android TV optimizations
-    val exoPlayer = remember {
-        com.fenyx.jtv.player.JioExoPlayerFactory.create(context, language)
+    // Player-affecting prefs. Read reactively (NEVER block the main thread here — doing so caused
+    // jank/black-screen on entry). Tunneling is applied live via track-selection params below; the
+    // hardware-decoder mode can only be set at construction, so the player is keyed on it.
+    val tunnelingPref by settingsManager.tunnelingFlow.collectAsState(initial = false)
+    val hardwareOnlyPref by settingsManager.hardwareDecoderFlow.collectAsState(initial = true)
+    val bufferSecPref by settingsManager.playbackBufferSecFlow.collectAsState(initial = 60)
+
+    // ExoPlayer is built using our custom factory to ensure Android TV optimizations. Keyed on the
+    // settings that can only be applied at construction so changing any of them rebuilds the player;
+    // the DisposableEffect below releases the previous instance when that happens.
+    val exoPlayer = remember(hardwareOnlyPref, tunnelingPref, bufferSecPref) {
+        com.fenyx.jtv.player.JioExoPlayerFactory.create(
+            context,
+            language,
+            tunneling = tunnelingPref,
+            hardwareOnly = hardwareOnlyPref,
+            maxBufferSec = bufferSecPref
+        )
     }
+
+    // Holds the freshest Akamai `__hdnea__` token. Read on the player's loader threads, written by the
+    // refresh loop below, so it's an AtomicReference.
+    val tokenHolder = remember { java.util.concurrent.atomic.AtomicReference("") }
 
     // Reuse data source factories to avoid GC pressure on every channel switch
     val httpDataSourceFactory = remember {
-        DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
+        DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(15000)
+    }
+    // Applies the latest Akamai token to EVERY request (manifest + segments) two ways, because Jio
+    // authorizes segments via BOTH the URL query token AND a `Cookie: __hdnea__=...` header:
+    //   1) rewrite the `__hdnea__` query param in the URL (if present), and
+    //   2) override the Cookie header with the fresh token.
+    // So the CDN never sees an expired token -> no 403 -> no reload. With no fresh token yet, the
+    // original (still-valid) request is used unchanged.
+    val resolvingDataSourceFactory = remember {
+        androidx.media3.datasource.ResolvingDataSource.Factory(httpDataSourceFactory) { dataSpec ->
+            val token = tokenHolder.get()
+            if (token.isEmpty()) {
+                dataSpec
+            } else {
+                val marker = "__hdnea__="
+                var spec = dataSpec
+                val uriStr = spec.uri.toString()
+                val i = uriStr.indexOf(marker)
+                if (i >= 0) {
+                    spec = spec.withUri(android.net.Uri.parse(uriStr.substring(0, i) + marker + token))
+                }
+                val headers = HashMap(spec.httpRequestHeaders)
+                headers["Cookie"] = marker + token
+                spec.withRequestHeaders(headers)
+            }
+        }
     }
     val mediaSourceFactory = remember {
-        DefaultMediaSourceFactory(context).setDataSourceFactory(httpDataSourceFactory)
+        DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(resolvingDataSourceFactory)
+            // Retry transient/expiry errors (incl. 403/404 from an expired token) instead of failing
+            // fatally and reloading. Works with the token rewrite above so the retry uses a fresh token.
+            .setLoadErrorHandlingPolicy(com.fenyx.jtv.player.JioLoadErrorHandlingPolicy())
     }
 
-    LaunchedEffect(language, quality) {
+    LaunchedEffect(exoPlayer, language, quality) {
         val builder = exoPlayer.trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguage(language)
-            
+        // Tunneling is applied at construction (see remember key above), not here, because the base
+        // TrackSelectionParameters.Builder doesn't expose setTunnelingEnabled in Media3 1.4.
+
         when (quality) {
             "low" -> builder.setMaxVideoSize(854, 480)
             "medium" -> builder.setMaxVideoSize(1280, 720)
             "high" -> builder.setMaxVideoSize(1920, 1080)
-            // CRITICAL for TV performance: "auto" should NOT attempt to play 1080p if it causes lag
-            else -> builder.setMaxVideoSize(1280, 720)
+            // "auto": allow up to 1080p (sharp on a 50" panel + wired connection); ABR still scales
+            // down automatically if bandwidth/decoder can't keep up.
+            else -> builder.setMaxVideoSize(1920, 1080)
         }
-        
+
         exoPlayer.trackSelectionParameters = builder.build()
     }
 
-    // Listen for errors
-    DisposableEffect(Unit) {
+    // Listen for errors (keyed on exoPlayer so a rebuilt player gets its own listener)
+    DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 isBuffering = state == Player.STATE_BUFFERING
+                if (state == Player.STATE_READY) {
+                    // Playback recovered -> clear any error and reset the recovery budget so the
+                    // next expiry (minutes/hours later) gets a fresh set of retries.
+                    retryCount.intValue = 0
+                    playbackError = null
+                }
             }
             override fun onPlayerError(error: PlaybackException) {
-                // Token expiration (often 403 Forbidden) causes black screen.
+                // Token/cookie expiration (often 403 Forbidden) causes a black screen.
                 // We MUST re-fetch the stream URL entirely, not just retry the same expired URL.
-                if (retryCount.intValue < 3) {
+                if (retryCount.intValue < 5) {
                     retryCount.intValue++
-                    streamRefreshTrigger++
+                    // Small backoff so a flapping CDN doesn't get hammered. Driven via the
+                    // streamRefreshTrigger LaunchedEffect which re-fetches the stream URL.
+                    val backoffMs = 800L * retryCount.intValue
+                    scope.launch {
+                        delay(backoffMs)
+                        streamRefreshTrigger++
+                    }
+                } else {
+                    // Auto-recovery exhausted: stop the spinner and show an actionable message
+                    // instead of an indefinite black screen.
+                    isBuffering = false
+                    playbackError = "Playback stopped. Press OK to retry."
                 }
             }
         }
@@ -182,6 +255,7 @@ fun TvPlayerScreen(
 
     LaunchedEffect(currentChannel, quality) {
         retryCount.intValue = 0 // Reset retries on intentional channel or quality change
+        playbackError = null
     }
 
     LaunchedEffect(currentChannel, quality, streamRefreshTrigger) {
@@ -197,6 +271,7 @@ fun TvPlayerScreen(
             if (authData == null) {
                 android.util.Log.e("TvPlayer", "Missing auth data")
                 isBuffering = false
+                playbackError = "Not logged in. Please sign in again."
                 return@LaunchedEffect
             }
             
@@ -208,12 +283,22 @@ fun TvPlayerScreen(
             if (result.isSuccess) {
                 val streamData = result.getOrNull()!!
                 val finalUrl = streamData.streamUrl
-                
+
+                // Seed the token holder so the ResolvingDataSource and refresh loop have the current token.
+                tokenHolder.set(com.fenyx.jtv.data.JioApiClient.extractHdneaToken(finalUrl))
+
                 android.util.Log.d("TvPlayer", "Loading stream: $finalUrl (isMpd: ${streamData.isMpd})")
 
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(finalUrl)
                     .setMimeType(if (streamData.isMpd) MimeTypes.APPLICATION_MPD else MimeTypes.APPLICATION_M3U8)
+                    // Play ~20s behind the live edge so brief network/CDN jitter is absorbed by the
+                    // buffer instead of starving the player and causing a rebuffer (the "loading").
+                    .setLiveConfiguration(
+                        MediaItem.LiveConfiguration.Builder()
+                            .setTargetOffsetMs(20000)
+                            .build()
+                    )
 
                 if (streamData.isMpd && streamData.licenseUrl.isNotEmpty()) {
                     val drmConfig = MediaItem.DrmConfiguration.Builder(androidx.media3.common.C.WIDEVINE_UUID)
@@ -234,12 +319,51 @@ fun TvPlayerScreen(
                 }
             } else {
                 android.util.Log.e("TvPlayer", "Failed to fetch stream: ${result.exceptionOrNull()?.message}")
-                isBuffering = false
+                // Let the auto-recovery budget retry transient fetch failures; only show the error
+                // once it's exhausted, so a one-off hiccup doesn't flash a message.
+                if (retryCount.intValue >= 5) {
+                    isBuffering = false
+                    playbackError = "Couldn't load this channel. Press OK to retry."
+                } else {
+                    retryCount.intValue++
+                    delay(800L * retryCount.intValue)
+                    streamRefreshTrigger++
+                }
             }
         }
     }
 
-    DisposableEffect(Unit) {
+    // ─── Transparent token refresh ───
+    // The Jio `__hdnea__` token expires ~120s after issue. This loop fetches a fresh stream URL a few
+    // seconds BEFORE expiry and publishes the new token to tokenHolder, so the ResolvingDataSource
+    // keeps rewriting requests with a valid token. Playback never sees a 403 -> no reload, no buffering.
+    LaunchedEffect(currentChannel) {
+        val ch = currentChannel ?: return@LaunchedEffect
+        while (true) {
+            val token = tokenHolder.get()
+            val expSec = com.fenyx.jtv.data.JioApiClient.extractTokenExpiryEpochSec(token)
+            val nowSec = System.currentTimeMillis() / 1000
+            // Refresh 15s before expiry; if we can't read an expiry, re-check in 60s.
+            val waitMs = if (expSec > 0) ((expSec - nowSec - 15) * 1000).coerceIn(5_000, 110_000)
+                         else 60_000L
+            delay(waitMs)
+
+            val authData = settingsManager.authDataFlow.first() ?: continue
+            val res = com.fenyx.jtv.data.JioApiClient.getStreamUrl(
+                context, ch.channelNumber.toString(), authData
+            )
+            if (res.isSuccess) {
+                val newToken = com.fenyx.jtv.data.JioApiClient.extractHdneaToken(res.getOrNull()!!.streamUrl)
+                if (newToken.isNotEmpty()) {
+                    tokenHolder.set(newToken)
+                    android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
+                }
+            }
+        }
+    }
+
+    // Release the player when it is replaced (hardware-decoder toggle) or the screen leaves.
+    DisposableEffect(exoPlayer) {
         onDispose {
             exoPlayer.release()
         }
@@ -249,7 +373,7 @@ fun TvPlayerScreen(
     var currentTime by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
         while (true) {
-            currentTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+            currentTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
             delay(30000)
         }
     }
@@ -408,6 +532,13 @@ fun TvPlayerScreen(
                                 showChannelList = false
                                 showCategoryList = false
                                 true
+                            } else if (playbackError != null) {
+                                // Manual retry after auto-recovery was exhausted.
+                                playbackError = null
+                                retryCount.intValue = 0
+                                isBuffering = true
+                                streamRefreshTrigger++
+                                true
                             } else {
                                 showOverlay = !showOverlay
                                 true
@@ -434,6 +565,8 @@ fun TvPlayerScreen(
             },
             update = { view ->
                 view.resizeMode = resizeMode
+                // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
+                if (view.player !== exoPlayer) view.player = exoPlayer
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -449,6 +582,27 @@ fun TvPlayerScreen(
                         ch?.name ?: "Loading...",
                         color = Color.White,
                         fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
+        // ─── Playback Error Overlay ───
+        if (playbackError != null && !isBuffering) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("⚠", fontSize = 40.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        playbackError ?: "",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        currentChannel?.name ?: "",
+                        color = Color.White.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
@@ -640,6 +794,24 @@ fun TvPlayerScreen(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
+                    SettingsItem(
+                        title = "Sleep Timer",
+                        subtitle = if (sleepTimerMin == 0) "Off" else "Turns off in $sleepTimerMin min",
+                        value = if (sleepTimerMin == 0) "Off" else "$sleepTimerMin min",
+                        valueColor = if (sleepTimerMin == 0) TvOnSurfaceVariant else TvPrimary,
+                        onClick = {
+                            // Cycle Off -> 15 -> 30 -> 60 -> Off
+                            sleepTimerMin = when (sleepTimerMin) {
+                                0 -> 15
+                                15 -> 30
+                                30 -> 60
+                                else -> 0
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     SettingsItem(
                         title = "Open Settings",
                         subtitle = "Go to full app settings",

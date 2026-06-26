@@ -77,16 +77,27 @@ class EpgRepository(private val context: Context) {
                 }
                 
                 if (connection != null && connection.responseCode in 200..299) {
-                    var inputStream = connection.inputStream
-                    if (currentUrlStr.endsWith(".gz")) {
+                    // Detect gzip by the actual content (magic bytes 0x1f 0x8b) rather than the URL
+                    // suffix. URL shorteners / redirects (e.g. the default short.gy link) often resolve
+                    // to a path that doesn't end in ".gz", which previously left the gzip bytes stored
+                    // raw and made parsing silently fail.
+                    val buffered = java.io.BufferedInputStream(connection.inputStream)
+                    buffered.mark(2)
+                    val b1 = buffered.read()
+                    val b2 = buffered.read()
+                    buffered.reset()
+                    val isGzip = b1 == 0x1f && b2 == 0x8b
+                    val inputStream: java.io.InputStream = if (isGzip) {
                         _syncStatus.value = EpgSyncStatus.EXTRACTING
-                        inputStream = GZIPInputStream(inputStream)
+                        GZIPInputStream(buffered)
+                    } else {
+                        buffered
                     }
                     val outputStream = FileOutputStream(cacheFile)
                     inputStream.copyTo(outputStream)
                     outputStream.close()
                     inputStream.close()
-                    Log.d(TAG, "EPG downloaded and saved")
+                    Log.d(TAG, "EPG downloaded and saved (gzip=$isGzip)")
                 } else {
                     Log.e(TAG, "Failed to download EPG: ${connection?.responseCode}")
                     _syncStatus.value = EpgSyncStatus.ERROR

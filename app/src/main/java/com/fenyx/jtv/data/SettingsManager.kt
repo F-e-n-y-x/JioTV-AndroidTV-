@@ -18,6 +18,8 @@ class SettingsManager(private val context: Context) {
         private val DEFAULT_LANGUAGE = stringPreferencesKey("default_language")
         private val DEFAULT_QUALITY = stringPreferencesKey("default_quality")
         private val HARDWARE_DECODER = booleanPreferencesKey("hardware_decoder")
+        private val TUNNELING = booleanPreferencesKey("tunneling_enabled")
+        private val PLAYBACK_BUFFER_SEC = intPreferencesKey("playback_buffer_sec")
         private val BUFFER_SIZE = intPreferencesKey("buffer_size")
         private val LAST_SELECTED_CATEGORY = stringPreferencesKey("last_selected_category")
         private val LAST_SELECTED_CHANNEL_INDEX = intPreferencesKey("last_selected_channel_index")
@@ -50,6 +52,17 @@ class SettingsManager(private val context: Context) {
 
     val hardwareDecoderFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[HARDWARE_DECODER] ?: true
+    }
+
+    // Off by default: tunneling causes random black screens on many Amlogic/MediaTek TVs.
+    val tunnelingFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[TUNNELING] ?: false
+    }
+
+    // Max playback buffer in seconds. Higher = smoother (rides out network/CDN jitter) at the cost of
+    // more RAM and slightly higher channel-zap time. Default 60s.
+    val playbackBufferSecFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[PLAYBACK_BUFFER_SEC] ?: 60
     }
 
     val bufferSizeFlow: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -128,6 +141,18 @@ class SettingsManager(private val context: Context) {
     suspend fun setHardwareDecoder(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[HARDWARE_DECODER] = enabled
+        }
+    }
+
+    suspend fun setTunneling(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[TUNNELING] = enabled
+        }
+    }
+
+    suspend fun setPlaybackBufferSec(seconds: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PLAYBACK_BUFFER_SEC] = seconds
         }
     }
 

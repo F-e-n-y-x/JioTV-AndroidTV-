@@ -34,22 +34,32 @@ fun MainNavigation() {
     val lastChannelGroup by settingsManager.lastChannelGroupFlow.collectAsState(initial = null)
     val hasAutoPlayed = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val allChannels by mainViewModel.channels.collectAsState()
+    val isLoading by mainViewModel.isLoading.collectAsState()
 
-    androidx.compose.runtime.LaunchedEffect(autoplayLastChannel, lastChannelId, lastChannelGroup, allChannels) {
-        if (autoplayLastChannel == true) {
-            // Trigger fetch if we haven't
-            if (allChannels.isEmpty()) {
-                mainViewModel.fetchChannels()
-            }
-            if (!hasAutoPlayed.value && lastChannelId != null && lastChannelGroup != null && allChannels.isNotEmpty()) {
-                hasAutoPlayed.value = true
-                val channelIndex = allChannels.indexOfFirst { it.id == lastChannelId }
-                if (channelIndex != -1) {
-                    backStack.add(Player(channelIndex = channelIndex, group = lastChannelGroup))
+    androidx.compose.runtime.LaunchedEffect(autoplayLastChannel, lastChannelId, allChannels, isLoading) {
+        when (autoplayLastChannel) {
+            true -> {
+                when {
+                    hasAutoPlayed.value -> { /* already handled */ }
+                    // No channel was ever saved (or auth was cleared) -> don't hang on the spinner,
+                    // just show the home screen.
+                    lastChannelId == null -> hasAutoPlayed.value = true
+                    // Kick off the channel load (served from cache when fresh, so this is fast).
+                    allChannels.isEmpty() && !isLoading -> mainViewModel.fetchChannels()
+                    allChannels.isNotEmpty() -> {
+                        hasAutoPlayed.value = true
+                        val channelIndex = allChannels.indexOfFirst { it.id == lastChannelId }
+                        if (channelIndex != -1) {
+                            backStack.add(Player(channelIndex = channelIndex, group = lastChannelGroup))
+                        }
+                    }
+                    // Load finished but produced no channels (e.g. offline first run) -> fall through
+                    // to the home screen instead of spinning forever.
+                    !isLoading -> hasAutoPlayed.value = true
                 }
             }
-        } else if (autoplayLastChannel == false) {
-            hasAutoPlayed.value = true
+            false -> hasAutoPlayed.value = true
+            else -> { /* null: setting not loaded yet */ }
         }
     }
 

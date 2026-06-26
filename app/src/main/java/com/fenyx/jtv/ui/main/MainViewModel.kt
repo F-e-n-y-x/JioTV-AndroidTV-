@@ -63,7 +63,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 list.sortedWith(compareByDescending<Channel> { favs.contains(it.id) }.thenBy { it.channelNumber })
             }.collect { _filteredChannels.value = it }
         }
-        fetchEpg()
+        // NOTE: EPG is intentionally NOT fetched here. Downloading + parsing the XMLTV file on every
+        // launch hammered the CPU on low-end TVs and slowed boot. MainScreen triggers fetchEpg() only
+        // when EPG mode is enabled, and Settings offers a manual refresh.
     }
 
     /** Get all channels (unfiltered) for the player's channel switching */
@@ -86,6 +88,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun publishChannels(parsedChannels: List<Channel>) {
+        _allChannels.value = parsedChannels
+        _channels.value = parsedChannels
+        _groups.value = parsedChannels.map { it.group }.distinct().sorted()
+        hasLoaded = true
+
+        // Restore last selected category
+        if (_selectedGroup.value == null) {
+            val lastCategory = settingsManager.lastSelectedCategoryFlow.first()
+            val groups = _groups.value
+            _selectedGroup.value = if (lastCategory != null && groups.contains(lastCategory)) {
+                lastCategory
+            } else {
+                groups.firstOrNull()
+            }
+        }
+    }
+
     fun fetchChannels(port: Int = 0) {
         // Skip if already loaded with data
         if (hasLoaded && _allChannels.value.isNotEmpty()) {
@@ -94,35 +114,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            _isLoading.value = true
             _error.value = null
-            
-            val result = JioApiClient.getMobileChannelList(getApplication())
-            if (result.isSuccess) {
-                val parsedChannels = result.getOrNull() ?: emptyList()
-                if (parsedChannels.isEmpty()) {
-                    _error.value = "No channels found."
-                } else {
-                    _allChannels.value = parsedChannels
-                    _channels.value = parsedChannels
-                    _groups.value = parsedChannels.map { it.group }.distinct().sorted()
-                    hasLoaded = true
+            val app = getApplication<Application>()
 
-                    // Restore last selected category
-                    if (_selectedGroup.value == null) {
-                        val lastCategory = settingsManager.lastSelectedCategoryFlow.first()
-                        val groups = _groups.value
-                        _selectedGroup.value = if (lastCategory != null && groups.contains(lastCategory)) {
-                            lastCategory
-                        } else {
-                            groups.firstOrNull()
-                        }
-                    }
-                }
+            // 1) Instant load from disk so the UI appears immediately (no network wait on boot).
+            val cached = JioApiClient.readChannelCache(app)
+            val cacheFresh = JioApiClient.isChannelCacheFresh(app)
+            if (cached != null) {
+                publishChannels(cached)
+                _isLoading.value = false
+                Log.d("MainViewModel", "Loaded ${cached.size} channels from cache (fresh=$cacheFresh)")
             } else {
-                _error.value = "Error: ${result.exceptionOrNull()?.message}"
+                _isLoading.value = true
             }
-            
+
+            // 2) Revalidate over the network only when there is no cache or it's stale.
+            if (cached == null || !cacheFresh) {
+                val result = JioApiClient.getMobileChannelList(app, forceNetwork = true)
+                if (result.isSuccess) {
+                    val parsedChannels = result.getOrNull() ?: emptyList()
+                    if (parsedChannels.isNotEmpty()) {
+                        publishChannels(parsedChannels)
+                    } else if (cached == null) {
+                        _error.value = "No channels found."
+                    }
+                } else if (cached == null) {
+                    _error.value = "Error: ${result.exceptionOrNull()?.message}"
+                }
+            }
+
             _isLoading.value = false
         }
     }

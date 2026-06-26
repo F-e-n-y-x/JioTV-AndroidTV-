@@ -161,9 +161,17 @@ object JioApiClient {
             if (connection.responseCode in 200..299) {
                 val responseText = connection.inputStream.bufferedReader().use { it.readText() }
                 val json = JSONObject(responseText)
-                if (json.has("ssoToken")) {
-                    val newSsoToken = json.optString("ssoToken", "")
-                    settingsManager.saveAuthData(authData.copy(ssoToken = newSsoToken))
+                // The refresh service may return a new ssoToken and/or a new authToken depending on
+                // the endpoint version. Update whichever are present.
+                val newSsoToken = json.optString("ssoToken", "")
+                val newAuthToken = json.optString("authToken", "")
+                if (newSsoToken.isNotEmpty() || newAuthToken.isNotEmpty()) {
+                    settingsManager.saveAuthData(
+                        authData.copy(
+                            ssoToken = newSsoToken.ifEmpty { authData.ssoToken },
+                            authToken = newAuthToken.ifEmpty { authData.authToken }
+                        )
+                    )
                     Log.d(TAG, "Token refreshed successfully")
                     return@withContext Result.success(true)
                 }
@@ -175,35 +183,59 @@ object JioApiClient {
         }
     }
 
-    suspend fun getMobileChannelList(context: android.content.Context): Result<List<Channel>> = withContext(Dispatchers.IO) {
+    private const val CHANNEL_CACHE_FILE = "channels_cache.json"
+    const val CHANNEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000L // 24 hours
+
+    private fun channelCacheFile(context: android.content.Context): java.io.File {
+        val cacheDir = context.getExternalFilesDir(null) ?: context.filesDir
+        return java.io.File(cacheDir, CHANNEL_CACHE_FILE)
+    }
+
+    /** Reads the persisted channel list regardless of age. Returns null if there is no usable cache. */
+    fun readChannelCache(context: android.content.Context): List<Channel>? {
+        val cacheFile = channelCacheFile(context)
+        if (!cacheFile.exists()) return null
+        return try {
+            val jsonArray = org.json.JSONArray(cacheFile.readText())
+            val channels = mutableListOf<Channel>()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                channels.add(Channel(
+                    id = obj.getString("id"),
+                    name = obj.getString("name"),
+                    logoUrl = obj.getString("logoUrl"),
+                    group = obj.getString("group"),
+                    streamUrl = obj.getString("streamUrl"),
+                    isDrm = obj.getBoolean("isDrm"),
+                    channelNumber = obj.getInt("channelNumber"),
+                    licenseUrl = if (obj.has("licenseUrl")) obj.getString("licenseUrl") else null
+                ))
+            }
+            channels.ifEmpty { null }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read channel cache", e)
+            null
+        }
+    }
+
+    /** True if a cache exists and is younger than the TTL. */
+    fun isChannelCacheFresh(context: android.content.Context): Boolean {
+        val cacheFile = channelCacheFile(context)
+        return cacheFile.exists() && System.currentTimeMillis() - cacheFile.lastModified() < CHANNEL_CACHE_TTL_MS
+    }
+
+    /**
+     * @param forceNetwork when true, skip the fresh-cache shortcut and always fetch from the network
+     *        (used for background revalidation after a fast cached load).
+     */
+    suspend fun getMobileChannelList(
+        context: android.content.Context,
+        forceNetwork: Boolean = false
+    ): Result<List<Channel>> = withContext(Dispatchers.IO) {
         try {
-            val cacheDir = context.getExternalFilesDir(null) ?: context.filesDir
-            val cacheFile = java.io.File(cacheDir, "channels_cache.json")
-            val cacheValidTime = 24 * 60 * 60 * 1000L // 24 hours
-            if (cacheFile.exists() && System.currentTimeMillis() - cacheFile.lastModified() < cacheValidTime) {
-                try {
-                    val cacheContent = cacheFile.readText()
-                    val jsonArray = org.json.JSONArray(cacheContent)
-                    val channels = mutableListOf<Channel>()
-                    for (i in 0 until jsonArray.length()) {
-                        val obj = jsonArray.getJSONObject(i)
-                        channels.add(Channel(
-                            id = obj.getString("id"),
-                            name = obj.getString("name"),
-                            logoUrl = obj.getString("logoUrl"),
-                            group = obj.getString("group"),
-                            streamUrl = obj.getString("streamUrl"),
-                            isDrm = obj.getBoolean("isDrm"),
-                            channelNumber = obj.getInt("channelNumber"),
-                            licenseUrl = if (obj.has("licenseUrl")) obj.getString("licenseUrl") else null
-                        ))
-                    }
-                    if (channels.isNotEmpty()) {
-                        return@withContext Result.success(channels)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to read cache", e)
-                }
+            val cacheFile = channelCacheFile(context)
+            if (!forceNetwork && isChannelCacheFresh(context)) {
+                readChannelCache(context)?.let { return@withContext Result.success(it) }
             }
 
             // Fetch dictionary
@@ -296,6 +328,12 @@ object JioApiClient {
             parseChannels("https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=389")
 
             if (finalChannelsMap.isEmpty()) {
+                // Network produced nothing — fall back to whatever we have on disk (even if stale)
+                // so a transient outage doesn't wipe the channel list.
+                readChannelCache(context)?.let {
+                    Log.w(TAG, "Channel fetch empty; serving stale cache (${it.size} channels)")
+                    return@withContext Result.success(it)
+                }
                 return@withContext Result.failure(Exception("Failed to fetch channels from endpoints"))
             }
 
@@ -328,7 +366,28 @@ object JioApiClient {
         }
     }
 
-    suspend fun getStreamUrl(context: android.content.Context, channelId: String, authData: AuthData): Result<StreamData> = withContext(Dispatchers.IO) {
+    /**
+     * Returns the value of the `__hdnea__` query parameter (the Akamai token) from a Jio stream URL,
+     * or "" if absent. Jio appends this token last, so everything after `__hdnea__=` is the token.
+     */
+    fun extractHdneaToken(url: String): String {
+        val marker = "__hdnea__="
+        val i = url.indexOf(marker)
+        return if (i >= 0) url.substring(i + marker.length) else ""
+    }
+
+    /** Parses the `exp=` epoch-seconds out of an `__hdnea__` token; 0 if not found. */
+    fun extractTokenExpiryEpochSec(token: String): Long {
+        val m = Regex("exp=(\\d+)").find(token) ?: return 0
+        return m.groupValues[1].toLongOrNull() ?: 0
+    }
+
+    suspend fun getStreamUrl(
+        context: android.content.Context,
+        channelId: String,
+        authData: AuthData,
+        allowRefreshRetry: Boolean = true
+    ): Result<StreamData> = withContext(Dispatchers.IO) {
         try {
             val url = URL("https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl")
             val connection = url.openConnection() as HttpURLConnection
@@ -373,15 +432,16 @@ object JioApiClient {
 
             val responseCode = connection.responseCode
             
-            if (responseCode == 401 || responseCode == 403 || responseCode == 419) {
-                // Token might be expired, try to refresh once
+            if ((responseCode == 401 || responseCode == 403 || responseCode == 419) && allowRefreshRetry) {
+                // Token might be expired, try to refresh exactly once (allowRefreshRetry = false on the
+                // recursive call) so a persistently-failing token can never cause infinite recursion.
                 Log.d(TAG, "Token expired, attempting refresh...")
                 val refreshResult = refreshToken(context)
                 if (refreshResult.isSuccess) {
                     val settingsManager = com.fenyx.jtv.data.SettingsManager(context)
                     val newAuthData = settingsManager.authDataFlow.first()
                     if (newAuthData != null) {
-                        return@withContext getStreamUrl(context, channelId, newAuthData)
+                        return@withContext getStreamUrl(context, channelId, newAuthData, allowRefreshRetry = false)
                     }
                 }
             }

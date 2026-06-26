@@ -57,6 +57,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     val language by settingsManager.defaultLanguageFlow.collectAsState(initial = "hi")
     val quality by settingsManager.defaultQualityFlow.collectAsState(initial = "auto")
     val hwDecoder by settingsManager.hardwareDecoderFlow.collectAsState(initial = true)
+    val tunneling by settingsManager.tunnelingFlow.collectAsState(initial = false)
+    val playbackBufferSec by settingsManager.playbackBufferSecFlow.collectAsState(initial = 60)
     val playerResizeMode by settingsManager.playerResizeModeFlow.collectAsState(initial = 0)
     val epgMode by settingsManager.epgModeFlow.collectAsState(initial = false)
     val epgUrl by settingsManager.epgUrlFlow.collectAsState(initial = "https://avkb.short.gy/epg.xml.gz")
@@ -66,7 +68,15 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showQualityPicker by remember { mutableStateOf(false) }
     var showPlayerResizeModePicker by remember { mutableStateOf(false) }
+    var showBufferPicker by remember { mutableStateOf(false) }
     var showEpgUrlDialog by remember { mutableStateOf(false) }
+
+    val bufferOptions = listOf(
+        30 to "Data Saver (30s)",
+        60 to "Balanced (60s)",
+        90 to "Smooth (90s)",
+        120 to "Max (120s)"
+    )
 
     val languages = listOf(
         "hi" to "Hindi", "en" to "English", "ta" to "Tamil", "te" to "Telugu",
@@ -96,6 +106,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                         showLanguagePicker -> { showLanguagePicker = false; true }
                         showQualityPicker -> { showQualityPicker = false; true }
                         showPlayerResizeModePicker -> { showPlayerResizeModePicker = false; true }
+                        showBufferPicker -> { showBufferPicker = false; true }
                         else -> false
                     }
                 } else false
@@ -216,6 +227,16 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
 
                 item {
                     SettingsItem(
+                        title = "Playback Buffer",
+                        subtitle = "Higher = fewer interruptions, smoother on weak networks (uses more memory)",
+                        value = bufferOptions.find { it.first == playbackBufferSec }?.second ?: "${playbackBufferSec}s",
+                        valueColor = TvPrimary,
+                        onClick = { showBufferPicker = true }
+                    )
+                }
+
+                item {
+                    SettingsItem(
                         title = "Player View Mode",
                         subtitle = "Default video scaling (Fit, Fill, Zoom...)",
                         value = resizeModes.find { it.first == playerResizeMode }?.second ?: "Fit",
@@ -237,9 +258,18 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                 item {
                     SettingsToggle(
                         title = "Hardware Decoder",
-                        subtitle = "Use hardware decoding for better performance",
+                        subtitle = "Recommended ON for low-end TVs. Off allows software fallback. Applies on next channel open.",
                         isEnabled = hwDecoder,
                         onClick = { scope.launch { settingsManager.setHardwareDecoder(!hwDecoder) } }
+                    )
+                }
+
+                item {
+                    SettingsToggle(
+                        title = "Tunneling (A/V sync)",
+                        subtitle = "Keep OFF if video randomly freezes/black-screens. Only enable for Amlogic audio-sync issues. Applies on next channel open.",
+                        isEnabled = tunneling,
+                        onClick = { scope.launch { settingsManager.setTunneling(!tunneling) } }
                     )
                 }
 
@@ -305,6 +335,21 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                         showPlayerResizeModePicker = false
                     },
                     onDismiss = { showPlayerResizeModePicker = false }
+                )
+            }
+        }
+
+        if (showBufferPicker) {
+            Dialog(onDismissRequest = { showBufferPicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+                PickerDialog(
+                    title = "Playback Buffer",
+                    options = bufferOptions.map { it.first.toString() to it.second },
+                    currentValue = playbackBufferSec.toString(),
+                    onSelect = { value ->
+                        scope.launch { settingsManager.setPlaybackBufferSec(value.toInt()) }
+                        showBufferPicker = false
+                    },
+                    onDismiss = { showBufferPicker = false }
                 )
             }
         }

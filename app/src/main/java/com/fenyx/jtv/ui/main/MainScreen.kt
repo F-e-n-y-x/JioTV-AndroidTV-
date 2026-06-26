@@ -378,7 +378,7 @@ fun EpgChannelRow(
 ) {
     val context = LocalContext.current
     // Reuse a single formatter instance instead of allocating per-recomposition
-    val timeFormat = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()) }
+    val timeFormat = remember { java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()) }
     // Update time every 30s instead of every frame to reduce recomposition triggers
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {

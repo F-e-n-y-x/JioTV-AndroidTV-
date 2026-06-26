@@ -14,17 +14,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            val permissions = arrayOf(
-                android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-            )
-            if (checkSelfPermission(permissions[0]) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(permissions, 100)
-            }
-        }
-        
+
+        // No runtime storage-permission request: the app uses only app-scoped storage, so the prompt
+        // was unnecessary and awkward to dismiss with a TV remote.
         setContent {
             JioTVGoTVTheme {
                 Surface(

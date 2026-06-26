@@ -3,6 +3,7 @@ package com.fenyx.jtv.player
 import android.content.Context
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultLivePlaybackSpeedControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
@@ -13,7 +14,21 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 @UnstableApi
 object JioExoPlayerFactory {
 
-    fun create(context: Context, preferredAudioLang: String): ExoPlayer {
+    /**
+     * @param tunneling  Tunneled playback. Off by default: on many Amlogic/MediaTek TVs (incl. MiTV)
+     *                   tunneling is the main cause of random black screens / video freezing while
+     *                   audio keeps playing. Only enable if a specific device needs it for A/V sync.
+     * @param hardwareOnly  When true (default), software extension renderers are disabled so the app
+     *                      never falls back to ffmpeg/software decode that would max out a weak CPU.
+     *                      When false, software decoding is allowed as a fallback.
+     */
+    fun create(
+        context: Context,
+        preferredAudioLang: String,
+        tunneling: Boolean = false,
+        hardwareOnly: Boolean = true,
+        maxBufferSec: Int = 60
+    ): ExoPlayer {
         // Amlogic Audio Sync Fix
         val audioSink = DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
@@ -32,31 +47,50 @@ object JioExoPlayerFactory {
 
         // HW+ Fix: Prefer MediaCodec Hardware decoders
         renderersFactory.setMediaCodecSelector(MediaCodecSelector.DEFAULT)
-        // CRITICAL for low-end TVs: Disable software extension renderers completely so it doesn't fall back to ffmpeg and kill the CPU
-        renderersFactory.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+        // On low-end TVs, disabling software extension renderers prevents an ffmpeg fallback that
+        // would max out the CPU. Controlled by the "Hardware Decoder" setting.
+        renderersFactory.setExtensionRendererMode(
+            if (hardwareOnly) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+            else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+        )
         renderersFactory.setEnableDecoderFallback(true)
 
         val trackSelector = DefaultTrackSelector(context)
         trackSelector.parameters = trackSelector.buildUponParameters()
             .setPreferredAudioLanguage(preferredAudioLang)
-            .setTunnelingEnabled(true) // CRITICAL: Amlogic fix for extreme hardware acceleration
+            .setTunnelingEnabled(tunneling)
             // Removed .setMaxVideoSizeSd() so we can handle quality dynamically in TvPlayerScreen
             .build()
 
-        // Optimize buffering to prevent lag on low-end TVs (drastically lower than default to save RAM)
+        // Buffering tuned for smooth LIVE playback on a wired connection. Large buffers ride out CDN
+        // stalls at the live edge (the main cause of mid-view "loading" + black flashes). largeHeap is
+        // set in the manifest so this is comfortably within RAM. After a rebuffer we wait for a solid
+        // cushion (12s) before resuming so playback doesn't stutter-loop.
+        val maxBufferMs = (maxBufferSec.coerceIn(15, 180)) * 1000
+        val minBufferMs = (maxBufferMs / 2).coerceAtLeast(15000)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                2000,  // Min buffer: 2 seconds
-                15000, // Max buffer: 15 seconds (reduced from default 50s)
-                1000,  // Buffer for playback: 1 second
-                2000   // Buffer for playback after rebuffer: 2 seconds
+                minBufferMs,
+                maxBufferMs,
+                3000,   // Buffer required to start/resume playback
+                12000   // Buffer required to resume after a rebuffer (build a cushion first)
             )
             .setPrioritizeTimeOverSizeThresholds(true)
+            // Keep a back-buffer so brief upstream gaps can be smoothed without a hard rebuffer.
+            .setBackBuffer(20000, true)
+            .build()
+
+        // Gently nudge playback speed (0.97x–1.03x) to hold a stable distance from the live edge
+        // instead of repeatedly draining the buffer and rebuffering.
+        val liveSpeedControl = DefaultLivePlaybackSpeedControl.Builder()
+            .setFallbackMinPlaybackSpeed(0.97f)
+            .setFallbackMaxPlaybackSpeed(1.03f)
             .build()
 
         return ExoPlayer.Builder(context, renderersFactory)
             .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
+            .setLivePlaybackSpeedControl(liveSpeedControl)
             .build()
     }
 }

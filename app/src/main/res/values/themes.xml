@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.JioTVGoTV" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Dark, full-screen theme for a TV app. A black window background prevents the white flash
+         that the previous Light theme showed during cold start (it read as "slow loading"). -->
+    <style name="Theme.JioTVGoTV" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+    </style>
 </resources>
