@@ -82,6 +82,13 @@ adb install -r app-release.apk
 
 ## Changelog
 
+### v1.3.2
+- **Reworked the Voice Boost audio engine** into a single 5-level control (Off / Low / Medium / High / Max) using a custom software audio processor:
+  - Center-channel (mid/side) extraction to separate dialogue from background.
+  - **Bass preserved** — only the stereo "side" is high-passed; the center stays full-range.
+  - **Presence boost** (~2.6 kHz peaking EQ) on the voice for clarity, with moderate background reduction so the sound stays full (not thin/mono).
+- Merged the old separate "Reduce Background" toggle into Voice Boost.
+
 ### v1.3
 - **Added** in-player audio controls (right-side panel): **Voice Boost** (cuts background bass/treble + boosts the speech band + ducks loud background), **Auto Volume** (loudness normalize), and **Reduce Background** (night-mode compression) — useful on TVs with poor built-in audio settings.
 - **Added** a real **Audio Track / Language** selector built from the stream's actual audio tracks, fixing channels whose language switching didn't work.

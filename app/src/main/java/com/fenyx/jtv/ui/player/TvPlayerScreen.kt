@@ -164,8 +164,10 @@ fun TvPlayerScreen(
     // Audio enhancement settings + the effect engine.
     val voiceBoost by settingsManager.voiceBoostFlow.collectAsState(initial = 0)
     val audioNormalize by settingsManager.audioNormalizeFlow.collectAsState(initial = false)
-    val reduceBackground by settingsManager.reduceBackgroundFlow.collectAsState(initial = false)
+    // LoudnessEnhancer handles makeup loudness; the dialogue processor does center-channel voice
+    // isolation. The processor is stable across player rebuilds and reads its level live.
     val audioEnhancer = remember { com.fenyx.jtv.player.AudioEnhancer() }
+    val dialogueProcessor = remember { com.fenyx.jtv.player.DialogueAudioProcessor() }
 
     // ExoPlayer is built using our custom factory to ensure Android TV optimizations. Keyed on the
     // settings that can only be applied at construction so changing any of them rebuilds the player;
@@ -176,7 +178,8 @@ fun TvPlayerScreen(
             language,
             tunneling = tunnelingPref,
             hardwareOnly = hardwareOnlyPref,
-            maxBufferSec = bufferSecPref
+            maxBufferSec = bufferSecPref,
+            dialogueProcessor = dialogueProcessor
         )
     }
 
@@ -416,8 +419,13 @@ fun TvPlayerScreen(
     }
 
     // Apply audio enhancements whenever the session id or any audio setting changes.
-    LaunchedEffect(audioSessionId, voiceBoost, audioNormalize, reduceBackground) {
-        audioEnhancer.apply(audioSessionId, audioNormalize, voiceBoost, reduceBackground)
+    // - dialogueProcessor: center-channel voice isolation (live, no rebuild needed), level 0..4
+    // - audioEnhancer: LoudnessEnhancer makeup/normalize bound to the session id
+    LaunchedEffect(voiceBoost) {
+        dialogueProcessor.setLevel(voiceBoost)
+    }
+    LaunchedEffect(audioSessionId, voiceBoost, audioNormalize) {
+        audioEnhancer.apply(audioSessionId, audioNormalize, voiceBoost)
     }
     DisposableEffect(Unit) {
         onDispose { audioEnhancer.release() }
@@ -862,11 +870,11 @@ fun TvPlayerScreen(
 
                     SettingsItem(
                         title = "Voice Boost",
-                        subtitle = "Clearer dialogue",
-                        value = when (voiceBoost) { 0 -> "Off"; 1 -> "Low"; else -> "High" },
+                        subtitle = "Suppress background & clear dialogue",
+                        value = when (voiceBoost) { 0 -> "Off"; 1 -> "Low"; 2 -> "Medium"; 3 -> "High"; else -> "Max" },
                         valueColor = if (voiceBoost == 0) TvOnSurfaceVariant else TvPrimary,
                         onClick = {
-                            val next = (voiceBoost + 1) % 3
+                            val next = (voiceBoost + 1) % 5 // Off -> Low -> Medium -> High -> Max -> Off
                             scope.launch { settingsManager.setVoiceBoost(next) }
                         }
                     )
@@ -880,18 +888,6 @@ fun TvPlayerScreen(
                         valueColor = if (audioNormalize) TvPrimary else TvOnSurfaceVariant,
                         onClick = {
                             scope.launch { settingsManager.setAudioNormalize(!audioNormalize) }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    SettingsItem(
-                        title = "Reduce Background",
-                        subtitle = "Tame loud music/effects (night mode)",
-                        value = if (reduceBackground) "On" else "Off",
-                        valueColor = if (reduceBackground) TvPrimary else TvOnSurfaceVariant,
-                        onClick = {
-                            scope.launch { settingsManager.setReduceBackground(!reduceBackground) }
                         }
                     )
 

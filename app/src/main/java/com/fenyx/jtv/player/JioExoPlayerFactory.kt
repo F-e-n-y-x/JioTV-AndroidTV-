@@ -27,13 +27,21 @@ object JioExoPlayerFactory {
         preferredAudioLang: String,
         tunneling: Boolean = false,
         hardwareOnly: Boolean = true,
-        maxBufferSec: Int = 60
+        maxBufferSec: Int = 60,
+        dialogueProcessor: androidx.media3.common.audio.AudioProcessor? = null
     ): ExoPlayer {
-        // Amlogic Audio Sync Fix
-        val audioSink = DefaultAudioSink.Builder(context)
+        // Amlogic Audio Sync Fix + optional dialogue (center-channel) processor. We insert the
+        // processor via DefaultAudioProcessorChain so the built-in Sonic processor (used by the live
+        // speed control) is preserved.
+        val sinkBuilder = DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
             .setEnableAudioTrackPlaybackParams(false)
-            .build()
+        if (dialogueProcessor != null) {
+            sinkBuilder.setAudioProcessorChain(
+                DefaultAudioSink.DefaultAudioProcessorChain(dialogueProcessor)
+            )
+        }
+        val audioSink = sinkBuilder.build()
 
         val renderersFactory = object : DefaultRenderersFactory(context) {
             override fun buildAudioSink(
