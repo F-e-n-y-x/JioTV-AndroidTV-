@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -16,6 +18,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +65,15 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
+/** One selectable audio track from the currently playing stream. */
+@androidx.annotation.OptIn(UnstableApi::class)
+private data class AudioOption(
+    val label: String,
+    val group: androidx.media3.common.TrackGroup,
+    val trackIndex: Int,
+    val selected: Boolean
+)
+
 @SuppressLint("SetJavaScriptEnabled")
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -78,12 +90,16 @@ fun TvPlayerScreen(
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
 
-    var currentGroup by remember { mutableStateOf<String?>(channels.firstOrNull()?.group) }
-    var currentChannels by remember { mutableStateOf<List<Channel>>(channels) }
-    var currentIndex by remember { mutableIntStateOf(initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))) }
-    val currentChannel by remember(currentIndex, currentChannels) {
-        derivedStateOf { currentChannels.getOrNull(currentIndex) }
+    // Saveable so the current channel/group survive leaving the player (e.g. opening full Settings and
+    // coming back) instead of resetting to the channel the player was originally launched with.
+    var currentGroup by rememberSaveable { mutableStateOf(channels.firstOrNull()?.group) }
+    var currentIndex by rememberSaveable { mutableIntStateOf(initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))) }
+    // Derived from the saved group so it rebuilds correctly after a state restore.
+    val currentChannels = remember(currentGroup, allChannelsByGroup, channels) {
+        val g = currentGroup
+        if (g != null) (allChannelsByGroup[g] ?: channels) else channels
     }
+    val currentChannel = remember(currentIndex, currentChannels) { currentChannels.getOrNull(currentIndex) }
 
     var showOverlay by remember { mutableStateOf(true) }
     var showChannelList by remember { mutableStateOf(false) }
@@ -107,6 +123,9 @@ fun TvPlayerScreen(
     
     var showAudioSelector by remember { mutableStateOf(false) }
     var showQualitySelector by remember { mutableStateOf(false) }
+
+    // Real audio tracks exposed by the current stream (for reliable language switching).
+    var audioTracks by remember { mutableStateOf<List<AudioOption>>(emptyList()) }
 
     // Sleep timer: 0 = off. When set, the player exits after the chosen number of minutes.
     var sleepTimerMin by remember { mutableIntStateOf(0) }
@@ -142,6 +161,12 @@ fun TvPlayerScreen(
     val hardwareOnlyPref by settingsManager.hardwareDecoderFlow.collectAsState(initial = true)
     val bufferSecPref by settingsManager.playbackBufferSecFlow.collectAsState(initial = 60)
 
+    // Audio enhancement settings + the effect engine.
+    val voiceBoost by settingsManager.voiceBoostFlow.collectAsState(initial = 0)
+    val audioNormalize by settingsManager.audioNormalizeFlow.collectAsState(initial = false)
+    val reduceBackground by settingsManager.reduceBackgroundFlow.collectAsState(initial = false)
+    val audioEnhancer = remember { com.fenyx.jtv.player.AudioEnhancer() }
+
     // ExoPlayer is built using our custom factory to ensure Android TV optimizations. Keyed on the
     // settings that can only be applied at construction so changing any of them rebuilds the player;
     // the DisposableEffect below releases the previous instance when that happens.
@@ -153,6 +178,15 @@ fun TvPlayerScreen(
             hardwareOnly = hardwareOnlyPref,
             maxBufferSec = bufferSecPref
         )
+    }
+
+    // Deterministic audio session id: generate one and bind the player to it so audio-effect
+    // attachment is reliable (the onAudioSessionIdChanged callback was unreliable on this hardware).
+    val audioSessionId = remember(exoPlayer) {
+        val am = context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        val id = am.generateAudioSessionId()
+        runCatching { exoPlayer.setAudioSessionId(id) }
+        id
     }
 
     // Holds the freshest Akamai `__hdnea__` token. Read on the player's loader threads, written by the
@@ -220,6 +254,25 @@ fun TvPlayerScreen(
     // Listen for errors (keyed on exoPlayer so a rebuilt player gets its own listener)
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                val opts = mutableListOf<AudioOption>()
+                for (g in tracks.groups) {
+                    if (g.type == androidx.media3.common.C.TRACK_TYPE_AUDIO) {
+                        for (i in 0 until g.length) {
+                            val f = g.getTrackFormat(i)
+                            val lang = f.language
+                            val label = f.label
+                                ?: lang?.takeIf { it.isNotBlank() && it != "und" }?.let {
+                                    runCatching { java.util.Locale(it).displayLanguage }
+                                        .getOrNull()?.replaceFirstChar { c -> c.uppercase() }
+                                }
+                                ?: "Audio ${i + 1}"
+                            opts.add(AudioOption(label, g.mediaTrackGroup, i, g.isTrackSelected(i)))
+                        }
+                    }
+                }
+                audioTracks = opts
+            }
             override fun onPlaybackStateChanged(state: Int) {
                 isBuffering = state == Player.STATE_BUFFERING
                 if (state == Player.STATE_READY) {
@@ -360,6 +413,14 @@ fun TvPlayerScreen(
                 }
             }
         }
+    }
+
+    // Apply audio enhancements whenever the session id or any audio setting changes.
+    LaunchedEffect(audioSessionId, voiceBoost, audioNormalize, reduceBackground) {
+        audioEnhancer.apply(audioSessionId, audioNormalize, voiceBoost, reduceBackground)
+    }
+    DisposableEffect(Unit) {
+        onDispose { audioEnhancer.release() }
     }
 
     // Release the player when it is replaced (hardware-decoder toggle) or the screen leaves.
@@ -521,8 +582,7 @@ fun TvPlayerScreen(
                             if (showCategoryList) {
                                 val group = groups.getOrNull(categorySelectedIndex)
                                 if (group != null) {
-                                    currentGroup = group
-                                    currentChannels = allChannelsByGroup[group] ?: emptyList<Channel>()
+                                    currentGroup = group // currentChannels derives from this
                                     currentIndex = 0
                                     showCategoryList = false
                                 }
@@ -740,7 +800,13 @@ fun TvPlayerScreen(
                     .background(TvDarkSurface.copy(alpha = 0.95f))
                     .padding(24.dp)
             ) {
-                Column {
+                Column(
+                    // Scrollable so all items (incl. Open Settings at the bottom) are reachable; the
+                    // focused item auto-scrolls into view as you press Down on the remote.
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                ) {
                     Text(
                         "Player Settings",
                         style = MaterialTheme.typography.titleLarge,
@@ -783,17 +849,54 @@ fun TvPlayerScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     SettingsItem(
-                        title = "Audio Track",
-                        subtitle = "Current: $language",
-                        value = "Change",
+                        title = "Audio Track / Language",
+                        subtitle = audioTracks.firstOrNull { it.selected }?.label?.let { "Current: $it" } ?: "Default",
+                        value = if (audioTracks.size > 1) "${audioTracks.size} tracks" else "Change",
                         valueColor = TvPrimary,
                         onClick = {
                             showAudioSelector = true
                         }
                     )
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
+                    SettingsItem(
+                        title = "Voice Boost",
+                        subtitle = "Clearer dialogue",
+                        value = when (voiceBoost) { 0 -> "Off"; 1 -> "Low"; else -> "High" },
+                        valueColor = if (voiceBoost == 0) TvOnSurfaceVariant else TvPrimary,
+                        onClick = {
+                            val next = (voiceBoost + 1) % 3
+                            scope.launch { settingsManager.setVoiceBoost(next) }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    SettingsItem(
+                        title = "Auto Volume",
+                        subtitle = "Normalize loudness across channels",
+                        value = if (audioNormalize) "On" else "Off",
+                        valueColor = if (audioNormalize) TvPrimary else TvOnSurfaceVariant,
+                        onClick = {
+                            scope.launch { settingsManager.setAudioNormalize(!audioNormalize) }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    SettingsItem(
+                        title = "Reduce Background",
+                        subtitle = "Tame loud music/effects (night mode)",
+                        value = if (reduceBackground) "On" else "Off",
+                        valueColor = if (reduceBackground) TvPrimary else TvOnSurfaceVariant,
+                        onClick = {
+                            scope.launch { settingsManager.setReduceBackground(!reduceBackground) }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     SettingsItem(
                         title = "Sleep Timer",
                         subtitle = if (sleepTimerMin == 0) "Off" else "Turns off in $sleepTimerMin min",
@@ -853,17 +956,46 @@ fun TvPlayerScreen(
 
         if (showAudioSelector) {
             Dialog(onDismissRequest = { showAudioSelector = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                TvPickerDialog(
-                    title = "Select Audio Language",
-                    options = languageOptions,
-                    currentValue = language,
-                    onSelect = { value ->
-                        language = value
-                        scope.launch { settingsManager.setDefaultLanguage(value) }
-                        showAudioSelector = false
-                    },
-                    onDismiss = { showAudioSelector = false }
-                )
+                if (audioTracks.isNotEmpty()) {
+                    // Real tracks from the stream — reliable even when channels label languages oddly.
+                    val opts = audioTracks.mapIndexed { i, t -> i.toString() to t.label }
+                    val current = audioTracks.indexOfFirst { it.selected }.let { if (it >= 0) it.toString() else "" }
+                    TvPickerDialog(
+                        title = "Audio Track / Language",
+                        options = opts,
+                        currentValue = current,
+                        onSelect = { value ->
+                            val opt = value.toIntOrNull()?.let { audioTracks.getOrNull(it) }
+                            if (opt != null) {
+                                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                                    .setOverrideForType(
+                                        androidx.media3.common.TrackSelectionOverride(opt.group, listOf(opt.trackIndex))
+                                    )
+                                    .build()
+                                // Remember the chosen language as the default for other channels too.
+                                opt.group.getFormat(opt.trackIndex).language?.let { lang ->
+                                    language = lang
+                                    scope.launch { settingsManager.setDefaultLanguage(lang) }
+                                }
+                            }
+                            showAudioSelector = false
+                        },
+                        onDismiss = { showAudioSelector = false }
+                    )
+                } else {
+                    // Fallback before tracks are known: pick a preferred language by code.
+                    TvPickerDialog(
+                        title = "Preferred Audio Language",
+                        options = languageOptions,
+                        currentValue = language,
+                        onSelect = { value ->
+                            language = value
+                            scope.launch { settingsManager.setDefaultLanguage(value) }
+                            showAudioSelector = false
+                        },
+                        onDismiss = { showAudioSelector = false }
+                    )
+                }
             }
         }
 
@@ -928,9 +1060,7 @@ fun TvPlayerScreen(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                                 onClick = {
                                     categorySelectedIndex = index
-                                    currentGroup = group
-                                    val newChannels = allChannelsByGroup[group] ?: emptyList<Channel>()
-                                    currentChannels = newChannels
+                                    currentGroup = group // currentChannels derives from this
                                     currentIndex = 0
                                     showCategoryList = false
                                 },

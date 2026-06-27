@@ -82,6 +82,12 @@ adb install -r app-release.apk
 
 ## Changelog
 
+### v1.3
+- **Added** in-player audio controls (right-side panel): **Voice Boost** (cuts background bass/treble + boosts the speech band + ducks loud background), **Auto Volume** (loudness normalize), and **Reduce Background** (night-mode compression) — useful on TVs with poor built-in audio settings.
+- **Added** a real **Audio Track / Language** selector built from the stream's actual audio tracks, fixing channels whose language switching didn't work.
+- **Fixed** opening full Settings from the player resetting playback to the originally launched channel — the current channel is now preserved.
+- **Fixed** the player side-panel not scrolling (bottom items like "Open Settings" are now reachable).
+
 ### v1.2
 - **Fixed** premium DRM channels (Star/Zee/Sony/Colors) cutting out every ~2 minutes — the expiring stream token is now refreshed transparently (URL **and** cookie).
 - **Fixed** release-build crashes caused by incorrect ProGuard keep rules (wrong package name) stripping serializable navigation keys.

@@ -20,6 +20,9 @@ class SettingsManager(private val context: Context) {
         private val HARDWARE_DECODER = booleanPreferencesKey("hardware_decoder")
         private val TUNNELING = booleanPreferencesKey("tunneling_enabled")
         private val PLAYBACK_BUFFER_SEC = intPreferencesKey("playback_buffer_sec")
+        private val VOICE_BOOST = intPreferencesKey("voice_boost")          // 0=off,1=low,2=high
+        private val AUDIO_NORMALIZE = booleanPreferencesKey("audio_normalize")
+        private val REDUCE_BACKGROUND = booleanPreferencesKey("reduce_background")
         private val BUFFER_SIZE = intPreferencesKey("buffer_size")
         private val LAST_SELECTED_CATEGORY = stringPreferencesKey("last_selected_category")
         private val LAST_SELECTED_CHANNEL_INDEX = intPreferencesKey("last_selected_channel_index")
@@ -63,6 +66,17 @@ class SettingsManager(private val context: Context) {
     // more RAM and slightly higher channel-zap time. Default 60s.
     val playbackBufferSecFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[PLAYBACK_BUFFER_SEC] ?: 60
+    }
+
+    // Audio enhancement (applied via AudioEffects on the player session).
+    val voiceBoostFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[VOICE_BOOST] ?: 0
+    }
+    val audioNormalizeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[AUDIO_NORMALIZE] ?: false
+    }
+    val reduceBackgroundFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[REDUCE_BACKGROUND] ?: false
     }
 
     val bufferSizeFlow: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -154,6 +168,18 @@ class SettingsManager(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[PLAYBACK_BUFFER_SEC] = seconds
         }
+    }
+
+    suspend fun setVoiceBoost(level: Int) {
+        context.dataStore.edit { preferences -> preferences[VOICE_BOOST] = level }
+    }
+
+    suspend fun setAudioNormalize(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[AUDIO_NORMALIZE] = enabled }
+    }
+
+    suspend fun setReduceBackground(enabled: Boolean) {
+        context.dataStore.edit { preferences -> preferences[REDUCE_BACKGROUND] = enabled }
     }
 
     suspend fun setBufferSize(size: Int) {
