@@ -1,57 +1,117 @@
-# JTV (Android TV Client)
-
-A highly optimized, lightweight Live TV streaming application specifically designed for Android TV and Android boxes.
-
-## Screenshots
-
 <div align="center">
-  <img src="screenshot/ui_screenshot_1.png" width="400" />
-  <img src="screenshot/ui_screenshot_2.png" width="400" />
-  <img src="screenshot/ui_screenshot_3.png" width="400" />
-  <img src="screenshot/ui_screenshot_4.png" width="400" />
-  <img src="screenshot/ui_screenshot_5.png" width="400" />
-  <img src="screenshot/ui_screenshot_6.png" width="400" />
-  <img src="screenshot/ui_screenshot_7.png" width="400" />
-  <img src="screenshot/ui_screenshot_8.png" width="400" />
+
+# 📺 JTV — Live TV for Android TV
+
+**A fast, lightweight, no-nonsense Live TV client built for Android TV & TV boxes.**
+
+![Platform](https://img.shields.io/badge/Platform-Android%20TV-3DDC84?logo=android&logoColor=white)
+![Android](https://img.shields.io/badge/Android-7.0%20%E2%86%92%2016-blue?logo=android&logoColor=white)
+[![Latest Release](https://img.shields.io/github/v/release/F-e-n-y-x/JioTV-AndroidTV-?label=Download&color=success)](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/F-e-n-y-x/JioTV-AndroidTV-/total?color=orange)](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases)
+
+<a href="https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest">
+  <img src="https://img.shields.io/badge/⬇️%20Download%20Latest%20APK-1f6feb?style=for-the-badge" alt="Download latest APK" />
+</a>
+
 </div>
 
-## Features
+---
 
-- **Seamless DRM Playback**: Plays Widevine-protected channels (Star, Sony, Zee, Colors, etc.). The short-lived Akamai stream token is refreshed transparently in the background and re-applied to every request (URL + cookie), so live channels keep playing without the periodic "buffering/black-screen" reload.
-- **Hardware Accelerated Playback**: Custom ExoPlayer configuration with MediaCodec hardware acceleration prioritized and software fallback disabled by default, preventing the CPU from maxing out on low-end hardware.
-- **Resilient Live Streaming**: Large, tunable buffers, back-buffer, gentle live speed control, and an error policy that retries transient `403/404` errors instead of failing — designed to ride out CDN jitter on weak networks.
-- **Adjustable Playback Buffer**: Pick **Data Saver / Balanced / Smooth / Max** in Settings to trade memory for fewer interruptions.
-- **Fast, Cached Channel List**: The channel list loads instantly from disk (stale-while-revalidate), then refreshes in the background — no waiting on the network at every launch.
-- **EPG Integration**: Automatic XMLTV Electronic Program Guide parsing with a memory-friendly sliding-window model, plus native Jio per-channel EPG fallback. EPG is only fetched when enabled, keeping startup fast.
-- **Modern TV UI**: Built entirely with Jetpack Compose for TV — native Numpad login, category/channel sidebars, numeric channel entry, and smooth D-pad navigation.
-- **Quality-of-Life**: Sleep timer, favorites, autoplay last channel on boot, 12-hour clock, selectable video quality (up to 1080p) and audio language, and multiple aspect-ratio modes.
-- **Amlogic Audio Sync Option**: Optional tunneling toggle (off by default) plus specialized audio-sink parameters for TVs that need it.
+## ✨ Highlights
 
-## Technical Stack
+- 🎬 **Plays DRM channels** (Star, Sony, Zee, Colors…) with the stream token refreshed in the background, so premium channels don't cut out mid-show.
+- ⚡ **Instant startup** — the channel list loads from cache immediately, then refreshes quietly in the background.
+- 🛡️ **Built for weak hardware** — hardware decoding, tuned buffers, and smart error recovery keep playback smooth on low-end TVs.
+- 🗣️ **Voice Boost** — a built-in dialogue enhancer that lifts speech and lowers background music/effects (great for TVs with poor built-in audio).
+- 🎚️ **Real controls** — pick the actual audio track/language, video quality (up to 1080p), aspect ratio, playback buffer, and a sleep timer.
+- 📅 **EPG** — optional Electronic Program Guide with a timeline view.
+- 🖥️ **Modern TV UI** — Jetpack Compose for TV, on-screen numpad login, and smooth D-pad navigation.
 
-- **UI**: Jetpack Compose (Material TV)
-- **Media**: AndroidX Media3 (ExoPlayer) — HLS + DASH/Widevine
-- **Architecture**: MVVM with Kotlin Coroutines and StateFlow
-- **Navigation**: AndroidX Navigation3
-- **Data Persistence**: DataStore Preferences + app-scoped file cache
-- **Min / Target SDK**: Android 7.0 (API 24) → Android 16 (API 36)
+<div align="center">
+  <img src="screenshot/ui_screenshot_1.png" width="32%" alt="Home" />
+  <img src="screenshot/ui_screenshot_2.png" width="32%" alt="Channels" />
+  <img src="screenshot/ui_screenshot_3.png" width="32%" alt="Player" />
+  <img src="screenshot/ui_screenshot_4.png" width="32%" alt="EPG" />
+  <img src="screenshot/ui_screenshot_5.png" width="32%" alt="Settings" />
+  <img src="screenshot/ui_screenshot_6.png" width="32%" alt="Player settings" />
+</div>
 
-## Building from Source
+---
 
-1. Clone the repository:
+## 📥 Install
+
+1. **Download** the latest `JTV-vX.X.X.apk` from the [**Releases page**](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
+2. **Sideload** it onto your Android TV with ADB:
+
    ```bash
-   git clone https://github.com/F-e-n-y-x/JioTV-AndroidTV-.git
+   adb connect <YOUR_TV_IP>:5555
+   adb install -r JTV-vX.X.X.apk
    ```
-2. Open the project in Android Studio (or build from the CLI).
-3. Build a debug APK:
-   ```bash
-   ./gradlew assembleDebug
-   ```
-   Output: `app/build/outputs/apk/debug/app-debug.apk`
 
-### Release builds (signed)
+   > 💡 Don't have ADB set up? You can also copy the APK to a USB drive and install it with a file-manager app like **"File Commander"** or **"X-plore"** on your TV.
 
-Release builds are signed automatically **if** a `keystore.properties` file exists in the project root (it is gitignored). Create one alongside your keystore:
+3. **Log in** with your Jio mobile number + OTP using the on-screen numpad.
+
+> ⚠️ Updating from an older build that was signed with a different key? Uninstall first: `adb uninstall com.fenyx.jtv`
+
+---
+
+## 🎮 Remote Controls
+
+| Button | In the channel grid | While watching |
+|---|---|---|
+| **D-pad ↑ / ↓** | Move | Change channel |
+| **CH+ / CH−** | — | Change channel |
+| **D-pad ←** | — | Open channel list / categories |
+| **D-pad →** | — | Open the player side panel (audio, quality, sleep timer…) |
+| **OK / Center** | Open channel | Show/hide channel info |
+| **0–9** | — | Jump to a channel number |
+| **Back** | Exit app | Close overlay / exit player |
+
+---
+
+## 🔊 Voice Boost (Dialogue Enhancer)
+
+Many channels mix dialogue too quietly under loud music and effects — and most TVs have no fix for it. JTV adds one.
+
+Open the **player side panel** (D-pad **→**) → **Voice Boost** and cycle through **Off → Low → Medium → High → Max**.
+
+It uses center-channel processing to **lift the voice and lower the background** while **keeping the bass full** (so it never sounds thin). **Medium** or **High** is the sweet spot for most content. Pair it with **Auto Volume** to even out loudness between channels.
+
+---
+
+## ⚙️ Settings Overview
+
+| Setting | What it does |
+|---|---|
+| **EPG Mode** | Switch the home screen to a program-guide timeline |
+| **EPG Source URL** | Choose your own XMLTV guide source |
+| **Autoplay Last Channel** | Jump straight into your last channel on launch |
+| **Default Quality** | Auto / 1080p / 720p / 480p |
+| **Playback Buffer** | Data Saver → Max (more buffer = fewer interruptions) |
+| **Player View Mode** | Fit, Fill, Zoom, Stretch |
+| **Default Audio Language** | Preferred language for multi-audio channels |
+| **Hardware Decoder** | Keep **on** for low-end TVs |
+| **Tunneling** | Keep **off** unless you have audio-sync issues (can cause black screens on some TVs) |
+
+---
+
+## 🛠️ Building from Source
+
+**Requirements:** Android Studio (or the command-line SDK) with JDK 17+.
+
+```bash
+git clone https://github.com/F-e-n-y-x/JioTV-AndroidTV-.git
+cd JioTV-AndroidTV-
+./gradlew assembleDebug
+```
+
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+
+<details>
+<summary><b>Release builds (signed)</b></summary>
+
+Create a `keystore.properties` file in the project root (it's gitignored):
 
 ```properties
 storeFile=jtv-release.keystore
@@ -60,59 +120,59 @@ keyAlias=YOUR_ALIAS
 keyPassword=YOUR_KEY_PASSWORD
 ```
 
-Generate a keystore once with:
+Generate a keystore once:
+
 ```bash
 keytool -genkeypair -v -keystore jtv-release.keystore -alias jtv -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Then build:
+Then build the signed, minified release (~3–4 MB):
+
 ```bash
 ./gradlew assembleRelease
 ```
-Output: `app/build/outputs/apk/release/app-release.apk` (minified, ~3–4 MB). If no `keystore.properties` is present, the APK is built unsigned.
 
-## Installation
+</details>
 
-Sideload on your Android TV:
-```bash
-adb connect <YOUR_TV_IP>:5555
-adb install -r app-release.apk
-```
-> Note: if you previously installed a build signed with a different key, uninstall first: `adb uninstall com.fenyx.jtv`
+---
 
-## Changelog
+## 🧱 Tech Stack
+
+| Area | Technology |
+|---|---|
+| **UI** | Jetpack Compose for TV (Material 3) |
+| **Media** | AndroidX Media3 / ExoPlayer (HLS + DASH/Widevine) |
+| **Architecture** | MVVM · Kotlin Coroutines · StateFlow |
+| **Navigation** | AndroidX Navigation 3 |
+| **Storage** | DataStore Preferences + on-disk cache |
+| **Images** | Coil |
+
+---
+
+## 📝 Changelog
 
 ### v1.3.2
-- **Reworked the Voice Boost audio engine** into a single 5-level control (Off / Low / Medium / High / Max) using a custom software audio processor:
-  - Center-channel (mid/side) extraction to separate dialogue from background.
-  - **Bass preserved** — only the stereo "side" is high-passed; the center stays full-range.
-  - **Presence boost** (~2.6 kHz peaking EQ) on the voice for clarity, with moderate background reduction so the sound stays full (not thin/mono).
-- Merged the old separate "Reduce Background" toggle into Voice Boost.
+- Reworked **Voice Boost** into a 5-level dialogue enhancer (center-channel processing) with **bass preserved** and a presence boost for clarity — no more thin/hollow sound. The old "Reduce Background" toggle is merged in.
 
 ### v1.3
-- **Added** in-player audio controls (right-side panel): **Voice Boost** (cuts background bass/treble + boosts the speech band + ducks loud background), **Auto Volume** (loudness normalize), and **Reduce Background** (night-mode compression) — useful on TVs with poor built-in audio settings.
-- **Added** a real **Audio Track / Language** selector built from the stream's actual audio tracks, fixing channels whose language switching didn't work.
-- **Fixed** opening full Settings from the player resetting playback to the originally launched channel — the current channel is now preserved.
-- **Fixed** the player side-panel not scrolling (bottom items like "Open Settings" are now reachable).
+- In-player **audio controls** (Voice Boost, Auto Volume), a **real audio-track/language selector**, the current channel is kept when opening Settings, and the player side panel now scrolls.
 
 ### v1.2
-- **Fixed** premium DRM channels (Star/Zee/Sony/Colors) cutting out every ~2 minutes — the expiring stream token is now refreshed transparently (URL **and** cookie).
-- **Fixed** release-build crashes caused by incorrect ProGuard keep rules (wrong package name) stripping serializable navigation keys.
-- **Fixed** black screens on Amlogic/MediaTek TVs — tunneling is now off by default (toggle in Settings).
-- **Improved** playback resilience: bigger buffers, back-buffer, live speed control, and 403/404 retry handling.
-- **Added** adjustable Playback Buffer setting, Sleep Timer, and a Tunneling toggle.
-- **Improved** startup: channels load instantly from cache; EPG no longer parsed on every launch.
-- **Raised** the "Auto" quality cap to 1080p.
-- **Changed** the clock to 12-hour (AM/PM).
-- **Fixed** the app icon (aspect-correct adaptive icon + raster fallbacks) and switched to a dark TV theme (no white boot flash).
-- **Updated** `targetSdk` to 36 (Android 16); `minSdk` remains 24.
+- **DRM channels no longer cut out every ~2 minutes** (transparent stream-token refresh), fixed release-build crashes, off-by-default tunneling, smoother buffering, instant cached startup, app-icon fix, and `targetSdk 36`.
 
-## Credits & Acknowledgements
+See the [Releases page](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases) for full notes and downloads.
 
-This project was built with reference to and inspiration from the following open-source projects:
+---
+
+## 🙏 Credits
+
+Built with reference to and inspiration from:
+
 - [dineshintry/plugin.kodi.jiotv](https://github.com/dineshintry/plugin.kodi.jiotv)
 - [JioTV-Go/jiotv_go](https://github.com/JioTV-Go/jiotv_go)
 
-## Disclaimer
+---
 
-This is a custom, third-party Android TV client wrapper for educational use. It is not affiliated with, maintained, authorized, or endorsed by JioTV or Reliance Jio Infocomm Ltd in any way. Use of this software is at your own risk.
+## ⚖️ Disclaimer
+
+This is an independent, third-party Android TV client made for **educational purposes**. It is **not** affiliated with, authorized, maintained, or endorsed by JioTV or Reliance Jio Infocomm Ltd. You are responsible for how you use it, and you need a valid Jio account to log in. Use at your own risk.
