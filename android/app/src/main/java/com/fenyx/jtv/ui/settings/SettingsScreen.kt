@@ -50,6 +50,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import com.fenyx.jtv.data.AppUpdateManager
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -74,11 +75,22 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     val serverRefreshing by mainViewModel.serverRefreshing.collectAsState()
     val serverRefreshMsg by mainViewModel.serverRefreshMsg.collectAsState()
 
+    // Updater states
+    val updateInfo by mainViewModel.updateInfo.collectAsState()
+    val isCheckingUpdate by mainViewModel.isCheckingUpdate.collectAsState()
+    val isDownloadingUpdate by mainViewModel.isDownloadingUpdate.collectAsState()
+    val updateDownloadProgress by mainViewModel.updateDownloadProgress.collectAsState()
+    val updateDownloadedBytes by mainViewModel.updateDownloadedBytes.collectAsState()
+    val updateTotalBytes by mainViewModel.updateTotalBytes.collectAsState()
+    val updateStatusMessage by mainViewModel.updateStatusMessage.collectAsState()
+    val updateError by mainViewModel.updateError.collectAsState()
+
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showQualityPicker by remember { mutableStateOf(false) }
     var showPlayerResizeModePicker by remember { mutableStateOf(false) }
     var showBufferPicker by remember { mutableStateOf(false) }
     var showEpgUrlDialog by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
 
     // Initial focus so the first D-pad press works on entry (previously nothing was focused).
     val firstItemFocus = remember { FocusRequester() }
@@ -116,10 +128,15 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Back) {
                     when {
+                        showUpdateDialog -> {
+                            if (!isDownloadingUpdate) showUpdateDialog = false
+                            true
+                        }
                         showLanguagePicker -> { showLanguagePicker = false; true }
                         showQualityPicker -> { showQualityPicker = false; true }
                         showPlayerResizeModePicker -> { showPlayerResizeModePicker = false; true }
                         showBufferPicker -> { showBufferPicker = false; true }
+                        showEpgUrlDialog -> { showEpgUrlDialog = false; true }
                         else -> false
                     }
                 } else false
@@ -337,22 +354,53 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
 
 
 
-                item { SectionHeader("About") }
+                item { SectionHeader("About & Updates") }
 
                 item {
                     // Read the real version from the package so it never drifts from build.gradle
-                    // (was previously hardcoded to "v1.0.0" while the app was already v1.3.2).
                     val versionName = remember {
                         runCatching {
                             context.packageManager.getPackageInfo(context.packageName, 0).versionName
                         }.getOrNull() ?: ""
                     }
                     SettingsItem(
-                        title = "About",
-                        subtitle = "JTV",
+                        title = "App Version",
+                        subtitle = "JTV for Android TV",
                         value = if (versionName.isNotEmpty()) "v$versionName" else "",
                         valueColor = TvOnSurfaceVariant,
                         onClick = { }
+                    )
+                }
+
+                item {
+                    val isAvailable = updateInfo?.isUpdateAvailable == true
+                    SettingsItem(
+                        title = "Check for Updates",
+                        subtitle = when {
+                            isDownloadingUpdate -> "Downloading update (${(updateDownloadProgress * 100).toInt()}%)..."
+                            isCheckingUpdate -> "Checking GitHub for updates..."
+                            isAvailable -> "New version v${updateInfo?.versionName} is available! Click to view details & install."
+                            updateStatusMessage != null -> updateStatusMessage!!
+                            else -> "Check GitHub releases for updates"
+                        },
+                        value = when {
+                            isDownloadingUpdate -> "${(updateDownloadProgress * 100).toInt()}%"
+                            isCheckingUpdate -> "Checking..."
+                            isAvailable -> "Update Available"
+                            else -> "Check Now"
+                        },
+                        valueColor = when {
+                            isAvailable -> Color(0xFF4CAF50)
+                            isCheckingUpdate || isDownloadingUpdate -> TvPrimary
+                            else -> TvPrimary
+                        },
+                        onClick = {
+                            if (isAvailable) {
+                                showUpdateDialog = true
+                            } else {
+                                mainViewModel.checkForUpdates(manual = true)
+                            }
+                        }
                     )
                 }
 
@@ -475,6 +523,26 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                         }
                     }
                 }
+            }
+        }
+
+        if (showUpdateDialog && updateInfo != null) {
+            Dialog(
+                onDismissRequest = { if (!isDownloadingUpdate) showUpdateDialog = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                UpdateDialog(
+                    updateInfo = updateInfo!!,
+                    isDownloading = isDownloadingUpdate,
+                    downloadProgress = updateDownloadProgress,
+                    downloadedBytes = updateDownloadedBytes,
+                    totalBytes = updateTotalBytes,
+                    errorMessage = updateError,
+                    onDownloadAndInstall = {
+                        mainViewModel.downloadAndInstallUpdate(context)
+                    },
+                    onDismiss = { showUpdateDialog = false }
+                )
             }
         }
     }
@@ -681,6 +749,235 @@ private fun PickerDialog(
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 10.dp),
                     color = TvOnSurface
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateDialog(
+    updateInfo: AppUpdateManager.UpdateInfo,
+    isDownloading: Boolean,
+    downloadProgress: Float,
+    downloadedBytes: Long,
+    totalBytes: Long,
+    errorMessage: String?,
+    onDownloadAndInstall: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val initialFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        runCatching { initialFocus.requestFocus() }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(TvDarkBackground.copy(alpha = 0.85f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(520.dp)
+                .background(TvDarkSurface, RoundedCornerShape(16.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Software Update",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = TvOnBackground
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        "Release: ${updateInfo.tagName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TvOnSurfaceVariant
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(TvPrimaryContainer.copy(alpha = 0.4f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        "v${updateInfo.versionName}",
+                        color = TvPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Changelog Box
+            Text(
+                "What's New:",
+                style = MaterialTheme.typography.labelMedium,
+                color = TvOnSurface,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 60.dp, max = 160.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(TvDarkSurfaceVariant)
+                    .padding(12.dp)
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        Text(
+                            text = updateInfo.changelog.ifBlank { "Performance improvements and bug fixes." },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TvOnSurfaceVariant,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+            }
+
+            // File Size / Download Info
+            if (updateInfo.apkSize > 0) {
+                val sizeMb = String.format(java.util.Locale.US, "%.1f MB", updateInfo.apkSize / (1024.0 * 1024.0))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Download size: $sizeMb",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TvOnSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+            }
+
+            // Progress bar when downloading
+            if (isDownloading) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Downloading...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TvPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
+                        val dlMb = String.format(java.util.Locale.US, "%.1f", downloadedBytes / (1024.0 * 1024.0))
+                        val totMb = if (totalBytes > 0) String.format(java.util.Locale.US, "%.1f MB", totalBytes / (1024.0 * 1024.0)) else ""
+                        Text(
+                            "${(downloadProgress * 100).toInt()}% ($dlMb / $totMb)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TvOnSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(TvDarkSurfaceVariant)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(fraction = downloadProgress.coerceIn(0f, 1f))
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(TvPrimary)
+                        )
+                    }
+                }
+            }
+
+            // Error message
+            if (errorMessage != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "⚠ $errorMessage",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFF5252),
+                    modifier = Modifier.align(Alignment.Start)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Action buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!isDownloading) {
+                    Surface(
+                        onClick = onDismiss,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = TvDarkSurfaceVariant,
+                            focusedContainerColor = TvDarkSurface
+                        ),
+                        border = ClickableSurfaceDefaults.border(
+                            focusedBorder = androidx.tv.material3.Border(
+                                border = androidx.compose.foundation.BorderStroke(1.5.dp, TvFocusBorder),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        )
+                    ) {
+                        Text(
+                            "Later",
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                            color = TvOnSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Surface(
+                        modifier = Modifier.focusRequester(initialFocus),
+                        onClick = onDownloadAndInstall,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = TvPrimaryContainer,
+                            focusedContainerColor = TvPrimary
+                        ),
+                        border = ClickableSurfaceDefaults.border(
+                            focusedBorder = androidx.tv.material3.Border(
+                                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color.White),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        )
+                    ) {
+                        Text(
+                            "Download & Install",
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                } else {
+                    Text(
+                        "Downloading update...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TvOnSurfaceVariant
+                    )
+                }
             }
         }
     }

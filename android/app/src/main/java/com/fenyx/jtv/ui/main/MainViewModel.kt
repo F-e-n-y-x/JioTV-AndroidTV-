@@ -76,6 +76,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _serverRefreshMsg = MutableStateFlow<String?>(null)
     val serverRefreshMsg: StateFlow<String?> = _serverRefreshMsg.asStateFlow()
 
+    // In-app update state
+    private val _updateInfo = MutableStateFlow<com.fenyx.jtv.data.AppUpdateManager.UpdateInfo?>(null)
+    val updateInfo: StateFlow<com.fenyx.jtv.data.AppUpdateManager.UpdateInfo?> = _updateInfo.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val _isDownloadingUpdate = MutableStateFlow(false)
+    val isDownloadingUpdate: StateFlow<Boolean> = _isDownloadingUpdate.asStateFlow()
+
+    private val _updateDownloadProgress = MutableStateFlow(0f)
+    val updateDownloadProgress: StateFlow<Float> = _updateDownloadProgress.asStateFlow()
+
+    private val _updateDownloadedBytes = MutableStateFlow(0L)
+    val updateDownloadedBytes: StateFlow<Long> = _updateDownloadedBytes.asStateFlow()
+
+    private val _updateTotalBytes = MutableStateFlow(0L)
+    val updateTotalBytes: StateFlow<Long> = _updateTotalBytes.asStateFlow()
+
+    private val _updateStatusMessage = MutableStateFlow<String?>(null)
+    val updateStatusMessage: StateFlow<String?> = _updateStatusMessage.asStateFlow()
+
+    private val _updateError = MutableStateFlow<String?>(null)
+    val updateError: StateFlow<String?> = _updateError.asStateFlow()
+
+    private val _downloadedApkFile = MutableStateFlow<java.io.File?>(null)
+    val downloadedApkFile: StateFlow<java.io.File?> = _downloadedApkFile.asStateFlow()
+
     init {
         viewModelScope.launch {
             settingsManager.favoriteChannelsFlow.collect { favorites ->
@@ -128,6 +156,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     kotlinx.coroutines.delay(3 * 60 * 60 * 1000L) // every 3h while the app is open
                 }
             }
+        }
+
+        // Quiet background update check on app launch
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(5000L)
+            checkForUpdates(manual = false)
         }
     }
 
@@ -301,5 +335,72 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun retry() {
         hasLoaded = false
         fetchChannels()
+    }
+
+    fun checkForUpdates(manual: Boolean = false) {
+        if (_isCheckingUpdate.value || _isDownloadingUpdate.value) return
+        viewModelScope.launch {
+            _isCheckingUpdate.value = true
+            _updateError.value = null
+            if (manual) _updateStatusMessage.value = "Checking for updates..."
+            val app = getApplication<Application>()
+            val result = com.fenyx.jtv.data.AppUpdateManager.checkForUpdate(app)
+            result.onSuccess { info ->
+                _updateInfo.value = info
+                if (info != null && info.isUpdateAvailable) {
+                    _updateStatusMessage.value = "Update v${info.versionName} available"
+                } else if (manual) {
+                    _updateStatusMessage.value = "App is up to date"
+                }
+            }.onFailure { err ->
+                if (manual) {
+                    _updateError.value = err.message ?: "Failed to check update"
+                    _updateStatusMessage.value = "Failed to check update"
+                }
+            }
+            _isCheckingUpdate.value = false
+        }
+    }
+
+    fun downloadAndInstallUpdate(context: android.content.Context) {
+        val info = _updateInfo.value ?: return
+        if (_isDownloadingUpdate.value) return
+
+        // If already downloaded and exists, trigger install directly
+        val existingFile = _downloadedApkFile.value
+        if (existingFile != null && existingFile.exists()) {
+            com.fenyx.jtv.data.AppUpdateManager.installApk(context, existingFile)
+            return
+        }
+
+        viewModelScope.launch {
+            _isDownloadingUpdate.value = true
+            _updateError.value = null
+            _updateDownloadProgress.value = 0f
+            _updateDownloadedBytes.value = 0L
+            _updateTotalBytes.value = info.apkSize
+            _updateStatusMessage.value = "Downloading update..."
+
+            val result = com.fenyx.jtv.data.AppUpdateManager.downloadApk(
+                context = context,
+                downloadUrl = info.downloadUrl,
+                onProgress = { downloaded, total, progress ->
+                    _updateDownloadedBytes.value = downloaded
+                    _updateTotalBytes.value = total
+                    _updateDownloadProgress.value = progress
+                }
+            )
+
+            result.onSuccess { file ->
+                _downloadedApkFile.value = file
+                _isDownloadingUpdate.value = false
+                _updateStatusMessage.value = "Download complete"
+                com.fenyx.jtv.data.AppUpdateManager.installApk(context, file)
+            }.onFailure { err ->
+                _isDownloadingUpdate.value = false
+                _updateError.value = err.message ?: "Download failed"
+                _updateStatusMessage.value = "Download failed"
+            }
+        }
     }
 }
