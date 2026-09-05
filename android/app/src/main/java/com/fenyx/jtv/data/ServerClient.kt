@@ -25,6 +25,7 @@ object ServerClient {
      * URL + code path ("server" mode).
      */
     val JTV_SERVER_URLS: List<String> = listOf(
+        "http://192.168.10.10:8080",
         "http://192.168.10.10:5001",
         "https://jtv.ayushsoni.eu.org"
     )
@@ -100,8 +101,11 @@ object ServerClient {
                 if (method == "POST") { doOutput = true; outputStream.close() }
             }
             val code = conn.responseCode
+            val isGzip = "gzip".equals(conn.contentEncoding, ignoreCase = true)
             if (code !in 200..299) {
-                val err = (conn.errorStream ?: conn.inputStream)?.bufferedReader()?.use { it.readText() } ?: ""
+                val rawErrStream = conn.errorStream ?: conn.inputStream
+                val errStream = if (isGzip && rawErrStream != null) java.util.zip.GZIPInputStream(rawErrStream) else rawErrStream
+                val err = errStream?.bufferedReader()?.use { it.readText() } ?: ""
                 Log.e(TAG, "$method $path failed: $code $err")
                 return@withContext Result.failure(
                     Exception(
@@ -113,7 +117,9 @@ object ServerClient {
                     )
                 )
             }
-            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            val rawInputStream = conn.inputStream
+            val inputStream = if (isGzip && rawInputStream != null) java.util.zip.GZIPInputStream(rawInputStream) else rawInputStream
+            val json = JSONObject(inputStream?.bufferedReader()?.use { it.readText() } ?: "{}")
             val ssoToken = json.optString("ssoToken", "")
             if (ssoToken.isEmpty()) {
                 return@withContext Result.failure(Exception("Server has no active login yet. Sign in on the server first."))

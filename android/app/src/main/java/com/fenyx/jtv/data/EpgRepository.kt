@@ -225,9 +225,15 @@ class EpgRepository(private val context: Context) {
             connection.requestMethod = "GET"
             connection.connectTimeout = 10000
             connection.readTimeout = 15000
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0")
+            connection.setRequestProperty("User-Agent", "okhttp/4.2.2")
+            connection.setRequestProperty("appname", "RJIL_JioTV")
+            connection.setRequestProperty("os", "android")
+            connection.setRequestProperty("devicetype", "phone")
             if (connection.responseCode in 200..299) {
-                val text = connection.inputStream.bufferedReader().use { it.readText() }
+                val isGzip = "gzip".equals(connection.contentEncoding, ignoreCase = true)
+                val rawStream = connection.inputStream
+                val stream = if (isGzip && rawStream != null) GZIPInputStream(rawStream) else rawStream
+                val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
                 val json = org.json.JSONObject(text)
                 val epgArray = json.optJSONArray("epg") ?: return@withContext emptyList()
                 val programs = mutableListOf<EpgProgram>()

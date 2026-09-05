@@ -19,6 +19,7 @@ RUN npm run build && npm prune --omit=dev
 # ── Runtime stage ──
 FROM node:22-alpine AS runtime
 WORKDIR /app
+RUN apk add --no-cache libstdc++
 ENV NODE_ENV=production
 ENV DATA_DIR=/app/data
 COPY package.json ./

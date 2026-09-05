@@ -41,6 +41,13 @@ object JioApiClient {
         val licenseHeaders: Map<String, String>
     )
 
+    private fun readResponseBody(connection: HttpURLConnection, isError: Boolean = false): String {
+        val isGzip = "gzip".equals(connection.contentEncoding, ignoreCase = true)
+        val rawStream = if (isError) (connection.errorStream ?: connection.inputStream) else connection.inputStream
+        val stream = if (isGzip && rawStream != null) java.util.zip.GZIPInputStream(rawStream) else rawStream
+        return stream?.bufferedReader()?.use { it.readText() } ?: ""
+    }
+
     suspend fun sendOTP(mobile: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val formattedMobile = if (!mobile.startsWith("+91")) "+91$mobile" else mobile
@@ -67,11 +74,10 @@ object JioApiClient {
             writer.close()
 
             val responseCode = connection.responseCode
-            if (responseCode == 204) {
+            if (responseCode in 200..299 || responseCode == 204) {
                 Result.success(Unit)
             } else {
-                val errorStream = connection.errorStream ?: connection.inputStream
-                val errorText = errorStream.bufferedReader().use { it.readText() }
+                val errorText = readResponseBody(connection, isError = true)
                 Log.e(TAG, "sendOTP failed: $responseCode - $errorText")
                 Result.failure(Exception("Failed to send OTP: $responseCode"))
             }
@@ -117,7 +123,7 @@ object JioApiClient {
 
             val responseCode = connection.responseCode
             if (responseCode in 200..299) {
-                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                val responseText = readResponseBody(connection, isError = false)
                 val json = JSONObject(responseText)
                 
                 if (json.has("ssoToken")) {
@@ -136,8 +142,7 @@ object JioApiClient {
                     Result.failure(Exception(json.optString("message", "Unknown error in OTP verification")))
                 }
             } else {
-                val errorStream = connection.errorStream ?: connection.inputStream
-                val errorText = errorStream.bufferedReader().use { it.readText() }
+                val errorText = readResponseBody(connection, isError = true)
                 Log.e(TAG, "verifyOTP failed: $responseCode - $errorText")
                 Result.failure(Exception("Failed to verify OTP: $responseCode"))
             }
@@ -182,7 +187,7 @@ object JioApiClient {
             OutputStreamWriter(connection.outputStream).use { it.write(body); it.flush() }
 
             if (connection.responseCode in 200..299) {
-                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                val responseText = readResponseBody(connection, isError = false)
                 val json = JSONObject(responseText)
                 // The refresh service returns a fresh authToken (and sometimes a new ssoToken /
                 // refreshToken). Update whichever are present, keeping the rest.
@@ -200,8 +205,7 @@ object JioApiClient {
                     Log.d(TAG, "Token refreshed successfully")
                     return@withContext Result.success(true)
                 }
-            }
-            val errText = (connection.errorStream ?: connection.inputStream)?.bufferedReader()?.use { it.readText() } ?: ""
+            val errText = readResponseBody(connection, isError = true)
             Log.e(TAG, "Refresh failed ${connection.responseCode}: $errText")
             Result.failure(Exception("Refresh failed with code ${connection.responseCode}"))
         } catch (e: Exception) {
@@ -468,7 +472,6 @@ object JioApiClient {
             connection.setRequestProperty("analyticsId", authData.deviceId)
             connection.setRequestProperty("Lbcookie", "1")
             connection.setRequestProperty("Versioncode", "389")
-            connection.setRequestProperty("Accept-Encoding", "gzip, deflate, br")
             connection.setRequestProperty("user-agent", "okhttp/4.2.2")
             connection.setRequestProperty("Connection", "keep-alive")
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
@@ -499,7 +502,7 @@ object JioApiClient {
             }
 
             if (responseCode in 200..299) {
-                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                val responseText = readResponseBody(connection, isError = false)
                 val json = JSONObject(responseText)
                 
                 var streamUrl = json.optString("result", "")
