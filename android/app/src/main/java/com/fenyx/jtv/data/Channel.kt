@@ -11,5 +11,7 @@ data class Channel(
     val streamUrl: String,
     val isDrm: Boolean = false,
     val channelNumber: Int = 0,
-    val licenseUrl: String? = null
+    val licenseUrl: String? = null,
+    val language: String = "English",
+    val isCatchup: Boolean = false
 )

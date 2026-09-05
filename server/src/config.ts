@@ -46,7 +46,7 @@ export const config = {
 
 /** Shared Jio API constants (mirrors the Android app's JioApiClient). */
 export const jio = {
-  USER_AGENT: "okhttp/4.2.2",
+  USER_AGENT: "okhttp/4.12.0",
   APP_NAME: "RJIL_JioTV",
   OS: "android",
   DEVICE_TYPE: "phone",

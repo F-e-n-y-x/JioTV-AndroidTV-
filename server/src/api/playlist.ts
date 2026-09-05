@@ -1,7 +1,9 @@
 import zlib from "node:zlib";
 import { Readable } from "node:stream";
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { getChannels, type Channel } from "../jio/channels";
+import { getNativeEpg } from "../jio/epg";
 import { getPlaybackInfo, proxyUpstream, rewriteManifest } from "../proxy/streamProxy";
 import { getFavorites, hasCode } from "../store/db";
 import { isAuthEnabled, envServerToken, getEpgConfig } from "../store/settings";
@@ -56,7 +58,8 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     const groups = splitCsv(q.group);
     const onlyFav = q.fav === "1" || q.fav === "true";
     const includeEpg = q.epg === "1" || q.epg === "true";
-    const catchup = q.catchup === "1" || q.catchup === "true";
+    const enableCatchup = q.catchup === "1" || q.catchup === "true";
+    const hideDrm = q.drm === "hide" || q.drm === "0" || q.drm === "false";
     const quality = String(q.quality ?? "auto").toLowerCase();
 
     const all = await getChannels();
@@ -65,6 +68,7 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
       if (langs.size && !langs.has(c.language.toLowerCase())) return false;
       if (groups.size && !groups.has(c.group.toLowerCase())) return false;
       if (favs && !favs.has(c.id)) return false;
+      if (hideDrm && c.isDrm) return false;
       return true;
     });
 
@@ -77,14 +81,15 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
       ? `#EXTM3U url-tvg="${base}/epg.xml${code ? `?code=${encodeURIComponent(code)}` : ""}"`
       : "#EXTM3U";
     lines.push(header);
-    // Note: `catchup` is intentionally not emitted — Jio catch-up needs per-show IDs (srno/programId),
-    // which the M3U `{utc}` catchup template can't supply, so external players get live only.
-    void catchup;
+
     for (const c of channels) {
       const streamUrl = `${base}/live/${encodeURIComponent(c.id)}.m3u8?ts=1${codeQ}${qualityQ}`;
+      const catchupAttr = enableCatchup
+        ? `catchup="default" catchup-days="7" catchup-source="${base}/live/${encodeURIComponent(c.id)}.m3u8?utc={utc}&lutc={lutc}${codeQ}${qualityQ}" `
+        : "";
       lines.push(
         `#EXTINF:-1 tvg-id="${attr(c.id)}" tvg-name="${attr(c.name)}" tvg-logo="${attr(c.logoUrl)}" ` +
-          `group-title="${attr(c.group)}" tvg-language="${attr(c.language)}",${c.name}`
+          `group-title="${attr(c.group)}" tvg-language="${attr(c.language)}" ${catchupAttr},${c.name}`
       );
       lines.push(streamUrl);
     }
@@ -97,9 +102,48 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
   // ── Resolve one channel to a playable (proxied) HLS manifest for external players ──
   app.get<{ Params: { id: string } }>("/live/:id", { preHandler: requireCode }, async (req, reply) => {
     const rawId = req.params.id.replace(/\.(m3u8|mpd|ts)$/i, "");
-    const code = String((req.query as Record<string, unknown>).code ?? "").trim();
-    const maxHeight = qualityToHeight(String((req.query as Record<string, unknown>).q ?? ""));
-    const key = rawId; // external players get live; catch-up needs per-show IDs (web player only)
+    const q = req.query as Record<string, unknown>;
+    const code = String(q.code ?? "").trim();
+    const maxHeight = qualityToHeight(String(q.q ?? ""));
+    const utcRaw = String(q.utc ?? q.lutc ?? "").trim();
+
+    let key = rawId;
+    if (utcRaw) {
+      // Catch-up replay requested via IPTV {utc} parameter
+      const utcNum = Number(utcRaw);
+      const utcMs = Number.isFinite(utcNum) ? (utcNum > 1e11 ? utcNum : utcNum * 1000) : Date.parse(utcRaw);
+      if (Number.isFinite(utcMs) && utcMs > 0) {
+        try {
+          const epg = await getNativeEpg(rawId, { fullCatchup: true });
+          const prog = epg.find((p) => utcMs >= p.startMs && utcMs < p.stopMs);
+          if (prog && prog.srno) {
+            const cu = {
+              c: rawId,
+              s: prog.srno,
+              p: prog.showId ?? "",
+              b: prog.startMs,
+              e: prog.stopMs,
+              t: prog.showtime ?? "",
+            };
+            const b64 = Buffer.from(JSON.stringify(cu), "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+            key = `cu.${b64}`;
+          } else {
+            const cu = {
+              c: rawId,
+              s: randomUUID(),
+              p: "",
+              b: utcMs,
+              e: utcMs + 3600_000,
+              t: "",
+            };
+            const b64 = Buffer.from(JSON.stringify(cu), "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+            key = `cu.${b64}`;
+          }
+        } catch {
+          /* fallback to live */
+        }
+      }
+    }
 
     try {
       const info = await getPlaybackInfo(key);

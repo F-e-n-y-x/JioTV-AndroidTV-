@@ -24,7 +24,8 @@ export async function refreshTokens(auth: AuthData): Promise<AuthData> {
       devicetype: jio.DEVICE_TYPE,
       deviceId: auth.deviceId,
       uniqueId: auth.uniqueId,
-      versionCode: "389",
+      versionCode: "422",
+      "user-agent": jio.USER_AGENT,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

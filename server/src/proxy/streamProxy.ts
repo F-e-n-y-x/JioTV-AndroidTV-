@@ -11,8 +11,15 @@ interface CachedStream {
   expiresAtMs: number;
 }
 
+interface DeadCacheEntry {
+  error: Error;
+  expiresAtMs: number;
+}
+
 const HDNEA_MARKER = "__hdnea__=";
 const cache = new Map<string, CachedStream>();
+const deadCache = new Map<string, DeadCacheEntry>();
+const DEAD_CACHE_TTL_MS = 60_000; // 60 seconds cooldown for 404/403/down channels
 
 /**
  * A playback key is either "channelId" (live) or "cu.<base64url-json>" (catch-up), where the JSON is
@@ -51,15 +58,26 @@ async function masterAlive(url: string, headers: Record<string, string>): Promis
 }
 
 async function resolve(key: string): Promise<CachedStream> {
+  const dead = deadCache.get(key);
+  if (dead && Date.now() < dead.expiresAtMs) {
+    throw dead.error;
+  }
+
   const { channelId, catchup } = parseKey(key);
   const creds = getStoredCredentials();
   if (!creds) throw new Error("No active login on the server — sign in on the Account page first.");
   const cachedMode = catchup ? undefined : streamMode.get(channelId);
   const opts = catchup ? { catchup } : { preferDrm: cachedMode === "drm" };
+
+  const markDead = (err: Error) => {
+    deadCache.set(key, { error: err, expiresAtMs: Date.now() + DEAD_CACHE_TTL_MS });
+    return err;
+  };
+
   // A 403 from geturl is per-channel: Jio blocks it for this account (delisted / licensing) even though
   // it's still in the channel list. It's NOT a token or plan issue and no refresh fixes it.
   const blocked = () =>
-    new Error("Jio blocked this channel (HTTP 403) — it isn't available on your account right now even though it's listed. A few channels are like this regardless of plan; if there's an HD version of the same channel, try that.");
+    markDead(new Error("Jio blocked this channel (HTTP 403) — it isn't available on your account right now even though it's listed. A few channels are like this regardless of plan; if there's an HD version of the same channel, try that."));
   let activeCreds: AuthData = creds;
   let data: StreamData;
   try {
@@ -87,7 +105,7 @@ async function resolve(key: string): Promise<CachedStream> {
   // dead the channel is simply down on Jio's side, so say so plainly instead of failing to parse a 404.
   if (!catchup && cachedMode === undefined && data.streamUrl) {
     const down = () =>
-      new Error("This channel is temporarily unavailable on Jio's servers (its stream URL returns 404). It's a Jio-side outage for this channel, not a login/plan issue — try again later or pick another channel.");
+      markDead(new Error("This channel is temporarily unavailable on Jio's servers (its stream URL returns 404). It's a Jio-side outage for this channel, not a login/plan issue — try again later or pick another channel."));
     if (!data.isMpd) {
       if (!(await masterAlive(data.streamUrl, data.streamHeaders))) {
         // HLS Fallback is dead — try the Widevine DASH.
@@ -95,7 +113,7 @@ async function resolve(key: string): Promise<CachedStream> {
         if (drm.isMpd && drm.streamUrl && (await masterAlive(drm.streamUrl, drm.streamHeaders))) {
           data = drm; streamMode.set(channelId, "drm");
         } else {
-          throw down(); // don't cache — retry next time in case Jio brings it back
+          throw down();
         }
       } else {
         streamMode.set(channelId, "hls");
@@ -107,6 +125,7 @@ async function resolve(key: string): Promise<CachedStream> {
     }
   }
 
+  deadCache.delete(key);
   const hdnea = extractHdneaToken(data.streamUrl);
   const expSec = extractTokenExpiryEpochSec(hdnea);
   const expiresAtMs = expSec > 0 ? expSec * 1000 : Date.now() + 90_000;

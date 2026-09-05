@@ -15,11 +15,26 @@ object JioApiClient {
     private const val TAG = "JioApiClient"
 
     // Default Headers
-    private const val USER_AGENT = "okhttp/4.2.2"
+    private const val USER_AGENT = "okhttp/4.12.0"
     private const val APP_NAME = "RJIL_JioTV"
     private const val OS = "android"
     private const val DEVICE_TYPE = "phone"
     private const val HOST = "jiotvapi.media.jio.com"
+
+    private val JIO_LANG_MAP: Map<String, String> = mapOf(
+        "1" to "Hindi", "2" to "Marathi", "3" to "Punjabi", "4" to "Urdu", "5" to "Tamil", "6" to "English",
+        "7" to "Malayalam", "8" to "Telugu", "9" to "Bengali", "10" to "Kannada", "11" to "Oriya",
+        "12" to "Gujarati", "13" to "Assamese", "14" to "Nepali", "15" to "French", "16" to "Bhojpuri",
+        "17" to "Kokborok", "18" to "Odia", "19" to "Rajasthani", "23" to "Arabic"
+    )
+
+    data class CatchupParams(
+        val srno: String,
+        val programId: String = "",
+        val beginMs: Long,
+        val endMs: Long,
+        val showtime: String = ""
+    )
 
     data class AuthData(
         val ssoToken: String,
@@ -174,7 +189,8 @@ object JioApiClient {
             connection.setRequestProperty("devicetype", DEVICE_TYPE)
             connection.setRequestProperty("deviceId", authData.deviceId)
             connection.setRequestProperty("uniqueId", authData.uniqueId)
-            connection.setRequestProperty("versionCode", "389")
+            connection.setRequestProperty("versionCode", "422")
+            connection.setRequestProperty("user-agent", USER_AGENT)
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
 
@@ -205,6 +221,7 @@ object JioApiClient {
                     Log.d(TAG, "Token refreshed successfully")
                     return@withContext Result.success(true)
                 }
+            }
             val errText = readResponseBody(connection, isError = true)
             Log.e(TAG, "Refresh failed ${connection.responseCode}: $errText")
             Result.failure(Exception("Refresh failed with code ${connection.responseCode}"))
@@ -259,10 +276,12 @@ object JioApiClient {
                     name = obj.getString("name"),
                     logoUrl = obj.getString("logoUrl"),
                     group = obj.getString("group"),
-                    streamUrl = obj.getString("streamUrl"),
-                    isDrm = obj.getBoolean("isDrm"),
-                    channelNumber = obj.getInt("channelNumber"),
-                    licenseUrl = if (obj.has("licenseUrl")) obj.getString("licenseUrl") else null
+                    streamUrl = obj.optString("streamUrl", ""),
+                    isDrm = obj.optBoolean("isDrm", false),
+                    channelNumber = obj.optInt("channelNumber", 0),
+                    licenseUrl = if (obj.has("licenseUrl")) obj.getString("licenseUrl") else null,
+                    language = obj.optString("language", "English"),
+                    isCatchup = obj.optBoolean("isCatchup", false)
                 ))
             }
             channels.ifEmpty { null }
@@ -342,12 +361,18 @@ object JioApiClient {
                                     var channelName = ""
                                     var logoUrl = ""
                                     var catId = ""
+                                    var langId = ""
+                                    var isDrm = false
+                                    var isCatchup = false
                                     while (reader.hasNext()) {
                                         when (reader.nextName()) {
                                             "channel_id" -> channelId = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
                                             "channel_name" -> channelName = reader.nextString()
                                             "logoUrl" -> logoUrl = reader.nextString()
                                             "channelCategoryId" -> catId = try { reader.nextString() } catch(e: Exception) { reader.nextInt().toString() }
+                                            "channelLanguageId" -> langId = try { reader.nextString() } catch(e: Exception) { reader.nextInt().toString() }
+                                            "isDrm" -> isDrm = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
+                                            "isCatchupAvailable" -> isCatchup = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
                                             else -> reader.skipValue()
                                         }
                                     }
@@ -358,9 +383,11 @@ object JioApiClient {
                                             name = channelName.ifEmpty { "Unknown" },
                                             logoUrl = "https://jiotvimages.cdn.jio.com/dare_images/images/$logoUrl",
                                             group = categoryMap[catId] ?: "Other",
-                                            isDrm = true,
+                                            isDrm = isDrm,
                                             channelNumber = channelId,
-                                            streamUrl = ""
+                                            streamUrl = "",
+                                            language = JIO_LANG_MAP[langId] ?: "Other",
+                                            isCatchup = isCatchup
                                         )
                                     }
                                 }
@@ -378,8 +405,8 @@ object JioApiClient {
             }
 
             // Fetch v1.4 (Sony/Zee) and v3.1 (Star/Disney)
-            parseChannels("https://jiotvapi.cdn.jio.com/apis/v1.4/getMobileChannelList/get/?langId=6&devicetype=phone&os=android&usertype=JIO&version=396")
-            parseChannels("https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=389")
+            parseChannels("https://jiotvapi.cdn.jio.com/apis/v1.4/getMobileChannelList/get/?langId=6&devicetype=phone&os=android&usertype=JIO&version=422")
+            parseChannels("https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=422")
 
             if (finalChannelsMap.isEmpty()) {
                 // Network produced nothing — fall back to whatever we have on disk (even if stale)
@@ -405,6 +432,8 @@ object JioApiClient {
                     obj.put("streamUrl", ch.streamUrl)
                     obj.put("isDrm", ch.isDrm)
                     obj.put("channelNumber", ch.channelNumber)
+                    obj.put("language", ch.language)
+                    obj.put("isCatchup", ch.isCatchup)
                     ch.licenseUrl?.let { obj.put("licenseUrl", it) }
                     jsonArray.put(obj)
                 }
@@ -440,7 +469,8 @@ object JioApiClient {
         context: android.content.Context,
         channelId: String,
         authData: AuthData,
-        allowRefreshRetry: Boolean = true
+        allowRefreshRetry: Boolean = true,
+        catchup: CatchupParams? = null
     ): Result<StreamData> = withContext(Dispatchers.IO) {
         try {
             val url = URL("https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl")
@@ -471,13 +501,18 @@ object JioApiClient {
             connection.setRequestProperty("Subscriberid", authData.crmid)
             connection.setRequestProperty("analyticsId", authData.deviceId)
             connection.setRequestProperty("Lbcookie", "1")
-            connection.setRequestProperty("Versioncode", "389")
-            connection.setRequestProperty("user-agent", "okhttp/4.2.2")
+            connection.setRequestProperty("Versioncode", "422")
+            connection.setRequestProperty("user-agent", USER_AGENT)
             connection.setRequestProperty("Connection", "keep-alive")
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             connection.doOutput = true
 
-            val body = "stream_type=Live&channel_id=$channelId"
+            val body = if (catchup != null) {
+                val enc = { s: String -> java.net.URLEncoder.encode(s, "UTF-8") }
+                "stream_type=Catchup&channel_id=$channelId&srno=${enc(catchup.srno)}&programId=${enc(catchup.programId)}&begin=${catchup.beginMs}&end=${catchup.endMs}&showtime=${enc(catchup.showtime)}"
+            } else {
+                "stream_type=Live&channel_id=$channelId"
+            }
             val writer = OutputStreamWriter(connection.outputStream)
             writer.write(body)
             writer.flush()
@@ -496,7 +531,7 @@ object JioApiClient {
                     val settingsManager = com.fenyx.jtv.data.SettingsManager(context)
                     val newAuthData = settingsManager.authDataFlow.first()
                     if (newAuthData != null) {
-                        return@withContext getStreamUrl(context, channelId, newAuthData, allowRefreshRetry = false)
+                        return@withContext getStreamUrl(context, channelId, newAuthData, allowRefreshRetry = false, catchup = catchup)
                     }
                 }
             }
@@ -532,7 +567,7 @@ object JioApiClient {
                 licenseHeaders["srno"] = UUID.randomUUID().toString()
                 licenseHeaders["channelid"] = channelId
                 licenseHeaders["usergroup"] = "tvYR7NSNn7rymo3F"
-                licenseHeaders["versionCode"] = "389"
+                licenseHeaders["versionCode"] = "422"
                 licenseHeaders["Accept-Encoding"] = "gzip, deflate"
                 licenseHeaders["Content-Type"] = "application/octet-stream"
                 licenseHeaders["Accept"] = "*/*"
@@ -549,7 +584,7 @@ object JioApiClient {
 
                 // Build stream headers
                 val streamHeaders = mutableMapOf<String, String>()
-                streamHeaders["User-Agent"] = "plaYtv/7.1.5 (Linux;Android 9) ExoPlayerLib/2.11.7"
+                streamHeaders["User-Agent"] = "plaYtv/7.1.8 (Linux;Android 8.1.0) ExoPlayerLib/2.11.7"
                 streamHeaders["ssoToken"] = authData.ssoToken
                 streamHeaders["userId"] = authData.userId
                 streamHeaders["uniqueId"] = authData.uniqueId

@@ -1,0 +1,71 @@
+name: Build and Release Android APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./android
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Locate and Rename APK
+        id: apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          VERSION_TAG="${{ github.ref_name }}"
+          if [[ "${{ github.ref }}" != refs/tags/* ]]; then
+            VERSION_TAG="v1.5.3"
+          fi
+          RELEASE_APK="JTV-${VERSION_TAG}.apk"
+          cp "$APK_PATH" "../$RELEASE_APK"
+          echo "apk_path=$RELEASE_APK" >> $GITHUB_OUTPUT
+          echo "release_name=JTV ${VERSION_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jtv-release-apk
+          path: ${{ steps.apk.outputs.apk_path }}
+
+      - name: Create or Update GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.apk.outputs.release_name }}
+          files: ${{ steps.apk.outputs.apk_path }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true

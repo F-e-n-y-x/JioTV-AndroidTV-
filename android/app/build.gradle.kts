@@ -22,8 +22,8 @@ android {
         applicationId = "com.fenyx.jtv"
         minSdk = 24          // Android 7.0 — comfortably covers the user's Android 10 TV
         targetSdk = 36       // Android 16 (latest)
-        versionCode = 13
-        versionName = "1.5.2"
+        versionCode = 14
+        versionName = "1.5.3"
     }
 
     signingConfigs {
@@ -42,9 +42,11 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Use the release keystore when credentials are available; otherwise the APK is unsigned.
+            // Use the release keystore when credentials are available; otherwise fall back to debug signing.
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }

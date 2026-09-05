@@ -75,8 +75,8 @@ export async function getStreamData(
       Subscriberid: auth.crmid,
       analyticsId: auth.deviceId,
       Lbcookie: "1",
-      Versioncode: "389",
-      "user-agent": "okhttp/4.2.2",
+      Versioncode: "422",
+      "user-agent": jio.USER_AGENT,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body,
@@ -129,7 +129,7 @@ export async function getStreamData(
     srno: randomUUID(),
     channelid: channelId,
     usergroup: "tvYR7NSNn7rymo3F",
-    versionCode: "389",
+    versionCode: "422",
     "Content-Type": "application/octet-stream",
     Accept: "*/*",
     ssoToken: auth.ssoToken,
@@ -142,7 +142,7 @@ export async function getStreamData(
   if (cookieStr) licenseHeaders["Cookie"] = cookieStr;
 
   const streamHeaders: Record<string, string> = {
-    "User-Agent": "plaYtv/7.1.5 (Linux;Android 9) ExoPlayerLib/2.11.7",
+    "User-Agent": "plaYtv/7.1.8 (Linux;Android 8.1.0) ExoPlayerLib/2.11.7",
     ssoToken: auth.ssoToken,
     userId: auth.userId,
     uniqueId: auth.uniqueId,

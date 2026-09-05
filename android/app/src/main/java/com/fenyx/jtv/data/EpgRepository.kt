@@ -24,7 +24,11 @@ data class EpgProgram(
     val title: String,
     val description: String,
     val startMs: Long,
-    val stopMs: Long
+    val stopMs: Long,
+    val srno: String? = null,
+    val showId: String? = null,
+    val showtime: String? = null,
+    val catchup: Boolean = false
 )
 
 enum class EpgSyncStatus {
@@ -217,15 +221,15 @@ class EpgRepository(private val context: Context) {
         return@withContext epgMap
     }
 
-    suspend fun getNativeEpgForChannel(channelId: String): List<EpgProgram> = withContext(Dispatchers.IO) {
+    suspend fun getNativeEpgForChannel(channelId: String, offset: Int = 0): List<EpgProgram> = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
         try {
-            val url = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/getepg/get?offset=0&channel_id=$channelId&langId=6")
+            val url = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/getepg/get?offset=$offset&channel_id=$channelId&langId=6")
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 10000
             connection.readTimeout = 15000
-            connection.setRequestProperty("User-Agent", "okhttp/4.2.2")
+            connection.setRequestProperty("User-Agent", "okhttp/4.12.0")
             connection.setRequestProperty("appname", "RJIL_JioTV")
             connection.setRequestProperty("os", "android")
             connection.setRequestProperty("devicetype", "phone")
@@ -243,8 +247,12 @@ class EpgRepository(private val context: Context) {
                     val desc = obj.optString("description", "")
                     val startMs = obj.optLong("startEpoch", 0)
                     val stopMs = obj.optLong("endEpoch", 0)
+                    val srno = if (obj.has("srno")) obj.optString("srno") else null
+                    val showId = if (obj.has("showId")) obj.optString("showId") else null
+                    val showtime = if (obj.has("showtime")) obj.optString("showtime") else null
+                    val catchup = obj.optBoolean("isCatchupAvailable", false)
                     if (title.isNotEmpty() && startMs > 0 && stopMs > 0) {
-                        programs.add(EpgProgram(title, desc, startMs, stopMs))
+                        programs.add(EpgProgram(title, desc, startMs, stopMs, srno, showId, showtime, catchup))
                     }
                 }
                 return@withContext programs
