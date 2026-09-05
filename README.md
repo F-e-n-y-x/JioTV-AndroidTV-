@@ -173,6 +173,13 @@ Then build the signed, minified release (~3–4 MB):
 
 ## 📝 Changelog
 
+### v1.5.3
+- **Self-Healing Token Refresh**: Fixed a nested control-flow bug in `refreshToken` ensuring non-2xx failures correctly propagate and auto-recovery reliably re-authenticates.
+- **7-Day Catch-Up Horizon & VOD Replay**: Expanded EPG program parsing with show IDs (`srno`, `showId`, `showtime`, and `isCatchupAvailable`) and added `stream_type=Catchup` VOD playback support.
+- **Upstream Upgrades**: Modernized API version code to `422` (JioTV v7.1.8), OkHttp headers to `4.12.0`, and stream user-agents to `plaYtv/7.1.8`.
+- **Companion Server Negative Caching**: Added 60s cooldown cache for 404/403 dead channels to protect against upstream IP rate limiting.
+- **IPTV Catch-Up & DRM Filtering**: Enhanced M3U playlists with `?drm=hide` and `?catchup=1` support for TiviMate, Kodi, and OTT Navigator.
+
 ### v1.5.2
 - **No more reload a second into every channel.** The saved quality preference loaded *after* playback
   had already started and (needlessly) re-fetched the stream and re-prepared the player. Quality never
