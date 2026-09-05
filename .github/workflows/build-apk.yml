@@ -38,6 +38,26 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Configure Release Signing Keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > jtv-release.keystore
+            cat <<EOF > keystore.properties
+          storeFile=jtv-release.keystore
+          storePassword=${RELEASE_KEYSTORE_PASSWORD}
+          keyAlias=${RELEASE_KEY_ALIAS}
+          keyPassword=${RELEASE_KEY_PASSWORD}
+          EOF
+            echo "Release keystore configured successfully."
+          else
+            echo "RELEASE_KEYSTORE_BASE64 not set, will fall back to debug signing."
+          fi
+
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace
 
