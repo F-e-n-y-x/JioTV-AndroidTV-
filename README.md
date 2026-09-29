@@ -192,6 +192,15 @@ Then build the signed, minified release (~3–4 MB):
 
 ## 📝 Changelog
 
+### v1.5.5
+- **More Zee channels play again.** Zee Bangla, Zee Tamil, Zee Yuva, Zee Cinemalu, Zee Sarthak,
+  Zee Classic and Zee Bangla Sonar were failing because Jio sends a broken DASH link for them. JTV now
+  checks it and switches to the working HLS stream, and sends the correct headers for its decryption key.
+- **Clear message when Jio doesn't carry a channel.** Most other Zee Entertainment channels (Zee TV,
+  Zee Cinema, &Pictures, Zee Talkies…) have been removed from JioTV by Jio itself: every Jio endpoint
+  refuses them or returns an empty stream. Instead of retrying 5 times and then wrongly saying
+  "login expired", the player now tells you straight away that the channel isn't available from Jio.
+
 ### v1.5.4
 - **Reorder your favorites.** In ★ Favorites, hold OK on a channel and pick **Move**, then place it with
   the arrow keys (▲▼ jump a whole row). Press OK to save or BACK to cancel. The menu also has

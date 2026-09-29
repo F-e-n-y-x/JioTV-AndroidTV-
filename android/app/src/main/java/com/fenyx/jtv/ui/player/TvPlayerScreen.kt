@@ -237,6 +237,10 @@ fun TvPlayerScreen(
     // Holds the freshest Akamai `__hdnea__` token. Read on the player's loader threads, written by the
     // refresh loop below, so it's an AtomicReference.
     val tokenHolder = remember { java.util.concurrent.atomic.AtomicReference("") }
+    // Headers for the AES-128 key of the non-DRM HLS. The key lives on tv.media.jio.com and
+    // authenticates like the Widevine license server (ssoToken/Accesstoken/crmid…), NOT like the CDN,
+    // so sending the CDN stream headers there gets a 403 and the stream never decrypts.
+    val keyHeadersHolder = remember { java.util.concurrent.atomic.AtomicReference<Map<String, String>>(emptyMap()) }
 
     // Reuse data source factories to avoid GC pressure on every channel switch
     val httpDataSourceFactory = remember {
@@ -254,7 +258,10 @@ fun TvPlayerScreen(
     val resolvingDataSourceFactory = remember {
         androidx.media3.datasource.ResolvingDataSource.Factory(httpDataSourceFactory) { dataSpec ->
             val token = tokenHolder.get()
-            if (token.isEmpty()) {
+            val keyHeaders = keyHeadersHolder.get()
+            if (keyHeaders.isNotEmpty() && isHlsKeyUri(dataSpec.uri.toString())) {
+                dataSpec.withRequestHeaders(keyHeaders)
+            } else if (token.isEmpty()) {
                 dataSpec
             } else {
                 val marker = "__hdnea__="
@@ -432,6 +439,7 @@ fun TvPlayerScreen(
 
                 // Seed the token holder so the ResolvingDataSource and refresh loop have the current token.
                 tokenHolder.set(com.fenyx.jtv.data.JioApiClient.extractHdneaToken(finalUrl))
+                keyHeadersHolder.set(if (streamData.isMpd) emptyMap() else streamData.licenseHeaders)
 
                 android.util.Log.d("TvPlayer", "Loading stream: $finalUrl (isMpd: ${streamData.isMpd})")
 
@@ -473,11 +481,18 @@ fun TvPlayerScreen(
                     userPaused = false // a new channel always starts playing
                 }
             } else {
-                val fetchErr = result.exceptionOrNull()?.message ?: ""
+                val fetchEx = result.exceptionOrNull()
+                val fetchErr = fetchEx?.message ?: ""
                 android.util.Log.e("TvPlayer", "Failed to fetch stream: $fetchErr")
+                // Jio refusing the channel, or its stream being gone from the CDN, won't fix itself in
+                // the next few seconds — say so at once instead of retrying 5x and then blaming the login.
+                if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException ||
+                    fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
+                    isBuffering = false
+                    playbackError = "$fetchErr\n\nPress OK to retry, or CH+/CH− for another channel."
                 // Let the auto-recovery budget retry transient fetch failures; only show the error
                 // once it's exhausted, so a one-off hiccup doesn't flash a message.
-                if (retryCount.intValue >= 5) {
+                } else if (retryCount.intValue >= 5) {
                     isBuffering = false
                     // A persistent 401/403 after the built-in credential refresh means the upstream
                     // Jio login is dead — retrying won't help. In server/JTV mode that's fixed by
@@ -928,13 +943,17 @@ fun TvPlayerScreen(
         // ─── Playback Error Overlay ───
         if (playbackError != null && !isBuffering) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.widthIn(max = 720.dp).padding(horizontal = 48.dp)
+                ) {
                     Text("⚠", fontSize = 40.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         playbackError ?: "",
                         color = Color.White,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -1539,6 +1558,13 @@ fun TvPlayerScreen(
         focusRequester.requestFocus()
     }
 }
+
+/** AES-128 key URIs of Jio's non-DRM "Fallback" HLS (same rule the companion server uses). */
+private val JIO_KEY_HOST = Regex("(^|//)tv\\.media\\.jio\\.com/", RegexOption.IGNORE_CASE)
+
+private fun isHlsKeyUri(uri: String): Boolean =
+    uri.contains(".pkey", ignoreCase = true) || uri.contains("aes128.key", ignoreCase = true) ||
+        JIO_KEY_HOST.containsMatchIn(uri)
 
 /** Display name for a category, including the Home screen's "All" / "Favorites" pseudo-categories. */
 private fun groupLabel(group: String): String = when (group) {

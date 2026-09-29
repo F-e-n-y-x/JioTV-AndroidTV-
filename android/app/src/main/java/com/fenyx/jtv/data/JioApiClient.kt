@@ -48,6 +48,45 @@ object JioApiClient {
         val refreshToken: String = ""
     )
 
+    /** Jio refused this one channel (geturl 403 even with fresh credentials). Not a login problem. */
+    class ChannelBlockedException(message: String) : Exception(message)
+
+    /** Jio handed back stream URLs, but every one of them is dead on its CDN (404 / not a manifest). */
+    class ChannelUnavailableException(message: String) : Exception(message)
+
+    /**
+     * Per-channel choice made on first play this session: "hls" when the DASH (Widevine) URL is dead
+     * but the non-DRM HLS works (several Zee regional channels), "mpd" when the DASH URL is fine.
+     * Remembered so each channel only pays for the manifest check once.
+     */
+    private val streamModeCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
+     * True when [url] answers 2xx with something that looks like an HLS/DASH manifest. A network error
+     * counts as alive (let the player try and report it) so a flaky probe never blocks a good channel.
+     */
+    private fun manifestAlive(url: String, headers: Map<String, String>): Boolean {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 5000
+                readTimeout = 5000
+                headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            }
+            if (conn.responseCode !in 200..299) return false
+            val head = ByteArray(256)
+            val n = conn.inputStream.use { it.read(head) }
+            if (n <= 0) return false
+            val text = String(head, 0, n, Charsets.UTF_8).trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+            text.startsWith("#EXTM3U") || text.startsWith("<?xml") || text.startsWith("<MPD")
+        } catch (e: java.io.IOException) {
+            Log.w(TAG, "Manifest probe failed (treating as alive): ${e.message}")
+            true
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
     data class StreamData(
         val streamUrl: String,
         val licenseUrl: String,
@@ -536,20 +575,67 @@ object JioApiClient {
                 }
             }
 
+            // Still 403 after a successful credential refresh: Jio is refusing this specific channel
+            // (e.g. most Zee Entertainment channels since Jio dropped them). Retrying can't fix it.
+            if (responseCode == 403 && !allowRefreshRetry) {
+                return@withContext Result.failure(ChannelBlockedException(
+                    "Jio isn't providing this channel right now (it refused the stream request). " +
+                    "This is on Jio's side, not a login problem. Try another channel."
+                ))
+            }
+
             if (responseCode in 200..299) {
                 val responseText = readResponseBody(connection, isError = false)
                 val json = JSONObject(responseText)
-                
-                var streamUrl = json.optString("result", "")
+
+                val hlsUrl = json.optString("result", "")
                 val mpdObj = json.optJSONObject("mpd")
-                val isMpd = mpdObj != null && mpdObj.has("result")
-                var licenseUrl = ""
-                
-                if (isMpd) {
-                    streamUrl = mpdObj.optString("result", "")
-                    licenseUrl = mpdObj.optString("key", "")
+                val mpdUrl = mpdObj?.optString("result", "").orEmpty()
+                val mpdKey = mpdObj?.optString("key", "").orEmpty()
+
+                // Prefer the Widevine DASH (best quality). But for some channels Jio returns a DASH URL
+                // whose CDN path 404s while the plain HLS still plays, so on first live play check the
+                // DASH manifest and fall back to HLS if it's dead. Catch-up keeps the old behaviour.
+                val probeHeaders = { u: String ->
+                    buildMap {
+                        put("User-Agent", "plaYtv/7.1.8 (Linux;Android 8.1.0) ExoPlayerLib/2.11.7")
+                        if (u.contains("__hdnea__")) put("Cookie", "__hdnea__" + u.split("__hdnea__")[1])
+                    }
                 }
-                
+                val hlsUsable = hlsUrl.startsWith("http")
+                var useMpd = mpdUrl.isNotEmpty()
+                if (catchup == null && useMpd) {
+                    val mode = streamModeCache[channelId]
+                    if (mode == "hls" && hlsUsable) {
+                        useMpd = false
+                    } else if (mode == null) {
+                        if (manifestAlive(mpdUrl, probeHeaders(mpdUrl))) {
+                            streamModeCache[channelId] = "mpd"
+                        } else if (hlsUsable && manifestAlive(hlsUrl, probeHeaders(hlsUrl))) {
+                            Log.i(TAG, "DASH is dead for $channelId, using HLS")
+                            streamModeCache[channelId] = "hls"
+                            useMpd = false
+                        } else {
+                            return@withContext Result.failure(ChannelUnavailableException(
+                                "This channel is offline on Jio's servers right now (its stream isn't there). " +
+                                "It's a Jio-side problem, not your login. Try again later or pick another channel."
+                            ))
+                        }
+                    }
+                } else if (catchup == null && hlsUsable && streamModeCache[channelId] == null) {
+                    if (!manifestAlive(hlsUrl, probeHeaders(hlsUrl))) {
+                        return@withContext Result.failure(ChannelUnavailableException(
+                            "This channel is offline on Jio's servers right now (its stream isn't there). " +
+                            "It's a Jio-side problem, not your login. Try again later or pick another channel."
+                        ))
+                    }
+                    streamModeCache[channelId] = "hls"
+                }
+
+                val isMpd = useMpd
+                val streamUrl = if (isMpd) mpdUrl else hlsUrl
+                val licenseUrl = if (isMpd) mpdKey else ""
+
                 // Extract cookie from response or headers
                 var cookieStr = ""
                 if (streamUrl.contains("__hdnea__")) {
