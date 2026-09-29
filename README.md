@@ -65,6 +65,7 @@
 | **D-pad ←** | — | Open channel list / categories |
 | **D-pad →** | — | Open the player side panel (audio, quality, sleep timer…) |
 | **OK / Center** | Open channel | Show/hide channel info |
+| **Hold OK** | Channel menu: favorite, move, group by category | — |
 | **0–9** | — | Jump to a channel number |
 | **Back** | Exit app | Close overlay / exit player |
 
@@ -172,6 +173,18 @@ Then build the signed, minified release (~3–4 MB):
 ---
 
 ## 📝 Changelog
+
+### v1.5.4
+- **Reorder your favorites.** In ★ Favorites, hold OK on a channel and pick **Move**, then place it with
+  the arrow keys (▲▼ jump a whole row). Press OK to save or BACK to cancel. The menu also has
+  **Move to top**, **Move to bottom** and **Remove from Favorites**.
+- **Group favorites by category.** One press lines your favorites up by category, e.g. all News, then
+  all Movies, then Music. Categories keep the order they first appear in, so move one News channel to
+  the top first to put News first.
+- **Favorites everywhere.** Hold OK on any channel to add it to favorites without opening it. The
+  sidebar shows how many you have, and the player's category list (press ← twice) now starts with ★ Favorites,
+  so CH+/CH− follow your own order.
+- Mouse, air-mouse and touch taps now always act on the item you tapped.
 
 ### v1.5.3
 - **Self-Healing Token Refresh**: Fixed a nested control-flow bug in `refreshToken` ensuring non-2xx failures correctly propagate and auto-recovery reliably re-authenticates.

@@ -160,12 +160,20 @@ fun MainNavigation() {
                     // Memoize the expensive per-group grouping + index lookups so they run once per
                     // channel-list change, not on every recomposition (this was a real source of
                     // player-open / settings-open lag: it re-filtered all ~1300 channels for every group).
+                    // Favorites is offered as the first category inside the player too, so CH+/CH- and
+                    // the category list follow the user's own favorites order. The order is snapshotted
+                    // per channel-list change (NOT keyed on favorites): toggling a favorite mid-playback
+                    // would otherwise reshuffle the zapping list under the current index and jump channels.
                     val channels = androidx.compose.runtime.remember(playerArgs.group, allChannels) {
                         if (playerArgs.group != null) mainViewModel.getChannelsByGroup(playerArgs.group)
                         else allChannels
                     }
-                    val allChannelsByGroup = androidx.compose.runtime.remember(groups, allChannels) {
-                        groups.associateWith { group -> mainViewModel.getChannelsByGroup(group) }
+                    val playerGroups = androidx.compose.runtime.remember(groups, allChannels) {
+                        if (mainViewModel.favoriteOrder.value.isEmpty()) groups
+                        else listOf(MainViewModel.GROUP_FAVORITES) + groups
+                    }
+                    val allChannelsByGroup = androidx.compose.runtime.remember(playerGroups, allChannels) {
+                        playerGroups.associateWith { group -> mainViewModel.getChannelsByGroup(group) }
                     }
                     val filteredIndex = androidx.compose.runtime.remember(channels, allChannels, playerArgs.channelIndex) {
                         val targetChannel = allChannels.getOrNull(playerArgs.channelIndex)
@@ -176,7 +184,7 @@ fun MainNavigation() {
                         channels = channels,
                         initialIndex = filteredIndex,
                         allChannelsByGroup = allChannelsByGroup,
-                        groups = groups,
+                        groups = playerGroups,
                         onBack = { backStack.removeLastOrNull() },
                         onSettings = {
                             backStack.add(Settings)

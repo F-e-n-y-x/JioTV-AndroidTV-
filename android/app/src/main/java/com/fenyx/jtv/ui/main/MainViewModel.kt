@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.fenyx.jtv.data.Channel
 import com.fenyx.jtv.data.JioApiClient
 import com.fenyx.jtv.data.SettingsManager
+import com.fenyx.jtv.data.FavoriteOrder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _favoriteChannels = MutableStateFlow<Set<String>>(emptySet())
     val favoriteChannels: StateFlow<Set<String>> = _favoriteChannels.asStateFlow()
+
+    /** Favorite ids in the user's chosen order (the Favorites category is shown in this order). */
+    private val _favoriteOrder = MutableStateFlow<List<String>>(emptyList())
+    val favoriteOrder: StateFlow<List<String>> = _favoriteOrder.asStateFlow()
 
     private val _allChannels = MutableStateFlow<List<Channel>>(emptyList())
 
@@ -106,8 +111,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            settingsManager.favoriteChannelsFlow.collect { favorites ->
-                _favoriteChannels.value = favorites
+            settingsManager.favoriteOrderFlow.distinctUntilChanged().collect { order ->
+                _favoriteOrder.value = order
+                _favoriteChannels.value = order.toSet()
             }
         }
         // Apply language-variant collapsing. Depends ONLY on the channel list and the toggle (both
@@ -130,14 +136,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Compute filtered/sorted channels reactively in the ViewModel (not in Compose)
         viewModelScope.launch {
-            combine(_displayChannels, _selectedGroup, _favoriteChannels) { all, group, favs ->
-                val list = when (group) {
-                    null, GROUP_ALL -> all
-                    GROUP_FAVORITES -> all.filter { favs.contains(it.id) }
-                    else -> all.filter { it.group == group }
-                }
-                list.sortedWith(compareByDescending<Channel> { favs.contains(it.id) }.thenBy { it.channelNumber })
-            }.collect { _filteredChannels.value = it }
+            combine(_displayChannels, _selectedGroup, _favoriteOrder) { all, group, order ->
+                channelsFor(all, group, order)
+            }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { _filteredChannels.value = it }
         }
         // NOTE: EPG is intentionally NOT fetched here. Downloading + parsing the XMLTV file on every
         // launch hammered the CPU on low-end TVs and slowed boot. MainScreen triggers fetchEpg() only
@@ -207,15 +208,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getAllChannels(): List<Channel> = _displayChannels.value
 
     /** Get channels filtered by group for channel switching within a category, sorted by favorites */
-    fun getChannelsByGroup(group: String?): List<Channel> {
-        val source = _displayChannels.value
-        val favorites = _favoriteChannels.value
-        val list = when (group) {
-            null, GROUP_ALL -> source
-            GROUP_FAVORITES -> source.filter { favorites.contains(it.id) }
-            else -> source.filter { it.group == group }
-        }
-        return list.sortedWith(compareByDescending<Channel> { favorites.contains(it.id) }.thenBy { it.channelNumber })
+    fun getChannelsByGroup(group: String?): List<Channel> =
+        channelsFor(_displayChannels.value, group, _favoriteOrder.value)
+
+    /**
+     * One ordering rule for the grid AND the player's zapping list: the Favorites category follows the
+     * user's saved order; every other category puts favorites first (in that same order), then the
+     * rest by channel number.
+     */
+    private fun channelsFor(all: List<Channel>, group: String?, order: List<String>): List<Channel> {
+        if (group == GROUP_FAVORITES) return FavoriteOrder.sortedFavorites(all, order) { it.id }
+        val list = if (group == null || group == GROUP_ALL) all else all.filter { it.group == group }
+        if (order.isEmpty()) return list.sortedBy { it.channelNumber }
+        val rank = order.withIndex().associate { (i, id) -> id to i }
+        return list.sortedWith(compareBy<Channel> { rank[it.id] ?: Int.MAX_VALUE }.thenBy { it.channelNumber })
+    }
+
+    // ── Favorites editing ──
+
+    fun toggleFavorite(channelId: String) {
+        viewModelScope.launch { settingsManager.toggleFavoriteChannel(channelId) }
+    }
+
+    /**
+     * Saves a new order for the favorites currently shown. The in-memory order is updated first so
+     * the grid doesn't flash back to the old order while DataStore writes.
+     */
+    fun saveFavoriteOrder(visibleIds: List<String>) {
+        val merged = FavoriteOrder.merge(_favoriteOrder.value, visibleIds)
+        if (merged == _favoriteOrder.value) return
+        _favoriteOrder.value = merged
+        viewModelScope.launch { settingsManager.setFavoriteOrder(merged) }
+    }
+
+    /** Groups favorites by category (categories in first-appearance order, stable inside each). */
+    fun groupFavoritesByCategory() {
+        val visible = FavoriteOrder.sortedFavorites(_displayChannels.value, _favoriteOrder.value) { it.id }
+        saveFavoriteOrder(FavoriteOrder.groupByCategory(visible) { it.group }.map { it.id })
     }
 
     fun setSelectedGroup(group: String?) {

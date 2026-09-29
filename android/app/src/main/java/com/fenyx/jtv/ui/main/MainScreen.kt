@@ -27,6 +27,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -153,7 +158,7 @@ fun MainScreen(
                         (selectedGroup == null && group == MainViewModel.GROUP_ALL)
                     val label = when (group) {
                         MainViewModel.GROUP_ALL -> "All"
-                        MainViewModel.GROUP_FAVORITES -> "★ Favorites"
+                        MainViewModel.GROUP_FAVORITES -> "★ Favorites (${favoriteChannels.size})"
                         else -> group
                     }
                     Surface(
@@ -303,6 +308,30 @@ fun MainScreen(
                 }
             } else {
                 val filteredChannels by viewModel.filteredChannels.collectAsState()
+                val isFavoritesGroup = selectedGroup == MainViewModel.GROUP_FAVORITES
+                val scope = rememberCoroutineScope()
+
+                // ── Favorites reorder state ──
+                // While moving, the grid shows `workingOrder` (a local copy) so every arrow press is
+                // instant; it's written to DataStore once on OK. Back discards it.
+                var movingId by remember { mutableStateOf<String?>(null) }
+                var workingOrder by remember { mutableStateOf<List<com.fenyx.jtv.data.Channel>?>(null) }
+                var menuChannel by remember { mutableStateOf<com.fenyx.jtv.data.Channel?>(null) }
+                val movingFocus = remember { FocusRequester() }
+                val shown = workingOrder ?: filteredChannels
+
+                fun cancelMove() { movingId = null; workingOrder = null }
+                fun commitMove() {
+                    workingOrder?.let { list -> viewModel.saveFavoriteOrder(list.map { it.id }) }
+                    cancelMove()
+                }
+                fun startMove(channel: com.fenyx.jtv.data.Channel) {
+                    workingOrder = filteredChannels
+                    movingId = channel.id
+                }
+                // Leaving Favorites (or the list changing underneath) ends a move without saving.
+                LaunchedEffect(selectedGroup) { if (!isFavoritesGroup) cancelMove() }
+                androidx.activity.compose.BackHandler(enabled = movingId != null) { cancelMove() }
 
                 // Pre-compute channel index map once (O(n)) instead of indexOf per item (O(n²))
                 val allChannels = viewModel.getAllChannels()
@@ -324,25 +353,130 @@ fun MainScreen(
                     }
                 }
 
+                val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+                // Keep the moving card on screen and focused after each step.
+                LaunchedEffect(workingOrder) {
+                    val id = movingId ?: return@LaunchedEffect
+                    val index = shown.indexOfFirst { it.id == id }
+                    if (index < 0) return@LaunchedEffect
+                    val visible = if (epgMode) listState.layoutInfo.visibleItemsInfo.map { it.index }
+                                  else gridState.layoutInfo.visibleItemsInfo.map { it.index }
+                    val fullyInside = visible.size > 2 && index > visible.first() && index < visible.last()
+                    if (!fullyInside) {
+                        if (epgMode) listState.scrollToItem((index - 1).coerceAtLeast(0))
+                        else gridState.scrollToItem(index)
+                    }
+                    androidx.compose.runtime.withFrameNanos { }
+                    runCatching { movingFocus.requestFocus() }
+                }
+
+                // D-pad handling while moving. Columns come from the live grid layout so ▲/▼ jump a
+                // whole row whatever the screen size; the EPG list is a single column.
+                val moveKeys = Modifier.onPreviewKeyEvent { event ->
+                    val id = movingId ?: return@onPreviewKeyEvent false
+                    val list = workingOrder ?: return@onPreviewKeyEvent false
+                    val isOk = event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.NumPadEnter
+                    if (isOk) {
+                        if (event.type == KeyEventType.KeyUp) commitMove()
+                        return@onPreviewKeyEvent true
+                    }
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val columns = if (epgMode) 1
+                        else (gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column } ?: 0) + 1
+                    val delta = when (event.key) {
+                        Key.DirectionLeft -> if (epgMode) return@onPreviewKeyEvent true else -1
+                        Key.DirectionRight -> if (epgMode) return@onPreviewKeyEvent true else 1
+                        Key.DirectionUp -> -columns
+                        Key.DirectionDown -> columns
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    val from = list.indexOfFirst { it.id == id }
+                    val to = (from + delta).coerceIn(0, list.lastIndex)
+                    if (from >= 0 && to != from) workingOrder = com.fenyx.jtv.data.FavoriteOrder.move(list, from, to)
+                    true
+                }
+
+                // Card click: normally opens the player; while moving, a mouse/touch tap on another
+                // card drops the moving channel into that slot (remote OK is handled in moveKeys).
+                fun onCardClick(channel: com.fenyx.jtv.data.Channel) {
+                    val id = movingId
+                    if (id != null) {
+                        val list = workingOrder ?: return
+                        val from = list.indexOfFirst { it.id == id }
+                        val to = list.indexOfFirst { it.id == channel.id }
+                        if (from >= 0 && to >= 0) workingOrder = com.fenyx.jtv.data.FavoriteOrder.move(list, from, to)
+                        commitMove()
+                        return
+                    }
+                    onChannelClick(channelIndexMap[channel.id] ?: 0, selectedGroup)
+                }
+
+                fun actionsFor(channel: com.fenyx.jtv.data.Channel): List<ChannelAction> = buildList {
+                    val isFav = favoriteChannels.contains(channel.id)
+                    add(ChannelAction("▶  Watch") { onCardClick(channel) })
+                    if (isFavoritesGroup && filteredChannels.size > 1) {
+                        val index = filteredChannels.indexOfFirst { it.id == channel.id }
+                        add(ChannelAction("⇅  Move", "Use the arrow keys to place it, then press OK") { startMove(channel) })
+                        if (index > 0) add(ChannelAction("⤒  Move to top") {
+                            viewModel.saveFavoriteOrder(com.fenyx.jtv.data.FavoriteOrder.move(filteredChannels, index, 0).map { it.id })
+                        })
+                        if (index in 0 until filteredChannels.lastIndex) add(ChannelAction("⤓  Move to bottom") {
+                            viewModel.saveFavoriteOrder(com.fenyx.jtv.data.FavoriteOrder.move(filteredChannels, index, filteredChannels.lastIndex).map { it.id })
+                        })
+                        add(ChannelAction("▦  Group favorites by category", "Categories keep the order they first appear in") {
+                            viewModel.groupFavoritesByCategory()
+                        })
+                    }
+                    add(
+                        if (isFav) ChannelAction("☆  Remove from Favorites") { viewModel.toggleFavorite(channel.id) }
+                        else ChannelAction("★  Add to Favorites") { viewModel.toggleFavorite(channel.id) }
+                    )
+                }
+
+                menuChannel?.let { ch ->
+                    ChannelActionsDialog(channel = ch, actions = actionsFor(ch), onDismiss = { menuChannel = null })
+                }
+
+                fun itemModifier(index: Int, channel: com.fenyx.jtv.data.Channel): Modifier = when {
+                    channel.id == movingId -> Modifier.focusRequester(movingFocus)
+                    index == 0 -> Modifier.focusRequester(firstItemFocus)
+                    else -> Modifier
+                }
+
                 Column(modifier = Modifier.fillMaxSize()) {
+                    val movingChannel = movingId?.let { id -> shown.firstOrNull { it.id == id } }
+                    if (movingChannel != null) {
+                        MoveBanner(
+                            channelName = movingChannel.name,
+                            position = shown.indexOf(movingChannel) + 1,
+                            total = shown.size,
+                            isGrid = !epgMode,
+                            modifier = Modifier.padding(start = TvDimens.SpaceMd, end = TvDimens.OverscanHorizontal, top = TvDimens.OverscanVertical)
+                        )
+                    } else if (isFavoritesGroup && shown.isNotEmpty()) {
+                        FavoritesHint(
+                            modifier = Modifier.padding(start = TvDimens.SpaceMd + 4.dp, end = TvDimens.OverscanHorizontal, top = TvDimens.OverscanVertical)
+                        )
+                    }
+                    val topPad = if (movingChannel != null || isFavoritesGroup) 12.dp else TvDimens.OverscanVertical
 
-
-                    if (filteredChannels.isEmpty()) {
+                    if (shown.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("No channels in this category", color = TvOnSurfaceVariant)
                         }
                     } else if (epgMode) {
                         LazyColumn(
+                            state = listState,
                             verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.focusRestorer(),
+                            modifier = Modifier.focusRestorer().then(moveKeys),
                             contentPadding = PaddingValues(
                                 start = TvDimens.SpaceMd, end = TvDimens.OverscanHorizontal,
-                                top = TvDimens.OverscanVertical, bottom = TvDimens.OverscanVertical
+                                top = topPad, bottom = TvDimens.OverscanVertical
                             )
                         ) {
-                            itemsIndexed(items = filteredChannels, key = { _, ch -> ch.id }) { index, channel ->
-                                val channelIndex = channelIndexMap[channel.id] ?: 0
-
+                            itemsIndexed(items = shown, key = { _, ch -> ch.id }) { index, channel ->
                                 val programs = epgData[channel.id] ?: emptyList()
                                 LaunchedEffect(channel.id) {
                                     if (programs.isEmpty()) {
@@ -354,33 +488,41 @@ fun MainScreen(
                                     channel = channel,
                                     epgPrograms = programs,
                                     now = epgNow,
-                                    onClick = { onChannelClick(channelIndex, selectedGroup) },
-                                    modifier = if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier
+                                    onClick = { onCardClick(channel) },
+                                    onLongClick = { if (movingId == null) menuChannel = channel },
+                                    isMoving = channel.id == movingId,
+                                    modifier = itemModifier(index, channel).then(
+                                        if (movingId != null) Modifier.animateItem() else Modifier
+                                    )
                                 )
                             }
                         }
                     } else {
                         LazyVerticalGrid(
+                            state = gridState,
                             columns = GridCells.Adaptive(150.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                             // focusRestorer keeps your place in the grid when you leave and come back
                             // (e.g. return from the player), instead of snapping to the first card.
-                            modifier = Modifier.focusRestorer(),
+                            modifier = Modifier.focusRestorer().then(moveKeys),
                             // Overscan-safe: extra room on the right/top/bottom so focused cards (which
                             // scale up) and the last column aren't clipped by the panel edge.
                             contentPadding = PaddingValues(
                                 start = TvDimens.SpaceMd, end = TvDimens.OverscanHorizontal,
-                                top = TvDimens.OverscanVertical, bottom = TvDimens.OverscanVertical
+                                top = topPad, bottom = TvDimens.OverscanVertical
                             )
                         ) {
-                            itemsIndexed(items = filteredChannels, key = { _, ch -> ch.id }) { index, channel ->
-                                val channelIndex = channelIndexMap[channel.id] ?: 0
-
+                            itemsIndexed(items = shown, key = { _, ch -> ch.id }) { index, channel ->
                                 ChannelCard(
                                     channel = channel,
-                                    onClick = { onChannelClick(channelIndex, selectedGroup) },
-                                    modifier = if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier
+                                    onClick = { onCardClick(channel) },
+                                    onLongClick = { if (movingId == null) menuChannel = channel },
+                                    isFavorite = !isFavoritesGroup && favoriteChannels.contains(channel.id),
+                                    isMoving = channel.id == movingId,
+                                    modifier = itemModifier(index, channel).then(
+                                        if (movingId != null) Modifier.animateItem() else Modifier
+                                    )
                                 )
                             }
                         }
@@ -397,7 +539,10 @@ fun MainScreen(
 fun ChannelCard(
     channel: com.fenyx.jtv.data.Channel,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    isFavorite: Boolean = false,
+    isMoving: Boolean = false
 ) {
     val context = LocalContext.current
 
@@ -406,20 +551,35 @@ fun ChannelCard(
             .fillMaxWidth()
             .aspectRatio(1f),
         onClick = onClick,
+        onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
         // Clear 10-foot focus cue: the card scales up (was disabled at 1.0f) plus the focus border.
-        scale = ClickableSurfaceDefaults.scale(focusedScale = TvDimens.FocusedScale),
+        // The card being moved is "lifted": bigger, accent-filled and always outlined.
+        scale = ClickableSurfaceDefaults.scale(focusedScale = if (isMoving) 1.12f else TvDimens.FocusedScale),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = TvDarkSurface,
-            focusedContainerColor = TvDarkSurfaceVariant
+            containerColor = if (isMoving) TvPrimaryContainer.copy(alpha = 0.5f) else TvDarkSurface,
+            focusedContainerColor = if (isMoving) TvPrimaryContainer.copy(alpha = 0.6f) else TvDarkSurfaceVariant
         ),
         border = ClickableSurfaceDefaults.border(
+            border = if (isMoving) androidx.tv.material3.Border(
+                border = androidx.compose.foundation.BorderStroke(3.dp, TvPrimary),
+                shape = RoundedCornerShape(12.dp)
+            ) else androidx.tv.material3.Border.None,
             focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, TvFocusBorder),
+                border = androidx.compose.foundation.BorderStroke(if (isMoving) 3.dp else 2.dp, if (isMoving) Color.White else TvFocusBorder),
                 shape = RoundedCornerShape(12.dp)
             )
         )
     ) {
+        if (isMoving || isFavorite) {
+            Text(
+                if (isMoving) "⇅" else "★",
+                color = if (isMoving) Color.White else androidx.compose.ui.graphics.Color(0xFFFFC107),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -497,7 +657,9 @@ fun EpgChannelRow(
     epgPrograms: List<com.fenyx.jtv.data.EpgProgram>,
     now: Long,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    isMoving: Boolean = false
 ) {
     val context = LocalContext.current
     // Reuse a single formatter instance instead of allocating per-recomposition
@@ -509,15 +671,16 @@ fun EpgChannelRow(
     Surface(
         modifier = modifier.fillMaxWidth().heightIn(min = 100.dp),
         onClick = onClick,
+        onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = TvDarkSurface,
-            focusedContainerColor = TvDarkSurfaceVariant
+            containerColor = if (isMoving) TvPrimaryContainer.copy(alpha = 0.45f) else TvDarkSurface,
+            focusedContainerColor = if (isMoving) TvPrimaryContainer.copy(alpha = 0.55f) else TvDarkSurfaceVariant
         ),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, TvFocusBorder),
+                border = androidx.compose.foundation.BorderStroke(if (isMoving) 3.dp else 2.dp, if (isMoving) Color.White else TvFocusBorder),
                 shape = RoundedCornerShape(8.dp)
             )
         )

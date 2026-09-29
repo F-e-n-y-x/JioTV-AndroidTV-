@@ -5,6 +5,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -52,6 +54,10 @@ fun Surface(
 ) {
     val focusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
+    // pointerInput(Unit) never restarts, so read the LATEST callbacks through updated state — otherwise
+    // a mouse/touch tap would call the lambda captured on first composition (stale toggles, wrong item).
+    val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnLongClick by rememberUpdatedState(onLongClick)
     androidx.tv.material3.Surface(
         onClick = onClick,
         modifier = modifier
@@ -72,8 +78,8 @@ fun Surface(
                             }
                         }
                     },
-                    onTap = { onClick() },
-                    onLongPress = { onLongClick?.invoke() }
+                    onTap = { currentOnClick() },
+                    onLongPress = { currentOnLongClick?.invoke() }
                 )
             }
             .indication(interactionSource, LocalIndication.current),

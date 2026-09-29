@@ -1417,7 +1417,7 @@ fun TvPlayerScreen(
                                         Spacer(modifier = Modifier.width(8.dp))
                                     }
                                     Text(
-                                        group,
+                                        groupLabel(group),
                                         color = if (isSelected || isCurrentGroup) TvPrimary else Color.White,
                                         fontWeight = if (isSelected || isCurrentGroup) FontWeight.Bold else FontWeight.Normal,
                                         maxLines = 1,
@@ -1454,7 +1454,7 @@ fun TvPlayerScreen(
             ) {
                 Column {
                     Text(
-                        currentGroup ?: "Channels",
+                        currentGroup?.let { groupLabel(it) } ?: "Channels",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
@@ -1538,6 +1538,13 @@ fun TvPlayerScreen(
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
+}
+
+/** Display name for a category, including the Home screen's "All" / "Favorites" pseudo-categories. */
+private fun groupLabel(group: String): String = when (group) {
+    com.fenyx.jtv.ui.main.MainViewModel.GROUP_ALL -> "All Channels"
+    com.fenyx.jtv.ui.main.MainViewModel.GROUP_FAVORITES -> "★ Favorites"
+    else -> group
 }
 
 @Composable

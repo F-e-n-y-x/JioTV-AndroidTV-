@@ -138,10 +138,15 @@ class SettingsManager(private val context: Context) {
         preferences[LAST_CHANNEL_GROUP]
     }
 
-    val favoriteChannelsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
-        val serialized = preferences[FAVORITE_CHANNELS] ?: ""
-        if (serialized.isEmpty()) emptySet() else serialized.split(",").toSet()
+    /**
+     * Favorites in the user's chosen order. The same comma-joined key has always been written in
+     * insertion order, so existing installs keep their favorites (oldest first) with no migration.
+     */
+    val favoriteOrderFlow: Flow<List<String>> = context.dataStore.data.map { preferences ->
+        parseFavorites(preferences[FAVORITE_CHANNELS])
     }
+
+    val favoriteChannelsFlow: Flow<Set<String>> = favoriteOrderFlow.map { it.toSet() }
 
     val authDataFlow: Flow<JioApiClient.AuthData?> = context.dataStore.data.map { preferences ->
         val ssoToken = preferences[AUTH_SSO_TOKEN]
@@ -254,18 +259,25 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    /** Adds the channel to the END of the favorites order, or removes it. */
     suspend fun toggleFavoriteChannel(channelId: String) {
         context.dataStore.edit { preferences ->
-            val current = preferences[FAVORITE_CHANNELS] ?: ""
-            val set = if (current.isEmpty()) mutableSetOf() else current.split(",").toMutableSet()
-            if (set.contains(channelId)) {
-                set.remove(channelId)
-            } else {
-                set.add(channelId)
-            }
-            preferences[FAVORITE_CHANNELS] = set.joinToString(",")
+            val list = parseFavorites(preferences[FAVORITE_CHANNELS]).toMutableList()
+            if (!list.remove(channelId)) list.add(channelId)
+            preferences[FAVORITE_CHANNELS] = list.joinToString(",")
         }
     }
+
+    /** Replaces the whole favorites order (used by the reorder / sort-by-category actions). */
+    suspend fun setFavoriteOrder(ids: List<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[FAVORITE_CHANNELS] = ids.filter { it.isNotBlank() }.distinct().joinToString(",")
+        }
+    }
+
+    private fun parseFavorites(serialized: String?): List<String> =
+        if (serialized.isNullOrEmpty()) emptyList()
+        else serialized.split(",").filter { it.isNotBlank() }.distinct()
 
     suspend fun saveAuthData(authData: JioApiClient.AuthData) {
         context.dataStore.edit { preferences ->
