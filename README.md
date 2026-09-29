@@ -24,6 +24,7 @@
 - 🛡️ **Built for weak hardware** — hardware decoding, tuned buffers, and smart error recovery keep playback smooth on low-end TVs.
 - 🗣️ **Voice Boost** — a built-in dialogue enhancer that lifts speech and lowers background music/effects (great for TVs with poor built-in audio).
 - 🎚️ **Real controls** — pick the actual audio track/language, video quality (up to 1080p), aspect ratio, playback buffer, and a sleep timer.
+- ⭐ **Your favorites, your order**: hold OK on any channel to favorite it, then move favorites into any order or group them by category in one press.
 - 📅 **EPG** — optional Electronic Program Guide with a timeline view.
 - 🖥️ **Modern TV UI** — Jetpack Compose for TV, on-screen numpad login, and smooth D-pad navigation.
 
@@ -68,6 +69,23 @@
 | **Hold OK** | Channel menu: favorite, move, group by category | — |
 | **0–9** | — | Jump to a channel number |
 | **Back** | Exit app | Close overlay / exit player |
+
+---
+
+## ⭐ Favorites: Add, Reorder, Group
+
+1. **Add**: on any channel, **hold OK** and choose **Add to Favorites**. The star can also be set from the player's side panel.
+2. **Reorder**: open **★ Favorites** in the sidebar, hold OK on a channel and choose **Move**. Use ◀ ▶ to move one place and ▲ ▼ to move a whole row. Press **OK** to save or **BACK** to cancel. **Move to top** and **Move to bottom** are one-press shortcuts.
+3. **Group by category**: choose **Group favorites by category** to line them up, e.g. all News, then Movies, then Music. Categories keep the order they first appear in, so move one News channel to the top first if you want News first.
+
+Your order is used everywhere, including the player: press ← twice while watching and ★ Favorites is the first category, and CH+/CH− follow your order.
+
+<div align="center">
+  <img src="screenshot/v154_favorites_grid.png" width="48%" alt="Favorites grid" />
+  <img src="screenshot/v154_favorites_menu.png" width="48%" alt="Hold-OK menu in Favorites" />
+  <img src="screenshot/v154_move_mode.png" width="48%" alt="Moving a favorite" />
+  <img src="screenshot/v154_hold_ok_menu.png" width="48%" alt="Add to favorites from any channel" />
+</div>
 
 ---
 
