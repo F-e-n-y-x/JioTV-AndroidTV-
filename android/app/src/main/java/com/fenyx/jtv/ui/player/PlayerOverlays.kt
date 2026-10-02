@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
@@ -322,6 +323,18 @@ internal fun Modifier.touchVideoGestures(ui: PlayerUi, actions: State<PlayerActi
         )
     }
 
+/** Portrait phone video: a downward swipe shrinks the player into the mini player. */
+internal fun Modifier.swipeDownToMinimize(actions: State<PlayerActions>): Modifier = this
+    .pointerInput(actions) {
+        var total = 0f
+        val threshold = 72.dp.toPx()
+        detectVerticalDragGestures(
+            onDragStart = { total = 0f },
+            onDragEnd = { if (total > threshold && actions.value.canMinimize) actions.value.minimize() },
+            onVerticalDrag = { change, dy -> total += dy; change.consume() },
+        )
+    }
+
 /**
  * Touch, full-screen (phone landscape + tablet), YouTube-style: the picture stays visible. Small round
  * icons at the edges, Previous / Play-Pause / Next in the centre, one slim info line at the bottom.
@@ -362,7 +375,8 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() })
+                        if (act.canMinimize) OverVideoIcon(PlayerIcons.ExpandMore, "Minimise player", { act.minimize() }, iconSize = 30.dp)
+                        else OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() })
                         d.playing?.let { ch ->
                             JText(
                                 listOfNotNull(ch.channelNumber.takeIf { it > 0 }?.toString(), ch.name).joinToString("  "),

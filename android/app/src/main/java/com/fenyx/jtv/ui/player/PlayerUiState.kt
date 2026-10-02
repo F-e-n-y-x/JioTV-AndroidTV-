@@ -76,6 +76,7 @@ internal val StrapBg = Color(0xFF141416)
 internal fun groupLabel(group: String?): String = when (group) {
     null, MainViewModel.GROUP_ALL -> "All channels"
     MainViewModel.GROUP_FAVORITES -> "Favourites"
+    MainViewModel.GROUP_RECENT -> "Recent"
     else -> group
 }
 

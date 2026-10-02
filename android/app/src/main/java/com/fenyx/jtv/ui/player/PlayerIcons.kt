@@ -49,6 +49,8 @@ internal object PlayerIcons {
     }
     val Pause by lazy { icon("Pause", "M6,19h4L10,5L6,5v14zM14,5v14h4L18,5h-4z") }
     val SkipPrevious by lazy { icon("SkipPrevious", "M6,6h2v12L6,18zM9.5,12l8.5,6L18,6z") }
+    /** Material "expand_more": the chevron-down that minimises the player (YouTube-style). */
+    val ExpandMore by lazy { icon("ExpandMore", "M16.59,8.59L12,13.17 7.41,8.59 6,10l6,6 6,-6z") }
     val SkipNext by lazy { icon("SkipNext", "M6,18l8.5,-6L6,6v12zM16,6v12h2L18,6h-2z") }
     val Fullscreen by lazy {
         icon(

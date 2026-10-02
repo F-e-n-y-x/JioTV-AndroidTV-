@@ -3,6 +3,13 @@ package com.fenyx.jtv.ui.player
 import android.annotation.SuppressLint
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import com.fenyx.jtv.theme.JtvDark
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -72,9 +79,23 @@ fun TvPlayerScreen(
     onSettings: () -> Unit = {},
     variantsFor: (String) -> List<com.fenyx.jtv.data.ChannelLanguage.Variant> = { emptyList() },
     initialGroup: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Phone/tablet: drawn as the in-app mini player (bar / card). Overlays, keys and focus are off. */
+    mini: Boolean = false,
+    /** Phone/tablet: shrink into the mini player (Back / chevron / swipe down). null (TV): Back leaves. */
+    onMinimize: (() -> Unit)? = null,
+    /** Mini player tapped. */
+    onExpand: () -> Unit = {},
+    /**
+     * Bumped by the host each time a channel is opened while this player is already composed (e.g. from
+     * the screen behind the mini player): the SAME player retunes to [initialIndex]/[initialGroup]
+     * instead of a second ExoPlayer being built.
+     */
+    openToken: Int = 0,
 ) {
     val context = LocalContext.current
+    // The app theme (the player itself is dark-only); the mini player matches the app.
+    val appColors = Jtv.colors
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
 
@@ -107,6 +128,16 @@ fun TvPlayerScreen(
     // derived lower down, once `language` (the preferred audio language) is in scope.
     var langOverride by remember { mutableStateOf<Channel?>(null) }
     LaunchedEffect(currentChannel) { langOverride = null }
+
+    // A channel opened again from outside (mini player host): retune this same player.
+    var seenOpenToken by rememberSaveable { mutableIntStateOf(openToken) }
+    LaunchedEffect(openToken) {
+        if (openToken != seenOpenToken) {
+            seenOpenToken = openToken
+            currentGroup = initialGroup
+            currentIndex = initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+        }
+    }
 
     // Overlay state (banner / browse / options / menu / number entry) lives apart from playback state.
     val ui = remember { PlayerUi(PlayerOverlay.Banner) }
@@ -759,6 +790,31 @@ fun TvPlayerScreen(
         numberJob = scope.launch { delay(1_500); commitLatest() }
     }
 
+    /** Into the mini player where the host offers one (rotation is handed back); else leave. */
+    fun doMinimize() {
+        val m = onMinimize ?: return onBack()
+        if (orientationLock != null) {
+            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            orientationLock = null
+        }
+        m()
+    }
+
+    // Entering the mini player drops every overlay and any half-typed number, so nothing is left
+    // waiting for keys the player no longer receives.
+    LaunchedEffect(mini) {
+        if (mini) {
+            numberJob?.cancel()
+            press.job?.cancel()
+            ui.number = ""
+            ui.numberMiss = null
+            ui.pointerChrome = false
+            ui.overlay = PlayerOverlay.None
+        } else {
+            ui.showBanner() // expanded: controls show briefly, as after a tune
+        }
+    }
+
     /** Back ladder: entry/menu/panel/browse → close; banner → hide; clean video → leave the player. */
     fun backLadder() {
         when {
@@ -771,7 +827,8 @@ fun TvPlayerScreen(
             // Phone full screen: Back returns to the portrait page first.
             isPhone && !portrait && orientationLock == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ->
                 setFullScreen(false)
-            else -> onBack()
+            // Phone/tablet: Back shrinks into the mini player (YouTube); TV: Back leaves.
+            else -> doMinimize()
         }
     }
 
@@ -848,6 +905,8 @@ fun TvPlayerScreen(
         override fun tune(group: String?, index: Int) = doTune(group, index)
         override fun back() = backLadder()
         override fun leave() = onBack()
+        override val canMinimize: Boolean get() = onMinimize != null
+        override fun minimize() = doMinimize()
         override fun retry() = doRetry()
         override fun fullScreen(on: Boolean) = setFullScreen(on)
     }
@@ -893,7 +952,9 @@ fun TvPlayerScreen(
 
     // Keep focus somewhere sensible: on the error's first button (TV), else on the player itself, so
     // keys keep arriving after a panel, rail or pointer bar goes away.
-    LaunchedEffect(Unit) {
+    // Not while mini: the screen behind owns focus then (restarted on expand, which re-takes focus).
+    LaunchedEffect(mini) {
+        if (mini) return@LaunchedEffect
         snapshotFlow { Triple(ui.overlay, ui.pointerChrome, playbackError != null && !isBuffering) }
             .collect { (ov, _, err) ->
                 if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) {
@@ -905,19 +966,43 @@ fun TvPlayerScreen(
 
     // System back (gesture / predictive back). Key-event Back is handled in the key handler below; skip
     // the duplicate if both arrive for one press.
-    androidx.activity.compose.BackHandler {
-        if (android.os.SystemClock.uptimeMillis() - press.lastKeyBack > 1_000) backLadder()
+    // Mini: no handler, so Back works normally for the screen behind. Composed conditionally (not
+    // `enabled = !mini`) so expanding re-registers it ON TOP of any handler a screen added meanwhile.
+    if (!mini) {
+        androidx.activity.compose.BackHandler {
+            if (android.os.SystemClock.uptimeMillis() - press.lastKeyBack > 1_000) backLadder()
+        }
+    }
+
+    // Mini drag offset (swipe to close) and the video's box in each mode.
+    val miniDrag = remember { MiniDrag() }
+    LaunchedEffect(mini) { miniDrag.reset() }
+    val card = Jtv.form == FormFactor.Tablet
+    val videoMode = when {
+        mini && !card -> VideoBox.MiniBar
+        mini || phonePortrait -> VideoBox.TopWide
+        else -> VideoBox.Fill
+    }
+    val rootFrame = when {
+        !mini -> Modifier.fillMaxSize().background(if (phonePortrait) JtvDark.bg else Color.Black)
+        card -> Modifier.width(MiniCardWidth)
+            .offset { androidx.compose.ui.unit.IntOffset(miniDrag.x.toInt(), miniDrag.y.toInt()) }
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .background(appColors.s1)
+            .border(1.dp, appColors.line, androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+        else -> Modifier.fillMaxWidth().height(MiniBarHeight)
+            .offset { androidx.compose.ui.unit.IntOffset(miniDrag.x.toInt(), miniDrag.y.toInt()) }
+            .background(appColors.s1)
     }
 
 
     JtvDarkOnly {
         Box(
             modifier = modifier
-                .fillMaxSize()
-                .background(Color.Black)
+                .then(rootFrame)
                 .focusRequester(focusRequester)
-                .focusable()
-                .pointerInput(ui) {
+                .focusable(enabled = !mini)
+                .then(if (mini) Modifier else Modifier.pointerInput(ui) {
                     // Mouse / air-mouse: move shows the banner + top bar, wheel zaps, right-click opens the
                     // quick menu. Touch: any touch while controls show restarts their hide timer.
                     awaitPointerEventScope {
@@ -951,8 +1036,10 @@ fun TvPlayerScreen(
                             }
                         }
                     }
-                }
+                })
                 .onPreviewKeyEvent { ev ->
+                    // Mini: the bar's own buttons may hold focus; never zap / open menus from there.
+                    if (mini) return@onPreviewKeyEvent false
                     val k = ev.key
                     val down = ev.type == KeyEventType.KeyDown
                     val isCenter = k == Key.Enter || k == Key.DirectionCenter || k == Key.NumPadEnter
@@ -1079,6 +1166,10 @@ fun TvPlayerScreen(
                     }
                 }
         ) {
+            // The ONE video surface: always the first child, in every mode (full, portrait page, mini),
+            // so it is never recreated; only its box changes (layout phase). Everything else draws over it.
+            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode))
+
             val name = currentChannel?.name
             val buffering = isBuffering && playbackError == null
             val paused = userPaused && !isBuffering
@@ -1087,26 +1178,32 @@ fun TvPlayerScreen(
                 if (paused) PausedBadge(touch = !isTv, onPlay = { setPaused(false) }, modifier = Modifier.align(Alignment.Center))
             }
 
-            if (phonePortrait) {
-                // Draws its own buffering ring and keeps its Play control up while paused.
-                PhonePortraitPlayer(
-                    ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering,
-                    video = { VideoSurface(exoPlayer, resizeMode, Modifier.fillMaxSize()) },
+            if (mini) {
+                MiniPlayerContent(
+                    appColors = appColors,
+                    card = card,
+                    channel = currentChannel,
+                    epg = epg,
+                    paused = userPaused,
+                    buffering = buffering,
+                    error = playbackError?.takeIf { !isBuffering }?.message,
+                    drag = miniDrag,
+                    onExpand = onExpand,
+                    onTogglePause = { setPaused(!userPaused) },
+                    onClose = onBack,
                 )
+            } else if (phonePortrait) {
+                // Draws its own buffering ring and keeps its Play control up while paused.
+                PhonePortraitPlayer(ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering)
             } else {
-                Box(
-                    Modifier.fillMaxSize()
-                        .then(if (!isTv) Modifier.touchVideoGestures(ui, actionsState, tapToggles = true) else Modifier),
-                ) {
-                    VideoSurface(exoPlayer, resizeMode, Modifier.fillMaxSize())
-                }
+                if (!isTv) Box(Modifier.fillMaxSize().touchVideoGestures(ui, actionsState, tapToggles = true))
                 Box(Modifier.fillMaxSize()) { status() }
                 if (isTv) TvOverlays(ui, overlayData)
                 else TouchOverlays(ui, overlayData, compact = Jtv.form == FormFactor.Phone)
             }
 
             val err = playbackError
-            if (err != null && !isBuffering) {
+            if (err != null && !isBuffering && !mini) {
                 ErrorPanel(
                     error = err,
                     channel = currentChannel,
@@ -1125,8 +1222,8 @@ fun TvPlayerScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    LaunchedEffect(mini) {
+        if (!mini) runCatching { focusRequester.requestFocus() }
     }
 }
 
@@ -1140,6 +1237,9 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
                 this.player = player
                 useController = false
                 keepScreenOn = true
+                // Letterbox black comes from the view itself: nothing opaque may be drawn over the
+                // surface by Compose (the portrait page sits above it and is transparent there).
+                setBackgroundColor(android.graphics.Color.BLACK)
             }
         },
         update = { view ->

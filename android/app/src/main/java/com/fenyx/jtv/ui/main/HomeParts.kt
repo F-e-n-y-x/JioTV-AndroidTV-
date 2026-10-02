@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -220,7 +221,7 @@ fun BottomNavItem(
     modifier: Modifier = Modifier,
 ) {
     val c = Jtv.colors
-    JtvClickable(onClick = onClick, modifier = modifier.height(60.dp), shape = RoundedCornerShape(0.dp), focusedContainer = c.s2) {
+    JtvClickable(onClick = onClick, modifier = modifier.height(PhoneBottomBarHeight), shape = RoundedCornerShape(0.dp), focusedContainer = c.s2) {
         if (selected) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth(0.6f).height(3.dp).background(c.acc))
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, contentDescription = null, tint = if (selected) c.acc else c.t2, modifier = Modifier.size(24.dp))
@@ -275,6 +276,56 @@ fun TvTabs(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier 
                     Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1)
                 }
             }
+        }
+    }
+}
+
+/** Height of [PhoneBottomBar] (the mini player docks right above it). */
+val PhoneBottomBarHeight = 60.dp
+
+/** Width of [TabletNavRail]. */
+val TabletRailWidth = 80.dp
+
+/** Tablet: the same four tabs as the phone bottom bar, as an 80dp rail on the left. */
+@Composable
+fun TabletNavRail(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier = Modifier) {
+    val c = Jtv.colors
+    Row(modifier.fillMaxHeight()) {
+        Column(
+            Modifier.width(TabletRailWidth - 1.dp).fillMaxHeight().background(c.s1).padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            RailItem("Live TV", Icons.Filled.Home, selected == PhoneTab.Live) { onSelect(PhoneTab.Live) }
+            RailItem("Guide", Icons.Filled.DateRange, selected == PhoneTab.Guide) { onSelect(PhoneTab.Guide) }
+            RailItem("Search", Icons.Filled.Search, selected == PhoneTab.Search) { onSelect(PhoneTab.Search) }
+            RailItem("Settings", Icons.Filled.Settings, selected == PhoneTab.Settings) { onSelect(PhoneTab.Settings) }
+        }
+        Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
+    }
+}
+
+/** Rail item: icon over a 12sp label; current = amber icon + 3dp amber bar on the left edge. */
+@Composable
+private fun RailItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val c = Jtv.colors
+    JtvClickable(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(64.dp),
+        shape = RoundedCornerShape(0.dp),
+        focusedContainer = c.s2,
+    ) {
+        if (selected) Box(Modifier.align(Alignment.CenterStart).width(3.dp).height(40.dp).background(c.acc))
+        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = null, tint = if (selected) c.acc else c.t2, modifier = Modifier.size(24.dp))
+            Text(
+                label, style = textStyle(12.sp, if (selected) FontWeight.Bold else FontWeight.Normal),
+                color = if (selected) c.tx else c.t2, maxLines = 1,
+            )
         }
     }
 }

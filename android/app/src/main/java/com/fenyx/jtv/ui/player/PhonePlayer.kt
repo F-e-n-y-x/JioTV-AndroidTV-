@@ -93,17 +93,18 @@ internal fun PhonePortraitPlayer(
     d: OverlayData,
     actionsState: State<PlayerActions>,
     buffering: Boolean,
-    video: @Composable () -> Unit,
 ) {
     val c = Jtv.colors
     val now = rememberMinuteClock()
     val act by rememberUpdatedState(d.actions)
     val playing = d.playing
     CompositionLocalProvider(LocalNow provides now) {
-        Box(Modifier.fillMaxSize().background(c.bg)) {
+        // No page background here: the player root paints it BEFORE the video surface, which sits
+        // under this page at the top 16:9 (anything opaque drawn here would cover the picture).
+        Box(Modifier.fillMaxSize()) {
             BannerAutoHide(ui, 4_000)
             Column(Modifier.fillMaxSize()) {
-                PhoneVideo(ui, d, actionsState, buffering, video)
+                PhoneVideo(ui, d, actionsState, buffering)
 
                 LaunchedEffect(d.currentGroup) { ui.browseGroup = d.currentGroup ?: MainViewModel.GROUP_ALL }
                 val bGroup = ui.browseGroup ?: d.currentGroup ?: MainViewModel.GROUP_ALL
@@ -188,7 +189,6 @@ private fun PhoneVideo(
     d: OverlayData,
     actionsState: State<PlayerActions>,
     buffering: Boolean,
-    video: @Composable () -> Unit,
 ) {
     val c = Jtv.colors
     val act by actionsState
@@ -196,11 +196,13 @@ private fun PhoneVideo(
     val paused = d.model.paused
     // Paused keeps the controls up, so Play is always one tap away (no separate paused card).
     val controls = ui.overlay == PlayerOverlay.Banner || paused
+    // The video itself is the player's single surface, laid out exactly under this 16:9 box (see
+    // videoBox); this box only carries the controls and gestures. Swipe down minimises (YouTube).
     Box(
-        Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)
-            .touchVideoGestures(ui, actionsState, tapToggles = true),
+        Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+            .touchVideoGestures(ui, actionsState, tapToggles = true)
+            .swipeDownToMinimize(actionsState),
     ) {
-        video()
         if (buffering && !controls) {
             CircularProgressIndicator(color = c.acc, strokeWidth = 3.dp, modifier = Modifier.align(Alignment.Center))
         }
@@ -222,7 +224,10 @@ private fun PhoneVideo(
             modifier = Modifier.fillMaxSize(),
         ) {
             Box(Modifier.fillMaxSize()) {
-                OverVideoIcon(
+                if (act.canMinimize) OverVideoIcon(
+                    PlayerIcons.ExpandMore, "Minimise player", { act.minimize() },
+                    Modifier.align(Alignment.TopStart).padding(8.dp), iconSize = 30.dp,
+                ) else OverVideoIcon(
                     Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() },
                     Modifier.align(Alignment.TopStart).padding(8.dp),
                 )

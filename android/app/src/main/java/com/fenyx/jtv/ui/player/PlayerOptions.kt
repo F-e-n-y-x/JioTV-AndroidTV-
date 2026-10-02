@@ -77,6 +77,10 @@ internal interface PlayerActions {
     fun back()
     /** Leave the player (on-screen Back button). */
     fun leave()
+    /** Phone/tablet: the player can shrink into the in-app mini player (TV: false, Back leaves). */
+    val canMinimize: Boolean get() = false
+    /** Shrink into the mini player; where that isn't offered it leaves, like Back. */
+    fun minimize() = leave()
     fun retry()
     /** Phone: go to landscape full screen, or back. */
     fun fullScreen(on: Boolean) {}
