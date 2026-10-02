@@ -94,7 +94,8 @@ private val PlayerSessionSaver = Saver<MutableState<PlayerSession?>, Any>(
  * Bottom space the phone mini bar takes (0 when there is none). A State read only by [TopLevel], so a
  * minimise / expand re-lays out the tab screen and nothing else.
  */
-private val LocalMiniBarInset = staticCompositionLocalOf<State<Dp>> { mutableStateOf(0.dp) }
+/** Non-zero while the player is minimised (phone bar height). Screens read it to keep content clear. */
+val LocalMiniBarInset = staticCompositionLocalOf<State<Dp>> { mutableStateOf(0.dp) }
 
 /** Phone: a top-level screen above the bottom tab bar. Tablet: beside the nav rail. TV: as-is. */
 @Composable

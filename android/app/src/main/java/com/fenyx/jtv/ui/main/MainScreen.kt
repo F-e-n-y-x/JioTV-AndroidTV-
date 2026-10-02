@@ -525,8 +525,11 @@ private fun PreviewPane(
         }
         Spacer(Modifier.weight(1f))
         // TV: OK on the row already plays and hold-OK opens options (shown in the key hint), so no
-        // duplicate buttons. Touch: one compact row — Watch + a favourite toggle.
+        // duplicate buttons. Touch: one compact row — Watch + a favourite toggle, lifted above the
+        // tablet's floating mini player while it's showing (card ≈ 16:9 video + 66dp row + margin).
         if (!tv) {
+            val miniShowing = com.fenyx.jtv.LocalMiniBarInset.current.value > 0.dp
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 JtvButton("Watch", onWatch, Modifier.weight(1f), icon = Icons.Filled.PlayArrow, primary = true, fontSize = 15.sp, minHeight = 44.dp)
                 JtvButton(
@@ -534,6 +537,7 @@ private fun PreviewPane(
                     icon = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star, fontSize = 15.sp, minHeight = 44.dp,
                 )
             }
+            if (miniShowing) Spacer(Modifier.height(com.fenyx.jtv.ui.player.MiniCardWidth * 9f / 16f + com.fenyx.jtv.ui.player.MiniBarHeight + 16.dp))
         }
     }
 }
