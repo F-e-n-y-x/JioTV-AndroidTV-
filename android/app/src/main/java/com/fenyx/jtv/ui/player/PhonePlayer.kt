@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -170,19 +172,19 @@ private fun PhoneNowInfo(playing: Channel, d: OverlayData, onOpen: (OptionsPage)
         } else channelSubtitle(playing)
         JText(line, 16.sp, color = c.t2, maxLines = 2, modifier = Modifier.padding(top = 3.dp))
         if (cur != null) JtvProgress(cur.progress(now), Modifier.padding(top = 10.dp))
-        Row(
-            Modifier.fillMaxWidth().padding(top = 14.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            val fav = d.model.favourite
+        // Two rows of equal-width labelled buttons: everything visible without sideways scrolling.
+        val fav = d.model.favourite
+        Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             JtvButton(
-                "Favourite", { d.actions.toggleFavourite() },
-                icon = if (fav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, minHeight = 56.dp,
+                if (fav) "Favourite" else "Add favourite", { d.actions.toggleFavourite() }, Modifier.weight(1.4f),
+                icon = if (fav) Icons.Filled.Star else Icons.Outlined.Star, minHeight = 56.dp,
             )
-            JtvButton("Sound", { onOpen(OptionsPage.Sound) }, minHeight = 56.dp)
-            JtvButton("Quality", { onOpen(OptionsPage.Quality) }, minHeight = 56.dp)
-            JtvButton("Sleep", { onOpen(OptionsPage.Sleep) }, minHeight = 56.dp)
-            JtvButton("More", { onOpen(OptionsPage.Main) }, minHeight = 56.dp)
+            JtvButton("Sound", { onOpen(OptionsPage.Sound) }, Modifier.weight(1f), minHeight = 56.dp)
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            JtvButton("Quality", { onOpen(OptionsPage.Quality) }, Modifier.weight(1f), minHeight = 56.dp)
+            JtvButton("Sleep", { onOpen(OptionsPage.Sleep) }, Modifier.weight(1f), minHeight = 56.dp)
+            JtvButton("More", { onOpen(OptionsPage.Main) }, Modifier.weight(1f), minHeight = 56.dp)
         }
     }
 }
