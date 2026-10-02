@@ -10,12 +10,19 @@ class JioTvApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // Android 7–12: the in-app language also applies to strings read via the application context.
+        com.fenyx.jtv.i18n.AppLocale.applyToApp(this)
         // Keep the Jio access token fresh in the background (see TokenRefreshScheduler).
         com.fenyx.jtv.data.TokenRefreshScheduler.schedule(this)
         // Device-to-device sync over the home Wi-Fi; runs only while the app is in the foreground.
         com.fenyx.jtv.sync.LanSync.init(this)
         // Pre-open connections to Jio's video servers so the first channel starts sooner.
         com.fenyx.jtv.data.Net.warmUp()
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        com.fenyx.jtv.i18n.AppLocale.applyToApp(this) // a system config change resets the app resources' locale
     }
 
     override fun newImageLoader(): ImageLoader {

@@ -16,6 +16,12 @@ import com.fenyx.jtv.theme.JioTVGoTVTheme
 
 class MainActivity : ComponentActivity() {
 
+    // Android 7–12: the in-app language choice (Settings → App language). 13+ uses the system per-app language.
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase)
+        com.fenyx.jtv.i18n.AppLocale.overrideConfiguration(newBase)?.let { applyOverrideConfiguration(it) }
+    }
+
     /** "Open with JTV" on a favourites backup file: restore it (merged into the current favourites). */
     private fun handleBackupIntent(intent: android.content.Intent?) {
         val uri = intent?.takeIf { it.action == android.content.Intent.ACTION_VIEW }?.data ?: return

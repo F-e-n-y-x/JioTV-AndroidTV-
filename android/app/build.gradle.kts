@@ -71,6 +71,11 @@ android {
       localeFilters += listOf("en", "hi")
     }
 
+    // Hindi must stay complete: the release build's lint-vital pass fails on an untranslated string.
+    lint {
+      fatal += listOf("MissingTranslation", "ExtraTranslation", "StringFormatMatches", "StringFormatCount")
+    }
+
     packaging {
       resources {
         excludes += listOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/*.version", "/META-INF/*.kotlin_module", "kotlin/**", "DebugProbesKt.bin")

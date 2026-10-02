@@ -1,3 +1,35 @@
 <resources>
-    <string name="app_name">JTV</string>
+    <!-- App-wide strings. Screen strings live in values/strings_<screen>.xml; every key needs a
+         Hindi twin in values-hi (StringsTranslationTest + lint MissingTranslation enforce it). -->
+    <string name="app_name" translatable="false">JTV</string>
+
+    <!-- Common actions and words, reused across screens -->
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_back">Back</string>
+    <string name="common_close">Close</string>
+    <string name="common_save">Save</string>
+    <string name="common_done">Done</string>
+    <string name="common_try_again">Try again</string>
+    <string name="common_on">On</string>
+    <string name="common_off">Off</string>
+    <string name="common_yes">Yes</string>
+    <string name="common_no">No</string>
+    <string name="common_loading">Loading…</string>
+    <string name="common_live_tv">Live TV</string>
+    <string name="common_guide">Guide</string>
+    <string name="common_settings">Settings</string>
+    <string name="common_search">Search</string>
+    <string name="common_favourites">Favourites</string>
+    <string name="common_live">Live</string>
+    <plurals name="common_channel_count">
+        <item quantity="one">%d channel</item>
+        <item quantity="other">%d channels</item>
+    </plurals>
+
+    <!-- Settings → App language -->
+    <string name="settings_app_language">App language</string>
+    <string name="settings_app_language_system">Same as device</string>
+    <string name="settings_app_language_en" translatable="false">English</string>
+    <string name="settings_app_language_hi" translatable="false">हिन्दी</string>
 </resources>
