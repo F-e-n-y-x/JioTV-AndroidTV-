@@ -364,14 +364,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         epgFlushJob = viewModelScope.launch {
             kotlinx.coroutines.delay(250)
             val batch = HashMap(pendingEpg); batch.keys.forEach { pendingEpg.remove(it) }
-            if (batch.isNotEmpty()) _epgData.value = _epgData.value + batch
+            if (batch.isNotEmpty()) {
+                val cur = _epgData.value
+                // Keep any earlier days a catch-up fetch already merged in for that channel.
+                _epgData.value = cur + batch.mapValues { (id, progs) ->
+                    cur[id].orEmpty().filter { it.stopMs <= progs.first().startMs } + progs
+                }
+            }
             if (pendingEpg.isNotEmpty()) { epgFlushJob = null; pendingEpg.entries.firstOrNull()?.let { (k, v) -> queueEpg(k, v) } }
         }
     }
 
     fun fetchNativeEpgIfMissing(channelId: String) {
         val currentData = _epgData.value[channelId]
-        if (currentData.isNullOrEmpty() && !fetchingEpgChannels.contains(channelId)) {
+        // Only earlier catch-up days loaded (no programme reaching now) still counts as missing.
+        val nowMs = System.currentTimeMillis()
+        val missing = currentData.isNullOrEmpty() ||
+            (channelId !in pastOnlyChecked && currentData.none { it.stopMs > nowMs }).also { if (it) pastOnlyChecked.add(channelId) }
+        if (missing && !fetchingEpgChannels.contains(channelId)) {
             fetchingEpgChannels.add(channelId)
             viewModelScope.launch {
                 try {
@@ -385,6 +395,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    // ── Catch-up: older guide days, and "Replay earlier shows" from a channel's options ──
+
+    /** "channelId:offset" pairs already fetched (or in flight) for past days. */
+    private val pastEpgFetched = HashSet<String>()
+    /** Channels whose guide held only earlier days once; today's guide was then fetched for them. */
+    private val pastOnlyChecked = HashSet<String>()
+
+    /**
+     * Fetches Jio's guide for an earlier day ([offset] -1 … -6) of a catch-up channel and merges it
+     * into [epgData] (de-duplicated by start time, sorted). Once per channel and day per session.
+     */
+    fun fetchPastEpgIfMissing(channelId: String, offset: Int) {
+        if (offset >= 0 || offset < com.fenyx.jtv.data.Catchup.OLDEST_OFFSET) return
+        val key = "$channelId:$offset"
+        if (!pastEpgFetched.add(key)) return
+        viewModelScope.launch {
+            val programs = epgFetchSemaphore.withPermit { epgRepository.getNativeEpgForChannel(channelId, offset) }
+            if (programs.isEmpty()) { pastEpgFetched.remove(key); return@launch }
+            val merged = HashMap<Long, com.fenyx.jtv.data.EpgProgram>()
+            programs.forEach { merged[it.startMs] = it }
+            _epgData.value[channelId]?.forEach { merged[it.startMs] = it }
+            _epgData.value = _epgData.value + (channelId to merged.values.sortedBy { it.startMs })
+        }
+    }
+
+    /** Set by "Replay earlier shows": the guide opens on this channel's row, a little back in time. */
+    private val _guideFocusChannel = MutableStateFlow<String?>(null)
+    val guideFocusChannel: StateFlow<String?> = _guideFocusChannel.asStateFlow()
+    fun requestGuideFocus(channelId: String) { _guideFocusChannel.value = channelId }
+    fun consumeGuideFocus() { _guideFocusChannel.value = null }
 
     fun retry() {
         hasLoaded = false

@@ -756,6 +756,29 @@ object JioApiClient {
         return m.groupValues[1].toLongOrNull() ?: 0
     }
 
+    /**
+     * The form body of a geturl request. Live: `stream_type=Live&channel_id=…`. Catch-up: the same
+     * fields, in the same order and encoding, as the companion server (server/src/jio/stream.ts) and
+     * the Kodi plugin send: srno, programId (the guide's showId), begin/end as epoch MILLISECONDS
+     * (Jio echoes them into the catch-up URL), and the guide's showtime.
+     */
+    internal fun geturlBody(channelId: String, catchup: CatchupParams?): String {
+        val enc = ::encodeUriComponent
+        return if (catchup != null) {
+            "stream_type=Catchup&channel_id=${enc(channelId)}&srno=${enc(catchup.srno)}" +
+                "&programId=${enc(catchup.programId)}&begin=${catchup.beginMs}&end=${catchup.endMs}" +
+                "&showtime=${enc(catchup.showtime)}"
+        } else {
+            "stream_type=Live&channel_id=${enc(channelId)}"
+        }
+    }
+
+    /** JavaScript's encodeURIComponent (what the server uses), so both send byte-identical bodies. */
+    internal fun encodeUriComponent(s: String): String =
+        java.net.URLEncoder.encode(s, "UTF-8")
+            .replace("+", "%20").replace("%21", "!").replace("%27", "'")
+            .replace("%28", "(").replace("%29", ")").replace("%7E", "~")
+
     suspend fun getStreamUrl(
         context: android.content.Context,
         channelId: String,
@@ -811,12 +834,7 @@ object JioApiClient {
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             connection.doOutput = true
 
-            val body = if (catchup != null) {
-                val enc = { s: String -> java.net.URLEncoder.encode(s, "UTF-8") }
-                "stream_type=Catchup&channel_id=$channelId&srno=${enc(catchup.srno)}&programId=${enc(catchup.programId)}&begin=${catchup.beginMs}&end=${catchup.endMs}&showtime=${enc(catchup.showtime)}"
-            } else {
-                "stream_type=Live&channel_id=$channelId"
-            }
+            val body = geturlBody(channelId, catchup)
             val writer = OutputStreamWriter(connection.outputStream)
             writer.write(body)
             writer.flush()
@@ -875,6 +893,9 @@ object JioApiClient {
                 }
                 val hlsUsable = hlsUrl.startsWith("http")
                 var useMpd = mpdUrl.isNotEmpty()
+                // Catch-up: the clear VOD HLS first, like the companion server (whose replay path is
+                // the one known to work); the DASH only when there's no real HLS.
+                if (catchup != null && hlsUsable && !hlsUrl.contains("paywall", ignoreCase = true)) useMpd = false
                 if (catchup == null && useMpd) {
                     val mode = streamModeCache[channelId]
                     if (mode == "hls" && hlsUsable) {
