@@ -371,4 +371,21 @@ class SettingsManager(private val context: Context) {
             preferences.remove(AUTH_USER_ID)
         }
     }
+
+    // ── Remote buttons (INTERACTION.md §6) ──
+    private val remoteKeysKey = stringPreferencesKey("remote_keys")
+
+    /** The custom remote-button map; absent (or unreadable) = the Standard profile = today's keys. */
+    val remoteKeyMapFlow: Flow<RemoteKeyMap> = context.dataStore.data.map { p ->
+        RemoteKeyMap.fromJson(p[remoteKeysKey]) ?: RemoteKeys.Default
+    }
+
+    suspend fun setRemoteKeyMap(map: RemoteKeyMap) {
+        context.dataStore.edit { it[remoteKeysKey] = map.toJson() }
+    }
+
+    /** Reset to default: the stored map is removed, so the built-in Standard profile applies. */
+    suspend fun resetRemoteKeyMap() {
+        context.dataStore.edit { it.remove(remoteKeysKey) }
+    }
 }

@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -95,6 +97,13 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
 
     var sheet by remember { mutableStateOf(Sheet.None) }
 
+    // Remote buttons (TV, or a keyboard/D-pad attached).
+    val showRemote = remoteButtonsAvailable()
+    val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
+    var remoteScreen by rememberSaveable { mutableStateOf(false) }
+    val remoteRowFocus = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+
     // LAN sync ("Devices")
     val syncDevices by com.fenyx.jtv.sync.LanSync.devices.collectAsState()
     val deviceName by com.fenyx.jtv.sync.LanSync.deviceName.collectAsState()
@@ -159,6 +168,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         add(SRow.Item("resize", "Picture size", value = resizeModes.find { it.first == playerResizeMode }?.second ?: "Fit the screen") { sheet = Sheet.PictureSize })
         add(SRow.Item("buffer", "Smooth playback", value = bufferOptions.find { it.first == playbackBufferSec }?.second ?: "$playbackBufferSec seconds",
             description = "More smoothness uses more memory") { sheet = Sheet.Buffer })
+        if (showRemote) add(SRow.Item("remote", "Remote buttons", value = remoteProfileLabel(remoteMap),
+            description = "Choose what each button on your remote does") { remoteScreen = true })
 
         add(SRow.Section("Programme guide"))
         add(SRow.Item("epg", "Programme guide", value = if (epgMode) "On" else "Off",
@@ -244,6 +255,20 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val now = rememberMinuteClock()
     val gutter = when (form) { FormFactor.Tv -> 48.dp; FormFactor.Tablet -> 32.dp; else -> 16.dp }
 
+    // Back from Remote buttons: focus returns to its row.
+    var focusRemoteRow by remember { mutableStateOf(false) }
+    LaunchedEffect(focusRemoteRow, remoteScreen) {
+        if (focusRemoteRow && !remoteScreen) {
+            androidx.compose.runtime.withFrameNanos { }
+            runCatching { remoteRowFocus.requestFocus() }
+            focusRemoteRow = false
+        }
+    }
+    if (remoteScreen) {
+        RemoteButtonsScreen(modifier, onClose = { remoteScreen = false; focusRemoteRow = true })
+        return
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -272,6 +297,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                     .weight(1f)
                     .then(if (Jtv.isPhonePortrait) Modifier.fillMaxWidth() else Modifier.widthIn(max = 820.dp).fillMaxWidth())
                     .focusRestorer(),
+                state = listState,
                 contentPadding = PaddingValues(bottom = 16.dp),
             ) {
                 itemsIndexed(rows, key = { _, r -> r.key }, contentType = { _, r -> r::class }) { _, r ->
@@ -282,7 +308,11 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                             value = r.value,
                             description = r.description,
                             destructive = r.key == "signout",
-                            modifier = if (r.key == "theme") Modifier.focusRequester(firstItemFocus) else Modifier,
+                            modifier = when (r.key) {
+                                "theme" -> Modifier.focusRequester(firstItemFocus)
+                                "remote" -> Modifier.focusRequester(remoteRowFocus)
+                                else -> Modifier
+                            },
                             onClick = r.onClick,
                         )
                     }
@@ -394,7 +424,7 @@ private sealed interface SRow {
 }
 
 @Composable
-private fun SettingsSection(title: String) {
+internal fun SettingsSection(title: String) {
     Text(
         title,
         style = textStyle(14.sp, FontWeight.SemiBold),
@@ -405,7 +435,7 @@ private fun SettingsSection(title: String) {
 
 /** One first-level row: label (+ optional short explanation) on the left, current value on the right. */
 @Composable
-private fun SettingsRow(
+internal fun SettingsRow(
     label: String,
     value: String,
     description: String?,
@@ -530,7 +560,7 @@ internal fun DialogPanel(onDismiss: () -> Unit, width: androidx.compose.ui.unit.
 }
 
 @Composable
-private fun PickerDialog(
+internal fun PickerDialog(
     title: String,
     options: List<Pair<String, String>>,
     currentValue: String,
@@ -587,7 +617,7 @@ private fun PickerDialog(
 }
 
 @Composable
-private fun ConfirmDialog(
+internal fun ConfirmDialog(
     title: String,
     message: String,
     confirm: String,

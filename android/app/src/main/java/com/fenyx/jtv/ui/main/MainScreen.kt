@@ -112,6 +112,7 @@ fun MainScreen(
     val epgMode by settingsManager.epgModeFlow.collectAsState(initial = false)
     val epgData by viewModel.epgData.collectAsState()
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
+    val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
     // Paired TVs on the same Wi-Fi, for "Play on <TV>" in the channel options.
     val playTargets by com.fenyx.jtv.sync.LanSync.playTargets.collectAsState()
 
@@ -239,6 +240,21 @@ fun MainScreen(
     }
 
     val keys = Modifier.onPreviewKeyEvent { e ->
+        // Remote buttons: the keys mapped to Programme guide / Search open them from here too.
+        if (movingId == null) {
+            val n = e.nativeKeyEvent
+            when (remoteMap.actionFor(n.keyCode, n.scanCode, hold = false)) {
+                com.fenyx.jtv.data.RemoteAction.Guide -> {
+                    if (e.type == KeyEventType.KeyDown && n.repeatCount == 0) onGuideClick()
+                    return@onPreviewKeyEvent true
+                }
+                com.fenyx.jtv.data.RemoteAction.Search -> {
+                    if (e.type == KeyEventType.KeyDown && n.repeatCount == 0) onSearchClick()
+                    return@onPreviewKeyEvent true
+                }
+                else -> {}
+            }
+        }
         val code = e.nativeKeyEvent.keyCode
         val digit = when (code) {
             in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 -> code - android.view.KeyEvent.KEYCODE_0

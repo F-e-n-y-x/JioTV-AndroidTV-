@@ -102,6 +102,8 @@ fun TvPlayerScreen(
     openToken: Int = 0,
     /** Catch-up: replay this programme of the launch channel instead of playing it live (null = live). */
     catchup: com.fenyx.jtv.data.CatchupRequest? = null,
+    /** Remote buttons: open the programme guide or search (the host navigates). */
+    onRemoteScreen: (com.fenyx.jtv.data.RemoteAction) -> Unit = {},
 ) {
     val context = LocalContext.current
     // The app theme (the player itself is dark-only); the mini player matches the app.
@@ -1203,6 +1205,78 @@ fun TvPlayerScreen(
     }
     val actionsState = rememberUpdatedState<PlayerActions>(actions)
 
+    // ─────────── Remote buttons (INTERACTION.md §6): custom keys → player actions ───────────
+    val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
+    val remoteView = androidx.compose.ui.platform.LocalView.current
+    val remoteHook = remember(remoteView) { RemoteKeyHook(scope, remoteView) }
+    remoteHook.map = remoteMap
+    var muted by remember { mutableStateOf(false) }
+    LaunchedEffect(exoPlayer, muted) { exoPlayer.volume = if (muted) 0f else 1f }
+    // Previous channel: the (group, index) tuned before the current one.
+    var tunedNow by remember { mutableStateOf<Pair<String?, Int>?>(null) }
+    var tunedBefore by remember { mutableStateOf<Pair<String?, Int>?>(null) }
+    LaunchedEffect(currentGroup, currentIndex) {
+        val pos = currentGroup to currentIndex
+        if (tunedNow != null && tunedNow != pos) tunedBefore = tunedNow
+        tunedNow = pos
+    }
+    // Number entry without number keys: ▲/▼ change the last digit, ▶ adds one, ◀ deletes, OK goes.
+    var numberPicker by remember { mutableStateOf(false) }
+    fun flash(msg: String) {
+        if (ui.number.isNotEmpty()) return
+        ui.numberMiss = msg
+        scope.launch { delay(2_000); if (ui.numberMiss == msg) ui.numberMiss = null }
+    }
+    fun restartPickerTimer() {
+        numberJob?.cancel()
+        numberJob = scope.launch { delay(6_000); commitLatest() }
+    }
+    fun doRemote(a: com.fenyx.jtv.data.RemoteAction) {
+        val ov = ui.overlay
+        when (a) {
+            com.fenyx.jtv.data.RemoteAction.QuickMenu ->
+                ui.overlay = if (ov == PlayerOverlay.Menu) PlayerOverlay.None else PlayerOverlay.Menu
+            com.fenyx.jtv.data.RemoteAction.Options -> ui.openOptions()
+            com.fenyx.jtv.data.RemoteAction.Favourite -> {
+                val id = currentChannel?.id ?: return
+                flash(if (id in favoriteChannels) "Removed from favourites" else "Added to favourites")
+                actions.toggleFavourite()
+            }
+            // The full guide when it is on; otherwise the channel list (what the Guide key did before).
+            com.fenyx.jtv.data.RemoteAction.Guide ->
+                if (epgModeState.value) onRemoteScreen(a) else if (ov != PlayerOverlay.Browse) openBrowse()
+            com.fenyx.jtv.data.RemoteAction.ChannelList -> if (ov != PlayerOverlay.Browse) openBrowse()
+            com.fenyx.jtv.data.RemoteAction.PreviousChannel -> {
+                val p = tunedBefore
+                if (p == null) flash("No previous channel yet") else doTune(p.first, p.second)
+            }
+            com.fenyx.jtv.data.RemoteAction.PlayPause -> {
+                setPaused(!userPaused)
+                if (isTv) ui.openControls() else if (userPaused) ui.showBanner()
+            }
+            com.fenyx.jtv.data.RemoteAction.Language -> ui.openOptions(OptionsPage.Language)
+            com.fenyx.jtv.data.RemoteAction.Quality -> ui.openOptions(OptionsPage.Quality)
+            com.fenyx.jtv.data.RemoteAction.Aspect -> ui.openOptions(OptionsPage.Aspect)
+            com.fenyx.jtv.data.RemoteAction.Sleep -> ui.openOptions(OptionsPage.Sleep)
+            com.fenyx.jtv.data.RemoteAction.VoiceBoost -> {
+                val next = (voiceBoost + 1) % VOICE_OPTIONS.size
+                actions.pickVoice(next)
+                flash("Voice boost: ${voiceLabel(next)}")
+            }
+            com.fenyx.jtv.data.RemoteAction.Mute -> { muted = !muted; flash(if (muted) "Sound off" else "Sound on") }
+            com.fenyx.jtv.data.RemoteAction.Search -> onRemoteScreen(a)
+            com.fenyx.jtv.data.RemoteAction.GoLive -> if (ts.seekable) { doGoLive(); flash("Live") }
+            com.fenyx.jtv.data.RemoteAction.NumberEntry -> {
+                if (ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu || ov == PlayerOverlay.Browse) ui.overlay = PlayerOverlay.None
+                ui.numberMiss = null
+                ui.number = (currentChannel?.channelNumber?.takeIf { it > 0 } ?: 1).toString().take(4)
+                numberPicker = true
+                restartPickerTimer()
+            }
+        }
+    }
+    // ─────────── end remote buttons ───────────
+
     val langChoices = remember(audioTracks, currentVariants, playingChannel) {
         val pid = playingChannel?.id
         buildLanguageChoices(
@@ -1348,6 +1422,14 @@ fun TvPlayerScreen(
                 .onPreviewKeyEvent { ev ->
                     // Mini: the bar's own buttons may hold focus; never zap / open menus from there.
                     if (mini) return@onPreviewKeyEvent false
+                    // Remote buttons: mapped keys and hold slots first (null = not mapped, carry on).
+                    if (ui.number.isEmpty()) numberPicker = false
+                    remoteHook.handle(
+                        ev.nativeKeyEvent,
+                        lockedHoldAllowed = (ui.overlay == PlayerOverlay.None || ui.overlay == PlayerOverlay.Banner) &&
+                            ui.number.isEmpty() && !userPaused && ts.scrubMs == null,
+                        perform = ::doRemote,
+                    )?.let { return@onPreviewKeyEvent it }
                     val k = ev.key
                     val down = ev.type == KeyEventType.KeyDown
                     val isCenter = k == Key.Enter || k == Key.DirectionCenter || k == Key.NumPadEnter
@@ -1392,11 +1474,13 @@ fun TvPlayerScreen(
                                 press.downSeen = true
                                 press.longFired = false
                                 press.job?.cancel()
-                                press.job = scope.launch {
+                                // Hold OK: the remote-buttons hold slot (Standard: the quick menu).
+                                val holdOk = remoteHook.holdOkAction()
+                                press.job = if (holdOk == null) null else scope.launch {
                                     delay(450) // long-press threshold
                                     press.longFired = true
                                     press.swallow = true
-                                    ui.overlay = PlayerOverlay.Menu
+                                    doRemote(holdOk)
                                 }
                             }
                         } else {
@@ -1443,6 +1527,29 @@ fun TvPlayerScreen(
                         return@onPreviewKeyEvent true
                     }
 
+                    // Number entry started from a remote button (no number keys): arrows pick the digits.
+                    if (entering && numberPicker) {
+                        val last = ui.number.last().digitToInt()
+                        when (k) {
+                            Key.DirectionUp, Key.DirectionDown -> {
+                                val d = (last + if (k == Key.DirectionUp) 1 else 9) % 10
+                                ui.number = ui.number.dropLast(1) + d
+                                restartPickerTimer()
+                                return@onPreviewKeyEvent true
+                            }
+                            Key.DirectionRight -> {
+                                if (ui.number.length < 4) ui.number += "0"
+                                restartPickerTimer()
+                                return@onPreviewKeyEvent true
+                            }
+                            Key.DirectionLeft -> {
+                                ui.number = ui.number.dropLast(1)
+                                if (ui.number.isEmpty()) numberJob?.cancel() else restartPickerTimer()
+                                return@onPreviewKeyEvent true
+                            }
+                            else -> {}
+                        }
+                    }
                     if (entering) {
                         when (k) {
                             Key.DirectionLeft, Key.Backspace -> {

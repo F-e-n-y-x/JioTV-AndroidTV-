@@ -350,6 +350,11 @@ fun MainNavigation() {
                         mainViewModel = mainViewModel,
                         onBack = { backStack.removeLastOrNull() },
                         onSettings = { backStack.add(Settings) },
+                        // Remote buttons: Guide / Search replace the player (Back then goes to Live).
+                        onRemoteScreen = { a ->
+                            backStack.removeLastOrNull()
+                            backStack.add(if (a == com.fenyx.jtv.data.RemoteAction.Search) Search else Guide)
+                        },
                     )
                 }
             },
@@ -359,6 +364,7 @@ fun MainNavigation() {
             session = session,
             mainViewModel = mainViewModel,
             onSettings = { onTab(PhoneTab.Settings) },
+            onRemoteScreen = { a -> onTab(if (a == com.fenyx.jtv.data.RemoteAction.Search) PhoneTab.Search else PhoneTab.Guide) },
         )
     }
 }
@@ -374,6 +380,7 @@ private fun BoxScope.PlayerHost(
     session: MutableState<PlayerSession?>,
     mainViewModel: MainViewModel,
     onSettings: () -> Unit,
+    onRemoteScreen: (com.fenyx.jtv.data.RemoteAction) -> Unit = {},
 ) {
     val s = session.value ?: return
     val mini = s.mini
@@ -406,6 +413,10 @@ private fun BoxScope.PlayerHost(
         openToken = s.token,
         catchup = s.catchup, // catch-up
         modifier = frame,
+        onRemoteScreen = { a ->
+            session.value = session.value?.copy(mini = true)
+            onRemoteScreen(a)
+        },
     )
 }
 
@@ -423,6 +434,7 @@ private fun PlayerForChannel(
     openToken: Int = 0,
     catchup: com.fenyx.jtv.data.CatchupRequest? = null, // catch-up
     modifier: Modifier = Modifier,
+    onRemoteScreen: (com.fenyx.jtv.data.RemoteAction) -> Unit = {},
 ) {
     val groups by mainViewModel.groups.collectAsState()
     // Reactive (not a one-shot snapshot) so if the player is opened while the collapsed
@@ -469,5 +481,6 @@ private fun PlayerForChannel(
         onExpand = onExpand,
         openToken = openToken,
         catchup = catchup, // catch-up
+        onRemoteScreen = onRemoteScreen,
     )
 }

@@ -1,0 +1,277 @@
+package com.fenyx.jtv.ui.settings
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
+import com.fenyx.jtv.data.AssignResult
+import com.fenyx.jtv.data.KeySpec
+import com.fenyx.jtv.data.RemoteAction
+import com.fenyx.jtv.data.RemoteKeyMap
+import com.fenyx.jtv.data.RemoteKeys
+import com.fenyx.jtv.data.RemoteProfile
+import com.fenyx.jtv.data.SettingsManager
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.JText
+import com.fenyx.jtv.ui.components.JtvButton
+import com.fenyx.jtv.ui.components.KeyHint
+import com.fenyx.jtv.ui.components.textStyle
+import kotlinx.coroutines.launch
+
+/** Who sees "Remote buttons": TV, or a phone/tablet with a hardware keyboard or D-pad attached. */
+@Composable
+internal fun remoteButtonsAvailable(): Boolean {
+    if (Jtv.isTv) return true
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+    return cfg.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS ||
+        cfg.navigation == android.content.res.Configuration.NAVIGATION_DPAD
+}
+
+/** Value shown on the Settings row. */
+internal fun remoteProfileLabel(map: RemoteKeyMap): String = map.matchingProfile()?.label ?: "Custom"
+
+private sealed interface RemoteSheet {
+    data object None : RemoteSheet
+    data object Profile : RemoteSheet
+    data object Reset : RemoteSheet
+    data class Capture(val action: RemoteAction, val note: String? = null) : RemoteSheet
+    data class Replace(val action: RemoteAction, val spec: KeySpec, val owner: RemoteAction) : RemoteSheet
+}
+
+/**
+ * Settings → Remote buttons (INTERACTION.md §6). Drawn in place of the settings list; Back returns.
+ * Rows: the remote type (one-step profiles), reset, then every action with its current buttons.
+ */
+@Composable
+internal fun RemoteButtonsScreen(modifier: Modifier, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val settings = remember { SettingsManager(context) }
+    val scope = rememberCoroutineScope()
+    val c = Jtv.colors
+    val isTv = Jtv.isTv
+    val map by settings.remoteKeyMapFlow.collectAsState(initial = RemoteKeys.Default)
+    var sheet by remember { mutableStateOf<RemoteSheet>(RemoteSheet.None) }
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { if (isTv) runCatching { firstFocus.requestFocus() } }
+
+    BackHandler(enabled = sheet == RemoteSheet.None) { onClose() }
+
+    fun save(m: RemoteKeyMap) = scope.launch {
+        if (m.sameAs(RemoteKeys.Default)) settings.resetRemoteKeyMap() else settings.setRemoteKeyMap(m)
+    }
+
+    fun tryAssign(action: RemoteAction, spec: KeySpec) {
+        when (val r = map.assign(action, spec)) {
+            is AssignResult.Done -> { save(r.map); sheet = RemoteSheet.None }
+            AssignResult.AlreadySet -> sheet = RemoteSheet.None
+            is AssignResult.Conflict -> sheet = RemoteSheet.Replace(action, spec, r.owner)
+            AssignResult.Locked -> sheet = RemoteSheet.Capture(action, "${spec.label} keeps its own job. Try another button, or hold it.")
+            AssignResult.SystemKey -> sheet = RemoteSheet.Capture(action, "${spec.label} belongs to the system. Try another button.")
+        }
+    }
+
+    val gutter = when (Jtv.form) { FormFactor.Tv -> 48.dp; FormFactor.Tablet -> 32.dp; else -> 16.dp }
+    Column(
+        modifier.fillMaxSize().background(c.bg).padding(horizontal = gutter, vertical = if (isTv) 27.dp else 8.dp),
+    ) {
+        JText("Remote buttons", if (isTv) 28.sp else 24.sp, weight = FontWeight.Bold)
+        Text(
+            "Choose an action, then press the button you want for it.",
+            style = textStyle(if (isTv) 16.sp else 15.sp), color = c.t2,
+        )
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(
+            Modifier.weight(1f)
+                .then(if (Jtv.isPhonePortrait) Modifier.fillMaxWidth() else Modifier.widthIn(max = 820.dp).fillMaxWidth())
+                .focusRestorer(),
+            contentPadding = PaddingValues(bottom = 16.dp),
+        ) {
+            item(key = "s:type", contentType = "section") { SettingsSection("Remote type") }
+            item(key = "type", contentType = "row") {
+                SettingsRow(
+                    label = "Remote type", value = remoteProfileLabel(map),
+                    description = "Sets every button in one step", destructive = false,
+                    modifier = Modifier.focusRequester(firstFocus),
+                ) { sheet = RemoteSheet.Profile }
+            }
+            item(key = "reset", contentType = "row") {
+                SettingsRow(
+                    label = "Reset to default", value = "",
+                    description = RemoteProfile.Standard.label, destructive = false, modifier = Modifier,
+                ) { sheet = RemoteSheet.Reset }
+            }
+            item(key = "s:actions", contentType = "section") { SettingsSection("Buttons for each action") }
+            items(RemoteAction.entries, key = { it.id }, contentType = { "row" }) { a ->
+                val keys = map.keysFor(a)
+                SettingsRow(
+                    label = a.label,
+                    value = if (keys.isEmpty()) "Not set" else keys.joinToString(", ") { it.label },
+                    description = null, destructive = false, modifier = Modifier,
+                ) { sheet = RemoteSheet.Capture(a) }
+            }
+            item(key = "note", contentType = "note") {
+                Text(
+                    "Back, OK and the arrows always keep their job. You can give OK and the arrows a hold (long press) action.",
+                    style = textStyle(14.sp), color = c.t2,
+                    modifier = Modifier.padding(start = 12.dp, top = 16.dp, end = 12.dp),
+                )
+            }
+        }
+        if (isTv) {
+            Spacer(Modifier.height(6.dp))
+            KeyHint(listOf("OK" to "change", "Back" to "go back"))
+        }
+    }
+
+    when (val s = sheet) {
+        RemoteSheet.None -> Unit
+        RemoteSheet.Profile -> PickerDialog(
+            "Remote type",
+            RemoteProfile.entries.map { it.id to it.label },
+            map.matchingProfile()?.id ?: "",
+            onSelect = { id ->
+                RemoteProfile.byId(id)?.let { save(RemoteKeys.profile(it)) }
+                sheet = RemoteSheet.None
+            },
+            onDismiss = { sheet = RemoteSheet.None },
+        )
+        RemoteSheet.Reset -> ConfirmDialog(
+            title = "Reset remote buttons?",
+            message = "Every button goes back to the standard Android TV remote.",
+            confirm = "Reset",
+            onConfirm = { scope.launch { settings.resetRemoteKeyMap() }; sheet = RemoteSheet.None },
+            onDismiss = { sheet = RemoteSheet.None },
+        )
+        is RemoteSheet.Capture -> CaptureDialog(
+            action = s.action,
+            current = map.keysFor(s.action),
+            note = s.note,
+            onKey = { spec -> tryAssign(s.action, spec) },
+            onClear = { save(map.clear(s.action)); sheet = RemoteSheet.None },
+            onDismiss = { sheet = RemoteSheet.None },
+        )
+        is RemoteSheet.Replace -> ConfirmDialog(
+            title = "Already used for ${s.owner.label} — replace?",
+            message = "${s.spec.label} will do \"${s.action.label}\" instead.",
+            confirm = "Replace",
+            onConfirm = {
+                (map.assign(s.action, s.spec, replace = true) as? AssignResult.Done)?.let { save(it.map) }
+                sheet = RemoteSheet.None
+            },
+            onDismiss = { sheet = RemoteSheet.None },
+        )
+    }
+}
+
+/**
+ * "Press the button you want to use…". The next key press is recorded (key code, scan code as the
+ * fallback); holding it past [RemoteKeys.HOLD_MS] records its hold slot. Back always cancels.
+ * Taps on OK and the arrows still move between the dialog's own buttons (they can't be remapped);
+ * holding them records "Hold OK" / "Hold Right arrow". Volume, Home and power pass to the system.
+ */
+@Composable
+private fun CaptureDialog(
+    action: RemoteAction,
+    current: List<KeySpec>,
+    note: String?,
+    onKey: (KeySpec) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val c = Jtv.colors
+    val cancelFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
+    var holding by remember { mutableStateOf<String?>(null) }
+    // The key-down that started the current press (so a key-up alone, e.g. the OK that opened this, is ignored).
+    var downCode by remember { mutableStateOf<Int?>(null) }
+
+    DialogPanel(onDismiss, width = 560.dp) {
+        Column(
+            Modifier.onPreviewKeyEvent { e ->
+                val n = e.nativeKeyEvent
+                val code = n.keyCode
+                val down = e.type == KeyEventType.KeyDown
+                when {
+                    RemoteKeys.isBack(code) -> { if (!down) onDismiss(); true }
+                    RemoteKeys.isSystem(code) -> false
+                    down && n.repeatCount == 0 -> {
+                        downCode = code
+                        holding = null
+                        // OK / arrows: let the tap move or press in this dialog.
+                        !RemoteKeys.isLockedTap(code)
+                    }
+                    down -> {
+                        if (n.eventTime - n.downTime >= RemoteKeys.HOLD_MS && downCode == code) {
+                            holding = "Hold ${RemoteKeys.buttonLabel(code, n.scanCode)}: let go to use it"
+                        }
+                        // Held OK / arrows don't auto-repeat through the dialog's buttons.
+                        true
+                    }
+                    else -> {
+                        if (downCode != code) return@onPreviewKeyEvent !RemoteKeys.isLockedTap(code)
+                        downCode = null
+                        val hold = n.eventTime - n.downTime >= RemoteKeys.HOLD_MS
+                        if (RemoteKeys.isLockedTap(code) && !hold) {
+                            holding = null
+                            false // a plain tap on OK / an arrow: the dialog's own buttons
+                        } else {
+                            onKey(KeySpec.of(code, n.scanCode, hold))
+                            true
+                        }
+                    }
+                }
+            },
+        ) {
+            Text(action.label, style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+            Spacer(Modifier.height(12.dp))
+            Text("Press the button you want to use…", style = textStyle(20.sp, FontWeight.SemiBold), color = c.acc)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                holding ?: note ?: "For a long press, hold the button. Back cancels.",
+                style = textStyle(16.sp), color = if (holding != null) c.tx else c.t2,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                if (current.isEmpty()) "No button yet" else "Now: " + current.joinToString(", ") { it.label },
+                style = textStyle(16.sp), color = c.t2,
+            )
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                JtvButton("Cancel", onDismiss, Modifier.focusRequester(cancelFocus))
+                if (current.isNotEmpty()) JtvButton("Remove buttons", onClear)
+            }
+        }
+    }
+}
