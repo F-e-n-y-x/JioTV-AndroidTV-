@@ -97,8 +97,24 @@ internal class Timeshift {
     /** Preview position while a finger drags the thumb or Left/Right is held (null = not scrubbing). */
     var scrubMs by mutableStateOf<Long?>(null)
 
+    /**
+     * A recorded-schedule channel ("VOD playout"): Jio hands out the current programme's file. The bar
+     * then covers the whole file, and "Back to schedule" returns to where the broadcast is now.
+     */
+    var vod by mutableStateOf(false)
+        private set
+    /** Wall-clock start of the programme in the file (set by the player from the guide; 0 = unknown). */
+    var scheduleStartMs = 0L
+    /** Where the schedule is now, in file coordinates (-1 = unknown). */
+    var scheduleMs by mutableLongStateOf(-1L)
+        private set
+
     val behindMs: Long get() = (spanMs - positionMs).coerceAtLeast(0L)
-    val atLive: Boolean get() = !live || behindMs < LiveToleranceMs
+    /** Live: at the live point. Schedule file: within 30 s of the scheduled position. */
+    val atLive: Boolean get() = if (vod) scheduleMs >= 0 && kotlin.math.abs(positionMs - scheduleMs) < ScheduleToleranceMs
+                                else !live || behindMs < LiveToleranceMs
+    /** The Live / Back to schedule button has something to do. */
+    val hasLiveButton: Boolean get() = if (vod) scheduleMs >= 0 else live
 
     private val window = Timeline.Window()
     private var holdStart = 0L
@@ -106,6 +122,7 @@ internal class Timeshift {
 
     fun reset() {
         live = false; seekable = false; spanMs = 0L; positionMs = 0L; bufferedMs = 0L; scrubMs = null
+        vod = false; scheduleMs = -1L // scheduleStartMs stays: the player sets it per programme
     }
 
     fun update(p: Player) {
@@ -114,6 +131,21 @@ internal class Timeshift {
         tl.getWindow(p.currentMediaItemIndex, window)
         val dur = window.durationMs
         val pos = p.currentPosition.coerceAtLeast(0L)
+        if (!window.isLive && !window.isPlaceholder) {
+            // A file, not a live stream: the bar is the whole file.
+            vod = true
+            live = false
+            val known = dur != C.TIME_UNSET && dur > 0
+            seekable = window.isSeekable && known
+            spanMs = if (known) dur else pos
+            positionMs = pos
+            bufferedMs = p.bufferedPosition.coerceIn(pos, spanMs.coerceAtLeast(pos))
+            val sched = if (scheduleStartMs > 0) System.currentTimeMillis() - scheduleStartMs else -1L
+            scheduleMs = if (known && sched in 0 until dur) sched else -1L
+            return
+        }
+        vod = false
+        scheduleMs = -1L
         var behind = 0L
         if (window.isLive) {
             // How far the playhead is behind where playback sits when "live" (the target offset).
@@ -148,7 +180,8 @@ internal class Timeshift {
                 if (!seekable) return false
                 val now = android.os.SystemClock.uptimeMillis()
                 if (ev.nativeKeyEvent.repeatCount == 0) {
-                    if (yieldAtLive && dir > 0 && scrubMs == null && atLive) return false
+                    val atEnd = if (vod) positionMs >= spanMs - 1_000 else atLive
+                    if (yieldAtLive && dir > 0 && scrubMs == null && atEnd) return false
                     holdStart = now
                 } else if (scrubMs == null || now - lastStep < 120) {
                     return scrubMs != null
@@ -160,7 +193,7 @@ internal class Timeshift {
                     held < 4_000 -> 30_000L
                     else -> 60_000L
                 }
-                val base = scrubMs ?: if (atLive) spanMs else positionMs
+                val base = scrubMs ?: if (!vod && atLive) spanMs else positionMs
                 scrubMs = (base + dir * step).coerceIn(0L, spanMs)
                 return true
             }
@@ -173,6 +206,18 @@ internal class Timeshift {
             else -> return scrubMs != null
         }
     }
+}
+
+/** "Back to schedule" counts as there within this distance (the file isn't frame-exact to the guide). */
+internal const val ScheduleToleranceMs = 30_000L
+
+/** "12:34" (or "1:02:34"). */
+internal fun formatClock(ms: Long): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%02d:%02d".format(m, sec)
 }
 
 /** "−02:35" (or "−1:02:35"). */
@@ -254,13 +299,19 @@ internal fun LiveSeekBar(
                 val th = (if (big) 6.dp else 4.dp).toPx()
                 val span = ts.spanMs.coerceAtLeast(1L).toFloat()
                 val scrub = ts.scrubMs
-                val frac = if (scrub == null && ts.atLive) 1f else ((scrub ?: ts.positionMs) / span).coerceIn(0f, 1f)
+                val frac = if (scrub == null && !ts.vod && ts.atLive) 1f else ((scrub ?: ts.positionMs) / span).coerceIn(0f, 1f)
                 val bfrac = (ts.bufferedMs / span).coerceIn(frac, 1f)
                 val top = cy - th / 2f
                 val r = CornerRadius(th / 2f, th / 2f)
                 drawRoundRect(Color.White.copy(alpha = 0.28f), Offset(0f, top), Size(w, th), r)
                 if (bfrac > frac) drawRect(Color.White.copy(alpha = 0.5f), Offset(w * frac, top), Size(w * (bfrac - frac), th))
                 drawRoundRect(accent, Offset(0f, top), Size(w * frac, th), r)
+                // Schedule file: a tick where the broadcast is now.
+                val sched = ts.scheduleMs
+                if (ts.vod && sched >= 0) {
+                    val sx = w * (sched / span).coerceIn(0f, 1f)
+                    drawRect(Color.White, Offset(sx - 1.dp.toPx(), cy - th * 1.5f), Size(2.dp.toPx(), th * 3f))
+                }
                 val tr = when {
                     dragging -> 11.dp
                     focused -> 10.dp
@@ -276,7 +327,11 @@ internal fun LiveSeekBar(
         val scrub = ts.scrubMs
         if (scrub != null) {
             val span = ts.spanMs.coerceAtLeast(1L)
-            val label = if (span - scrub < LiveToleranceMs) "Live" else formatBehind(span - scrub)
+            val label = when {
+                ts.vod -> formatClock(scrub)
+                span - scrub < LiveToleranceMs -> "Live"
+                else -> formatBehind(span - scrub)
+            }
             val labelW = remember { intArrayOf(0) }
             Box(
                 Modifier
@@ -299,6 +354,14 @@ internal fun LiveSeekBar(
 /** "−02:35" next to the bar; nothing while live. Recomposes at most once a second. */
 @Composable
 internal fun BehindTime(ts: Timeshift, modifier: Modifier = Modifier) {
+    if (ts.vod) {
+        // Elapsed / remaining in the programme file.
+        val text by remember(ts) {
+            derivedStateOf { "${formatClock(ts.positionMs)} / ${formatBehind(ts.spanMs - ts.positionMs)}" }
+        }
+        JText(text, if (Jtv.isTv) 16.sp else 14.sp, color = Jtv.colors.tx, weight = FontWeight.SemiBold, modifier = modifier)
+        return
+    }
     val secs by remember(ts) { derivedStateOf { if (ts.atLive) -1L else ts.behindMs / 1000 } }
     if (secs >= 0) {
         JText(formatBehind(secs * 1000), if (Jtv.isTv) 16.sp else 14.sp, color = Jtv.colors.tx,
@@ -309,7 +372,7 @@ internal fun BehindTime(ts: Timeshift, modifier: Modifier = Modifier) {
 /** "Behind live · −02:35" for the info strap / video tag, so a returning viewer knows what they see. */
 @Composable
 internal fun BehindLiveTag(ts: Timeshift, size: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier) {
-    val secs by remember(ts) { derivedStateOf { if (ts.atLive) -1L else ts.behindMs / 1000 } }
+    val secs by remember(ts) { derivedStateOf { if (ts.vod || ts.atLive) -1L else ts.behindMs / 1000 } }
     if (secs >= 0) {
         val c = Jtv.colors
         Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -328,10 +391,19 @@ internal fun BehindLiveTag(ts: Timeshift, size: androidx.compose.ui.unit.TextUni
 internal fun LiveButton(ts: Timeshift, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = Jtv.colors
     val atLive by remember(ts) { derivedStateOf { ts.atLive } }
+    val vod = ts.vod
+    val label = if (vod) "Back to schedule" else "Live"
     JtvClickable(
         onClick = onClick,
         modifier = modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
-            .semantics { contentDescription = if (atLive) "Live. Playing live" else "Go to live"; role = Role.Button },
+            .semantics {
+                contentDescription = when {
+                    vod -> if (atLive) "On schedule" else "Back to schedule"
+                    atLive -> "Live. Playing live"
+                    else -> "Go to live"
+                }
+                role = Role.Button
+            },
         shape = RoundedCornerShape(24.dp),
         container = Color.Transparent,
         focusedContainer = Color.Transparent,
@@ -358,7 +430,7 @@ internal fun LiveButton(ts: Timeshift, onClick: () -> Unit, modifier: Modifier =
         ) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
             Spacer(Modifier.width(6.dp))
-            JText("Live", if (Jtv.isTv) 16.sp else 14.sp, color = fg, weight = FontWeight.SemiBold)
+            JText(label, if (Jtv.isTv) 16.sp else 14.sp, color = fg, weight = FontWeight.SemiBold)
         }
     }
 }
@@ -393,11 +465,11 @@ internal fun SeekRow(
             )
             Spacer(Modifier.width(10.dp))
             BehindTime(ts)
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(8.dp))
         } else {
             Spacer(Modifier.weight(1f))
         }
-        if (ts.live) {
+        if (ts.hasLiveButton) {
             LiveButton(
                 ts, onClick = { actions.goLive() },
                 modifier = Modifier

@@ -265,7 +265,7 @@ private fun TvControls(ui: PlayerUi, d: OverlayData) {
             modifier = Modifier.align(Alignment.Center),
             side = 56.dp, main = 72.dp, gap = 48.dp,
             playFocus = playFr, upFocus = settingsFr,
-            downFocus = if (ts.seekable) barFr else if (ts.live) liveFr else null,
+            downFocus = if (ts.seekable) barFr else if (ts.hasLiveButton) liveFr else null,
             onPlayFocus = { f ->
                 if (f) ui.focusedControl = ControlFocus.Play
                 else if (ui.focusedControl == ControlFocus.Play) ui.focusedControl = ControlFocus.None

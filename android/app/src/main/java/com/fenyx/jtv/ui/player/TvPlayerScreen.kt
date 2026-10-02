@@ -25,6 +25,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -148,6 +151,13 @@ fun TvPlayerScreen(
     val ui = remember { PlayerUi(PlayerOverlay.Banner) }
     // Live timeshift (DVR window) state for the seek bar, the Live button and "Behind live".
     val ts = remember { Timeshift() }
+    // Recorded-schedule channels ("VOD playout", e.g. some Sony Yay feeds): Jio's geturl returns the
+    // CURRENT programme's file (SonyLIV, partner=jiotvvod), not a live stream. We start it at the
+    // scheduled position and load the next file when it ends. Known from the URL at load, and from
+    // the timeline (a non-live, non-placeholder window) once it is prepared.
+    var vodItem by remember { mutableStateOf(false) }
+    // The loaded stream URL without its query: a refreshed token is only applied to the same file.
+    val streamBase = remember { java.util.concurrent.atomic.AtomicReference("") }
     
     val settingsManager = remember { SettingsManager(context) }
     val favoriteChannels by settingsManager.favoriteChannelsFlow.collectAsState(initial = emptySet())
@@ -376,7 +386,18 @@ fun TvPlayerScreen(
                 }
                 android.util.Log.d("TvPlayerVideo", "video renditions:$vdiag")
             }
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                if (timeline.isEmpty) return
+                val w = timeline.getWindow(exoPlayer.currentMediaItemIndex.coerceIn(0, timeline.windowCount - 1),
+                    androidx.media3.common.Timeline.Window())
+                if (!w.isPlaceholder && !w.isLive && !vodItem) vodItem = true
+            }
             override fun onPlaybackStateChanged(state: Int) {
+                // Schedule file finished: Jio now hands out the next programme's file.
+                if (state == Player.STATE_ENDED && vodItem) {
+                    android.util.Log.d("TvPlayer", "Schedule file ended: loading the next programme")
+                    streamRefreshTrigger++
+                }
                 isBuffering = state == Player.STATE_BUFFERING
                 if (state == Player.STATE_READY) {
                     // Playback recovered -> clear any error and reset the recovery budget so the
@@ -460,6 +481,8 @@ fun TvPlayerScreen(
 
                 // Seed the token holder so the ResolvingDataSource and refresh loop have the current token.
                 tokenHolder.set(com.fenyx.jtv.data.JioApiClient.extractHdneaToken(finalUrl))
+                streamBase.set(finalUrl.substringBefore('?'))
+                vodItem = isScheduleFileUrl(finalUrl)
                 keyHeadersHolder.set(if (streamData.isMpd) emptyMap() else streamData.licenseHeaders)
 
                 android.util.Log.d("TvPlayer", "Loading stream: $finalUrl (isMpd: ${streamData.isMpd})")
@@ -602,13 +625,53 @@ fun TvPlayerScreen(
                 context, ch.channelNumber.toString(), authData
             )
             if (res.isSuccess) {
-                val newToken = com.fenyx.jtv.data.JioApiClient.extractHdneaToken(res.getOrNull()!!.streamUrl)
+                val newUrl = res.getOrNull()!!.streamUrl
+                val newToken = com.fenyx.jtv.data.JioApiClient.extractHdneaToken(newUrl)
+                // Schedule file: geturl may already point at the NEXT programme's file; its token is for
+                // that file, so only take it when it is the same file (never reload mid-programme).
+                if (vodItem && newUrl.substringBefore('?') != streamBase.get()) continue
                 if (newToken.isNotEmpty()) {
                     tokenHolder.set(newToken)
                     android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
                 }
             }
         }
+    }
+
+    // Recorded-schedule channels: start at the scheduled position, move on at the programme end.
+    // Keyed on each load (streamRefreshTrigger) so every new file gets its own start seek + end timer.
+    LaunchedEffect(vodItem, playingChannel, streamRefreshTrigger) {
+        if (!vodItem) return@LaunchedEffect
+        val ids = listOfNotNull(playingChannel?.id, currentChannel?.id).distinct()
+        if (ids.isEmpty() || vm == null) return@LaunchedEffect
+        ids.forEach { vm.fetchNativeEpgIfMissing(it) }
+        fun programme(m: Map<String, List<com.fenyx.jtv.data.EpgProgram>>): com.fenyx.jtv.data.EpgProgram? {
+            val now = System.currentTimeMillis()
+            return ids.firstNotNullOfOrNull { id -> m[id]?.firstOrNull { it.startMs <= now && now < it.stopMs } }
+        }
+        val p = kotlinx.coroutines.withTimeoutOrNull(15_000) { vm.epgData.first { programme(it) != null } }
+            ?.let { programme(it) } ?: return@LaunchedEffect
+        // (a) Once the file is ready, jump to where the broadcast is now (only if that's inside the file).
+        val ready = kotlinx.coroutines.withTimeoutOrNull(30_000) {
+            while (exoPlayer.playbackState != Player.STATE_READY) delay(200)
+            true
+        } ?: false
+        ts.scheduleStartMs = p.startMs
+        if (ready) {
+            val target = System.currentTimeMillis() - p.startMs
+            val dur = exoPlayer.duration
+            if (dur != androidx.media3.common.C.TIME_UNSET && target in 5_000 until dur - 5_000 &&
+                kotlin.math.abs(exoPlayer.currentPosition - target) > 5_000) {
+                android.util.Log.d("TvPlayer", "Schedule file: start at ${target / 1000}s of ${dur / 1000}s")
+                exoPlayer.seekTo(target)
+            }
+            ts.update(exoPlayer)
+        }
+        // (b) The programme's end (+2 s): fetch the next programme's file.
+        val wait = p.stopMs + 2_000 - System.currentTimeMillis()
+        if (wait > 0) delay(wait)
+        android.util.Log.d("TvPlayer", "Schedule: programme over, loading the next one")
+        streamRefreshTrigger++
     }
 
     // Apply audio enhancements whenever the session id or any audio setting changes.
@@ -726,6 +789,36 @@ fun TvPlayerScreen(
         }
     }
 
+    // System bars (phone/tablet): hidden only in true full screen (phone landscape, tablet full
+    // screen). The portrait phone page and the tablet page keep the status bar, laid out below it.
+    // TV has no system bars at all (MainActivity). Mini: the app's own state, so nothing to do.
+    val trueFullScreen = !isTv && !mini && !pagePlayer
+    val appLight = appColors.bg.luminance() > 0.5f
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(activity, trueFullScreen, mini, phonePortrait, appLight) {
+        val window = activity?.window
+        val ctl = if (!isTv && window != null) androidx.core.view.WindowInsetsControllerCompat(window, hostView) else null
+        val bars = androidx.core.view.WindowInsetsCompat.Type.systemBars()
+        if (ctl != null && !mini) {
+            if (trueFullScreen) {
+                ctl.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                ctl.hide(bars)
+            } else {
+                ctl.show(bars)
+                // The phone page is always dark: light icons on it, whatever the app theme.
+                if (phonePortrait) {
+                    ctl.isAppearanceLightStatusBars = false
+                    ctl.isAppearanceLightNavigationBars = false
+                }
+            }
+        }
+        onDispose {
+            ctl?.show(bars)
+            ctl?.isAppearanceLightStatusBars = appLight
+            ctl?.isAppearanceLightNavigationBars = appLight
+        }
+    }
+
     val browseGroups = remember(groups, currentGroup) {
         buildList {
             if (MainViewModel.GROUP_FAVORITES in groups) add(MainViewModel.GROUP_FAVORITES)
@@ -761,7 +854,11 @@ fun TvPlayerScreen(
     /** Seek inside the live window; at (or past) the right end it means live. Keeps play/pause as is. */
     fun commitSeek(ms: Long) {
         if (!ts.seekable) return
-        if (ms >= ts.spanMs - LiveToleranceMs) {
+        if (ts.vod) {
+            val t = ms.coerceIn(0L, (ts.spanMs - 1_000).coerceAtLeast(0L))
+            exoPlayer.seekTo(t)
+            ts.positionMs = t
+        } else if (ms >= ts.spanMs - LiveToleranceMs) {
             exoPlayer.seekToDefaultPosition()
             ts.positionMs = ts.spanMs
         } else {
@@ -773,6 +870,15 @@ fun TvPlayerScreen(
     }
 
     fun doGoLive() {
+        if (ts.vod) {
+            // Back to schedule: where the broadcast is now.
+            val t = ts.scheduleMs
+            android.util.Log.d("TvPlayer", "Back to schedule: ${t / 1000}s")
+            if (t >= 0) { exoPlayer.seekTo(t); ts.positionMs = t }
+            setPaused(false)
+            ui.bannerToken++
+            return
+        }
         exoPlayer.seekToDefaultPosition()
         ts.positionMs = ts.spanMs
         setPaused(false)
@@ -1088,6 +1194,8 @@ fun TvPlayerScreen(
         Box(
             modifier = modifier
                 .then(rootFrame)
+                // The phone / tablet page sits below the status bar (and above the navigation bar).
+                .then(if (!mini && pagePlayer) Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing) else Modifier)
                 .focusRequester(focusRequester)
                 .focusable(enabled = !mini)
                 .then(if (mini) Modifier else Modifier.pointerInput(ui) {
@@ -1254,7 +1362,7 @@ fun TvPlayerScreen(
                         Key.MediaPause -> { setPaused(true); if (isTv) ui.openControls() else ui.showBanner(); true }
                         Key.MediaFastForward, Key.MediaRewind -> {
                             if (ts.seekable && !panel) {
-                                val base = if (ts.atLive) ts.spanMs else ts.positionMs
+                                val base = if (ts.atLive && !ts.vod) ts.spanMs else ts.positionMs
                                 commitSeek(base + if (k == Key.MediaFastForward) 10_000 else -10_000)
                                 if (isTv) ui.openControls(ControlFocus.Bar) else ui.showBanner()
                             }
@@ -1434,3 +1542,7 @@ private fun TvPausedBadge(ui: PlayerUi, modifier: Modifier) {
     val ov = ui.overlay
     if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) PausedBadge(touch = false, onPlay = {}, modifier = modifier)
 }
+
+/** Jio's recorded-schedule channels hand out a SonyLIV programme file instead of a live stream. */
+private fun isScheduleFileUrl(url: String): Boolean =
+    url.contains("slivcdn.com", ignoreCase = true) || url.contains("partner=jiotvvod", ignoreCase = true)

@@ -352,7 +352,7 @@ fun MainNavigation() {
 /**
  * Phone/tablet player layer, drawn above NavDisplay. Composes [TvPlayerScreen] ONCE per session and
  * keeps it composed while minimised, so the ExoPlayer and its effects keep running (no rebuffer).
- * Expanded = full screen as before (system bars hidden); mini = phone bar docked above the tab bar,
+ * Expanded = the player page or full screen (the player handles the system bars); mini = phone bar docked above the tab bar,
  * or a 360dp card at the bottom-right on tablet (system bars shown).
  */
 @Composable
@@ -365,17 +365,8 @@ private fun BoxScope.PlayerHost(
     val mini = s.mini
     val phone = Jtv.isPhonePortrait
 
-    // System bars: hidden only while expanded.
-    val view = androidx.compose.ui.platform.LocalView.current
-    androidx.compose.runtime.DisposableEffect(mini) {
-        val window = (view.context as? android.app.Activity)?.window
-        val ctl = window?.let { androidx.core.view.WindowInsetsControllerCompat(it, view) }
-        if (!mini) {
-            ctl?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            ctl?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-        }
-        onDispose { if (!mini) ctl?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
-    }
+    // System bars: the player itself hides them, and only in true full screen (phone landscape, tablet
+    // full screen). The portrait phone page and the tablet page keep them (see TvPlayerScreen).
 
     val frame = when {
         !mini -> Modifier
