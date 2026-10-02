@@ -22,11 +22,13 @@ object JioApiClient {
     private const val DEVICE_TYPE = "phone"
     private const val HOST = "jiotvapi.media.jio.com"
 
+    // Jio's own languageIdMapping (apis/v1.3/dictionary/dictionary). The old table had 10 ids wrong
+    // (5/8/9/10/11/12/13/14/15/16), which labelled e.g. "Sony Yay Tamil" as Telugu and made language
+    // grouping pick the wrong feed.
     private val JIO_LANG_MAP: Map<String, String> = mapOf(
-        "1" to "Hindi", "2" to "Marathi", "3" to "Punjabi", "4" to "Urdu", "5" to "Tamil", "6" to "English",
-        "7" to "Malayalam", "8" to "Telugu", "9" to "Bengali", "10" to "Kannada", "11" to "Oriya",
-        "12" to "Gujarati", "13" to "Assamese", "14" to "Nepali", "15" to "French", "16" to "Bhojpuri",
-        "17" to "Kokborok", "18" to "Odia", "19" to "Rajasthani", "23" to "Arabic"
+        "1" to "Hindi", "2" to "Marathi", "3" to "Punjabi", "4" to "Urdu", "5" to "Bengali", "6" to "English",
+        "7" to "Malayalam", "8" to "Tamil", "9" to "Gujarati", "10" to "Odia", "11" to "Telugu",
+        "12" to "Bhojpuri", "13" to "Kannada", "14" to "Assamese", "15" to "Nepali", "16" to "French"
     )
 
     data class CatchupParams(

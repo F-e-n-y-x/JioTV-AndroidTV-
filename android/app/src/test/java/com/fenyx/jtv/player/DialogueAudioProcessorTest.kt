@@ -76,4 +76,19 @@ class DialogueAudioProcessorTest {
             assertEquals(size, p.output.remaining())
         }
     }
+
+    /** Issue #3: the empty buffer Media3 sends first / after a reset must not crash the Off path. */
+    @Test
+    fun emptyInput_afterReset_doesNotThrow_atEveryLevel() {
+        for (lvl in 0..4) {
+            val p = newProcessor(lvl)
+            p.reset(); p.configure(stereo16); p.flush()        // output buffer is EMPTY_BUFFER again
+            p.queueInput(AudioProcessor.EMPTY_BUFFER)          // threw "The source buffer is this buffer"
+            p.queueInput(ByteBuffer.allocateDirect(0))
+            val input = pcm(64)
+            p.queueInput(input)
+            assertFalse(input.hasRemaining())
+            assertEquals(64 * 4, p.output.remaining())
+        }
+    }
 }

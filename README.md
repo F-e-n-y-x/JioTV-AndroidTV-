@@ -224,13 +224,16 @@ The **"Everyday"** redesign for TV, phone and tablet:
 - Wi-Fi favourites sync with "Play on TV", plus favourites backup.
 
 ### v1.5.9
-- **Streams no longer stop with Voice Boost off** (reported by @sant009m in #3). With Voice Boost
-  and Auto Volume both off, the audio effect JTV keeps on the stream sat at exactly zero gain, which
-  some TV boxes treat as idle. It now uses a tiny gain you can't hear (0.1 dB), the same active state
-  as Low and above.
-- **Automatic recovery if a stream freezes.** If the picture and sound stop without an error or a
-  spinner, JTV now notices within about 8 seconds. It first restarts the audio and, if that doesn't
-  help, reloads the same channel.
+- **Streams no longer stop when Voice Boost is Off** (reported by @sant009m in #3). With Voice Boost
+  set to Off, the audio filter crashed on the empty buffer the player sends after every channel change
+  or stream reload, so playback stopped after a few retries. Fixed, with a test that reproduces it.
+- **A safety net for frozen playback.** If the picture stops moving for 8 seconds with no error, JTV
+  restarts the audio and then reloads the stream by itself.
+- **Sony Yay and other "recorded schedule" channels play correctly.** Jio streams these as one
+  recorded episode per programme. JTV now starts at the scheduled point and loads the next programme
+  when one ends, instead of playing an old episode from the beginning.
+- **Correct channel languages.** Ten of Jio's language IDs were mapped wrongly (for example Sony Yay
+  Tamil showed as Telugu), which could make "Group languages together" pick the wrong feed.
 
 ### v1.5.8
 - **Hold OK now keeps the menu open** (reported in issue #1). On remotes without a mouse, releasing a

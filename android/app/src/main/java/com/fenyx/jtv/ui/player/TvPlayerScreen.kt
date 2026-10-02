@@ -180,6 +180,11 @@ fun TvPlayerScreen(
 
     // Player state
     var isBuffering by remember { mutableStateOf(true) }
+    // "Recorded schedule" channels (e.g. Sony Yay): Jio's geturl returns a SonyLIV VOD file for the
+    // programme on air (slivcdn / partner=jiotvvod), not a live stream. We start it at the scheduled
+    // point and load the next programme's file when it ends, instead of playing it from 0:00 forever.
+    var vodProgramEndMs by remember { mutableStateOf(0L) }
+    val vodPendingSeekMs = remember { java.util.concurrent.atomic.AtomicLong(-1L) }
     // True when the user paused via long-press OK.
     var userPaused by remember { mutableStateOf(false) }
     // Non-null only when playback has failed and auto-recovery has been exhausted.
@@ -371,6 +376,18 @@ fun TvPlayerScreen(
                     // next expiry (minutes/hours later) gets a fresh set of retries.
                     retryCount.intValue = 0
                     playbackError = null
+                    val seek = vodPendingSeekMs.getAndSet(-1L)
+                    val dur = exoPlayer.duration
+                    if (seek > 0 && !exoPlayer.isCurrentMediaItemLive && (dur <= 0 || seek < dur - 5_000)) {
+                        android.util.Log.d("TvPlayer", "Recorded schedule: start at ${seek / 1000}s of ${dur / 1000}s")
+                        exoPlayer.seekTo(seek)
+                    }
+                }
+                if (state == Player.STATE_ENDED && vodProgramEndMs > 0) {
+                    // The programme's file finished: ask Jio again, it now returns the next one.
+                    android.util.Log.d("TvPlayer", "Recorded schedule: programme ended, loading next")
+                    retryCount.intValue = 0
+                    streamRefreshTrigger++
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
@@ -395,6 +412,19 @@ fun TvPlayerScreen(
         }
         exoPlayer.addListener(listener)
         onDispose { exoPlayer.removeListener(listener) }
+    }
+
+    // Recorded schedule: when the guide says this programme is over, fetch the next one's file even if
+    // the file itself runs longer than its slot (keeps the "channel" in step with Jio's schedule).
+    LaunchedEffect(vodProgramEndMs, playingChannel) {
+        val end = vodProgramEndMs
+        if (end <= 0 || end == Long.MAX_VALUE) return@LaunchedEffect
+        val wait = end + 2_000 - System.currentTimeMillis()
+        if (wait > 0) delay(wait)
+        if (vodProgramEndMs == end) {
+            android.util.Log.d("TvPlayer", "Recorded schedule: slot over, loading next programme")
+            streamRefreshTrigger++
+        }
     }
 
     LaunchedEffect(playingChannel, quality) {
@@ -442,6 +472,23 @@ fun TvPlayerScreen(
                 keyHeadersHolder.set(if (streamData.isMpd) emptyMap() else streamData.licenseHeaders)
 
                 android.util.Log.d("TvPlayer", "Loading stream: $finalUrl (isMpd: ${streamData.isMpd})")
+
+                val isRecordedSchedule = !streamData.isMpd &&
+                    (finalUrl.contains("slivcdn.com") || finalUrl.contains("partner=jiotvvod"))
+                vodProgramEndMs = 0L
+                vodPendingSeekMs.set(-1L)
+                if (isRecordedSchedule) {
+                    val now = System.currentTimeMillis()
+                    val prog = runCatching {
+                        com.fenyx.jtv.data.EpgRepository(context).getNativeEpgForChannel(ch.id)
+                    }.getOrNull()?.firstOrNull { it.startMs <= now && now < it.stopMs }
+                    if (prog != null) {
+                        vodPendingSeekMs.set(now - prog.startMs)
+                        vodProgramEndMs = prog.stopMs
+                    } else {
+                        vodProgramEndMs = Long.MAX_VALUE // unknown schedule: still advance on STATE_ENDED
+                    }
+                }
 
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(finalUrl)

@@ -79,6 +79,11 @@ class DialogueAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
+        // Media3 feeds an EMPTY buffer first (and after every stop()/re-prepare the output buffer is
+        // that same shared EMPTY_BUFFER). Copying it into replaceOutputBuffer(0) then copies a buffer
+        // into itself -> IllegalArgumentException "The source buffer is this buffer" -> player error
+        // loop -> "Playback stopped". That was issue #3's "only with Voice Boost Off". Nothing to do.
+        if (!inputBuffer.hasRemaining()) return
         val position = inputBuffer.position()
         val limit = inputBuffer.limit()
         val size = limit - position
