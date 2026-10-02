@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="screenshot/jtv-logo.png" width="240" alt="JTV logo" />
+<img src="screenshot/jtv-mark.svg" width="120" alt="JTV" />
 
 # JTV — Live TV, made easy
 
