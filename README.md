@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="screenshot/brand/jtv-hero.png" width="640" alt="JTV — Live TV, made easy" />
+<img src="screenshot/jtv-logo.png" width="240" alt="JTV logo" />
+
+# JTV — Live TV, made easy
 
 **Live TV that anyone at home can use: on the big TV with a plain remote, on your phone, and on your tablet.**
 
@@ -232,7 +234,6 @@ The **"Everyday"** redesign for TV, phone and tablet:
 - Show details: type, genre, rating, cast and director.
 - A Recent category.
 - Wi-Fi favourites sync with "Play on TV", plus favourites backup.
-- A new logo.
 
 ### v1.5.8
 - **Hold OK now keeps the menu open** (reported in issue #1). On remotes without a mouse, releasing a
