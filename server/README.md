@@ -42,6 +42,39 @@ Then set everything up **in the browser** (nothing to edit on disk):
 > self-signed cert (accept the one-time warning), or use the optional Caddy profile for a real domain:
 > edit `Caddyfile`, then `docker compose --profile https up -d`.
 
+## Upgrading: data volume permissions
+
+The image now runs as the unprivileged **`node` user (uid/gid 1000)** instead of root. A **new**
+named volume gets the right owner automatically. A volume (or bind-mounted folder) created by an
+**older image** still holds root-owned files (`jtv.sqlite`, `config.json`, `tls-*.pem`), and the
+server refuses to start with a message listing them. Fix it **once**, then start the new image:
+
+```bash
+docker stop jtv-server
+# named volume (compose default; Portainer stacks prefix it, e.g. jtv_jtv-data — check `docker volume ls`)
+docker run --rm -v jtv-data:/app/data alpine chown -R 1000:1000 /app/data
+# bind mount instead of a volume
+sudo chown -R 1000:1000 /path/to/data
+```
+
+In Portainer: stop the stack, run the `docker run … chown` line above from the host shell (or a
+one-off `alpine` container in the Portainer UI with the volume mounted at `/app/data` and the
+command `chown -R 1000:1000 /app/data`), then pull/redeploy the stack.
+
+## Reverse proxy (Cloudflare / Caddy)
+
+`TRUST_PROXY` (default `true`) makes the server honour `X-Forwarded-Proto/Host/For`, so playlist and
+segment links come out as `https://your.domain/…` and rate limits see the real client IP (Cloudflare's
+`CF-Connecting-IP` is used when present). It also accepts a hop count or a list of proxy IPs/CIDRs.
+Set `TRUST_PROXY=false` if port 8080 is reachable directly from the internet with no proxy in front.
+
+Rate limits (per client IP): admin login / setup / OTP verify / `/api/credentials` 10 per minute,
+OTP send 5/min, `/api/refresh` and `/api/admin/refresh` 10/min, `/playlist.m3u` 30/min. Streaming
+(`/live`, `/seg`, `/api/proxy`) is not limited. Access codes are masked (`code=[redacted]`) in logs,
+and Docker logs rotate at 3 × 10 MB.
+
+New TV access codes must be **6–12** characters; older 4–5 character codes keep working.
+
 ## Web dashboard
 
 - **Channels** — searchable grid, category sidebar with icons, language filter, favourites (⭐, shared
@@ -72,6 +105,7 @@ cd server
 npm install
 npm run dev            # tsx watch on :8080 (+ :8443 https)
 npm run typecheck      # tsc --noEmit
+npm test               # unit tests (node:test via tsx)
 npm --prefix web run build   # build the web UI into web/dist
 npm run build && npm start
 ```

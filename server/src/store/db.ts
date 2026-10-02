@@ -1,15 +1,15 @@
-import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { config } from "../config";
 import type { AuthData } from "../jio/types";
+import { ensureDataDirWritable } from "./dataDir";
 
 /**
  * Tiny SQLite-backed store. v1 holds a single shared Jio account (id = 1) plus its mobile number and
  * the last-refresh timestamp. Multi-account is a Phase 3 extension (add a profile id).
  */
 
-fs.mkdirSync(config.dataDir, { recursive: true });
+ensureDataDirWritable();
 const db = new Database(path.join(config.dataDir, "jtv.sqlite"));
 db.pragma("journal_mode = WAL");
 
@@ -144,4 +144,9 @@ export function addCode(name: string, code: string, nowMs: number): void {
 
 export function deleteCode(code: string): void {
   codeDel.run(code);
+}
+
+/** Checkpoints the WAL and closes the database (graceful shutdown). */
+export function closeDb(): void {
+  try { db.close(); } catch { /* already closed */ }
 }

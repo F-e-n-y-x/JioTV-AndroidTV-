@@ -7,10 +7,11 @@ import { config } from "./config";
 import { registerRoutes } from "./api/routes";
 import { registerPlayRoutes } from "./api/play";
 import { registerPlaylistRoutes } from "./api/playlist";
-import { startRefreshScheduler } from "./refresh";
+import { startRefreshScheduler, stopRefreshScheduler } from "./refresh";
 import { isAdminConfigured } from "./store/settings";
 import { ensureCert } from "./https";
 import { redactUrl } from "./util/redact";
+import { closeDb } from "./store/db";
 
 /** Builds a fully-wired Fastify instance (used for both the HTTP and HTTPS listeners). */
 async function buildApp(extra?: Record<string, unknown>): Promise<FastifyInstance> {
@@ -92,6 +93,31 @@ async function buildApp(extra?: Record<string, unknown>): Promise<FastifyInstanc
   return app;
 }
 
+/** Every listener we started, so a SIGTERM/SIGINT can close them all. */
+const apps: FastifyInstance[] = [];
+let shuttingDown = false;
+
+/**
+ * Graceful stop for `docker stop` / Portainer redeploys (SIGTERM) and Ctrl-C (SIGINT): stop accepting
+ * connections, let in-flight requests finish (app.close), close SQLite cleanly, then exit. A 10 s
+ * backstop exits anyway if a long-lived stream keeps a connection open (Docker kills at 10 s too).
+ */
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal} received, closing…`);
+  setTimeout(() => {
+    console.warn("[shutdown] timed out waiting for connections, exiting");
+    process.exit(0);
+  }, 10_000).unref();
+  stopRefreshScheduler();
+  await Promise.allSettled(apps.map((a) => a.close()));
+  closeDb();
+  process.exit(0);
+}
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+process.once("SIGINT", () => void shutdown("SIGINT"));
+
 async function main() {
   if (!isAdminConfigured()) {
     console.log("ℹ  First run — open the web UI to create an admin password (no .env editing needed).");
@@ -102,6 +128,7 @@ async function main() {
   // HTTP
   try {
     const http = await buildApp();
+    apps.push(http);
     await http.listen({ port: config.port, host: config.host });
     console.log(`JTV server (HTTP)  → http://${config.host}:${config.port}`);
   } catch (err) {
@@ -113,6 +140,7 @@ async function main() {
   try {
     const { key, cert } = ensureCert();
     const https = await buildApp({ https: { key, cert } });
+    apps.push(https);
     await https.listen({ port: config.httpsPort, host: config.host });
     console.log(`JTV server (HTTPS) → https://${config.host}:${config.httpsPort}  (self-signed; accept the warning)`);
   } catch (err) {

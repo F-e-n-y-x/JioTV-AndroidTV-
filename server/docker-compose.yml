@@ -1,17 +1,30 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   jtv-server:
     build: .
     image: jtv-server
     container_name: jtv-server
     restart: unless-stopped
+    # Tiny init as PID 1: forwards SIGTERM to node (graceful shutdown) and reaps zombies.
+    init: true
+    stop_grace_period: 15s
     env_file: [.env]
     environment:
       - PORT=8080
       - DATA_DIR=/app/data
+      # Honour X-Forwarded-* from Cloudflare / Caddy (https links, real client IP for rate limits).
+      # Set to false if port 8080 is exposed straight to the internet with no proxy in front.
+      - TRUST_PROXY=${TRUST_PROXY:-true}
     ports:
       - "8080:8080"
     volumes:
       - jtv-data:/app/data
+    logging: *default-logging
 
   # Optional automatic HTTPS (required for browser Widevine playback in Phase 2).
   # Enable with:  docker compose --profile https up -d   (after editing Caddyfile with your domain)
@@ -28,6 +41,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    logging: *default-logging
 
 volumes:
   jtv-data:
