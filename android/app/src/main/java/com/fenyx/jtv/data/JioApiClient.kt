@@ -98,20 +98,102 @@ object JioApiClient {
      * Remembered so each channel only pays for the manifest check once.
      */
     private val streamModeCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    /** When each [streamModeCache] entry was learned (epoch ms), for the on-disk copy's expiry. */
+    private val streamModeLearnedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    @Volatile private var streamModesLoaded = false
+    private const val STREAM_MODE_FILE = "stream_modes.tsv"
+    /** A learned mode is trusted for a day, then re-probed (a dead DASH can come back, or die). */
+    private const val STREAM_MODE_TTL_MS = 24 * 60 * 60 * 1000L
+
+    /**
+     * Loads the per-channel DASH/HLS choice saved by an earlier run, so the first zap after an app
+     * restart doesn't redo the manifest probe. Lines are `channelId<TAB>mode<TAB>learnedAtMs`.
+     */
+    private fun ensureStreamModesLoaded(context: android.content.Context) {
+        if (streamModesLoaded) return
+        synchronized(streamModeCache) {
+            if (streamModesLoaded) return
+            try {
+                val f = java.io.File(context.filesDir, STREAM_MODE_FILE)
+                if (f.exists()) {
+                    val now = System.currentTimeMillis()
+                    f.forEachLine { line ->
+                        val parts = line.split('\t')
+                        val at = parts.getOrNull(2)?.toLongOrNull() ?: return@forEachLine
+                        val mode = parts[1]
+                        if ((mode == "mpd" || mode == "hls") && now - at in 0 until STREAM_MODE_TTL_MS) {
+                            streamModeCache.putIfAbsent(parts[0], mode)
+                            streamModeLearnedAt.putIfAbsent(parts[0], at)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Couldn't read saved stream modes: ${e.message}")
+            }
+            streamModesLoaded = true
+        }
+    }
+
+    /** Remembers [mode] for [channelId] in memory and on disk (atomic rewrite of a tiny file). */
+    private fun rememberStreamMode(context: android.content.Context, channelId: String, mode: String) {
+        streamModeCache[channelId] = mode
+        streamModeLearnedAt[channelId] = System.currentTimeMillis()
+        try {
+            synchronized(streamModeCache) {
+                val dir = context.filesDir
+                val tmp = java.io.File(dir, "$STREAM_MODE_FILE.tmp")
+                tmp.writeText(buildString {
+                    streamModeCache.forEach { (id, m) ->
+                        append(id).append('\t').append(m).append('\t')
+                            .append(streamModeLearnedAt[id] ?: System.currentTimeMillis()).append('\n')
+                    }
+                })
+                if (!tmp.renameTo(java.io.File(dir, STREAM_MODE_FILE))) tmp.delete()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't save stream modes: ${e.message}")
+        }
+    }
+
+    /**
+     * Live stream URLs resolved ahead of a zap for the channels next to the one playing (see
+     * [prefetchStreamUrl]). [getStreamUrl] hands a valid entry out once instead of calling geturl.
+     */
+    private val streamUrlCache = StreamUrlCache(maxEntries = 6, marginSec = 20)
+
+    /**
+     * Resolves [channelId]'s live stream URL in the background and keeps it in [streamUrlCache] for
+     * the next zap. Network only (geturl + the one-off manifest probe). Never refreshes credentials: a
+     * prefetch that hits an expired token just gives up and the real zap handles it. Returns true
+     * when a usable entry is cached.
+     */
+    suspend fun prefetchStreamUrl(context: android.content.Context, channelId: String, authData: AuthData): Boolean {
+        if (streamUrlCache.hasValid(channelId, authData.authToken)) return true
+        val data = getStreamUrl(context, channelId, authData, allowRefreshRetry = false, useCache = false)
+            .getOrNull() ?: return false
+        return streamUrlCache.put(channelId, data, authData.authToken)
+    }
+
+    /** Drops [channelId]'s prefetched URL (e.g. its stream failed). */
+    fun invalidateStreamUrl(channelId: String) = streamUrlCache.remove(channelId)
 
     /**
      * True when [url] answers 2xx with something that looks like an HLS/DASH manifest. A network error
      * counts as alive (let the player try and report it) so a flaky probe never blocks a good channel.
      */
     private fun manifestAlive(url: String, headers: Map<String, String>): Boolean {
-        var conn: HttpURLConnection? = null
+        // No disconnect(): that tears down the socket. Closing the body stream instead lets the
+        // connection go back to the pool for the player's own manifest request to the same CDN.
         return try {
-            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5000
                 readTimeout = 5000
                 headers.forEach { (k, v) -> setRequestProperty(k, v) }
             }
-            if (conn.responseCode !in 200..299) return false
+            if (conn.responseCode !in 200..299) {
+                runCatching { conn.errorStream?.close() }
+                return false
+            }
             val head = ByteArray(256)
             val n = conn.inputStream.use { it.read(head) }
             if (n <= 0) return false
@@ -120,8 +202,6 @@ object JioApiClient {
         } catch (e: java.io.IOException) {
             Log.w(TAG, "Manifest probe failed (treating as alive): ${e.message}")
             true
-        } finally {
-            conn?.disconnect()
         }
     }
 
@@ -666,12 +746,22 @@ object JioApiClient {
         channelId: String,
         authData: AuthData,
         allowRefreshRetry: Boolean = true,
-        catchup: CatchupParams? = null
+        catchup: CatchupParams? = null,
+        // false = always ask geturl (token refresh loop, prefetch). A cached URL is taken (removed) on
+        // use, so a load that fails with it retries against the network.
+        useCache: Boolean = true
     ): Result<StreamData> = withContext(Dispatchers.IO) {
         try {
             // Use the newest stored credentials (refreshed ahead of expiry if needed); the caller's copy
             // may be stale if a refresh happened since it read them.
             val authData = if (allowRefreshRetry) (ensureFreshAccessToken(context) ?: authData) else authData
+            if (catchup == null && useCache) {
+                streamUrlCache.take(channelId, authData.authToken)?.let {
+                    Log.d(TAG, "Stream URL for $channelId from prefetch")
+                    return@withContext Result.success(it)
+                }
+            }
+            ensureStreamModesLoaded(context)
             val url = URL("https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
@@ -776,10 +866,10 @@ object JioApiClient {
                         useMpd = false
                     } else if (mode == null) {
                         if (manifestAlive(mpdUrl, probeHeaders(mpdUrl))) {
-                            streamModeCache[channelId] = "mpd"
+                            rememberStreamMode(context, channelId, "mpd")
                         } else if (hlsUsable && manifestAlive(hlsUrl, probeHeaders(hlsUrl))) {
                             Log.i(TAG, "DASH is dead for $channelId, using HLS")
-                            streamModeCache[channelId] = "hls"
+                            rememberStreamMode(context, channelId, "hls")
                             useMpd = false
                         } else {
                             return@withContext Result.failure(ChannelUnavailableException(
@@ -795,7 +885,7 @@ object JioApiClient {
                             "It's a Jio-side problem, not your login. Try again later or pick another channel."
                         ))
                     }
-                    streamModeCache[channelId] = "hls"
+                    rememberStreamMode(context, channelId, "hls")
                 }
 
                 val isMpd = useMpd

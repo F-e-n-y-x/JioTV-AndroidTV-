@@ -634,7 +634,7 @@ fun TvPlayerScreen(
             if (playbackError != null) continue
             val authData = settingsManager.authDataFlow.first() ?: continue
             val res = com.fenyx.jtv.data.JioApiClient.getStreamUrl(
-                context, ch.channelNumber.toString(), authData
+                context, ch.channelNumber.toString(), authData, useCache = false
             )
             if (res.isSuccess) {
                 val newUrl = res.getOrNull()!!.streamUrl
@@ -647,6 +647,32 @@ fun TvPlayerScreen(
                     android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
                 }
             }
+        }
+    }
+
+    // ─── Zap prefetch ───
+    // Once the channel has been playing for ~1.5 s, resolve the stream URL of the channel a zap up and
+    // a zap down would land on (same wrap-around as doZap, same language feed the zap would pick), so
+    // that zap skips the geturl round trip. Network only: no second player, no decoder. Sequential on
+    // IO and cancelled as soon as the channel changes. JioApiClient keeps at most 6 entries, each until
+    // its token is ~20 s from expiry, and never caches recorded-schedule (SonyLIV) files.
+    LaunchedEffect(exoPlayer, playingChannel, currentChannels, currentIndex, prefsLoaded, streamRefreshTrigger) {
+        val playing = playingChannel ?: return@LaunchedEffect
+        if (!prefsLoaded) return@LaunchedEffect
+        while (exoPlayer.playbackState != Player.STATE_READY) delay(250)
+        delay(1_500)
+        if (exoPlayer.playbackState != Player.STATE_READY || playbackError != null) return@LaunchedEffect
+        val list = currentChannels
+        val targets = com.fenyx.jtv.data.zapNeighbourIndices(currentIndex, list.size)
+            .mapNotNull { list.getOrNull(it) }
+            .map { ch -> variantsFor(ch.id).firstOrNull { it.langCode == language }?.channel ?: ch }
+            .map { it.channelNumber.toString() }
+            .filter { it != playing.channelNumber.toString() }
+            .distinct()
+        for (id in targets) {
+            val auth = settingsManager.authDataFlow.first() ?: return@LaunchedEffect
+            val ok = com.fenyx.jtv.data.JioApiClient.prefetchStreamUrl(context, id, auth)
+            android.util.Log.d("TvPlayer", "Prefetch $id: ${if (ok) "cached" else "skipped"}")
         }
     }
 
