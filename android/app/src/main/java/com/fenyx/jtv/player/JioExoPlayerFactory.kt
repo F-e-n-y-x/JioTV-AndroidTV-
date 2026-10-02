@@ -156,10 +156,12 @@ object JioExoPlayerFactory {
             .setLoadControl(loadControl)
             .setBandwidthMeter(bandwidthMeter)
             .setLivePlaybackSpeedControl(liveSpeedControl)
-            // NOTE: experimentalSetDynamicSchedulingEnabled is deliberately NOT enabled. It is an
-            // *experimental* API in a *beta* Media3, it alters playback-loop timing, and it was live on
-            // the build where mid-playback stutter was reported. The theoretical CPU saving isn't worth
-            // risking a steady picture on a live TV app; revisit once it's stable.
+            // Dynamic scheduling is explicitly turned OFF. Since Media3 1.11 ExoPlayer.Builder enables
+            // it by default, so leaving the call out silently switched it on. It alters the playback
+            // loop's timing and was live on the build where mid-playback stutter was reported; the
+            // theoretical CPU saving isn't worth risking a steady picture on a live TV app. Revisit
+            // only with an on-device A/B on the weakest TV box.
+            .experimentalSetDynamicSchedulingEnabled(false)
             .build()
     }
 }
