@@ -20,18 +20,6 @@
 
 ---
 
-## 👋 Why JTV exists
-
-JTV started with a simple wish: watch Jio channels on the TV in the living room, on a cheap Android TV box, with the remote that came in the box. No mouse, no fiddly menus, no adverts. Just the channels.
-
-Over time it grew. People asked for favourites, a guide, and a way to share one login across every TV in the house. Then the bigger goal arrived: **anyone at home should be able to use it, including parents and grandparents.** That's what **JTV 2.0** is about: big readable text, labelled buttons, nothing hidden behind secret gestures, and an app that stays fast on the cheapest boxes.
-
-JTV is free, open source, and made by one person in their spare time. If it makes your evenings a little easier, that's the whole point. ❤️
-
-— Ayush ([@F-e-n-y-x](https://github.com/F-e-n-y-x))
-
----
-
 ## 🧪 Meet JTV 2.0 (beta)
 
 A ground-up redesign called **"Everyday"**. It has a calm near-black or light look, one warm amber accent, and the same layout on every screen size. It is tuned for 10-foot TV viewing and for people who just want to watch TV.
