@@ -69,7 +69,8 @@ class MainActivity : ComponentActivity() {
                 else -> com.fenyx.jtv.theme.FormFactor.Tablet
             }
             val themeMode by settings.themeModeFlow.collectAsState(initial = null)
-            JioTVGoTVTheme(form = form, themeMode = themeMode) {
+            val accent by settings.accentFlow.collectAsState(initial = null)
+            JioTVGoTVTheme(form = form, themeMode = themeMode, accent = accent) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.background)

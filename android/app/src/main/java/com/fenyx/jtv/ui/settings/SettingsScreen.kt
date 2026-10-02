@@ -50,7 +50,7 @@ import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.launch
 
 /** Which second-level picker / dialog is open. */
-private enum class Sheet { None, Theme, StartWith, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
+private enum class Sheet { None, Theme, Accent, StartWith, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
 
 /**
  * Settings, v2 "Everyday": a plain two-level list. Section labels, then rows of *label + current
@@ -133,6 +133,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val themes = listOf("system" to "Same as device", "dark" to "Dark", "light" to "Light")
     // No stored choice = dark on TV, device setting on phone/tablet (see JioTVGoTVTheme).
     val themeValue = themeMode ?: if (isTv) "dark" else "system"
+    val accentMode by settingsManager.accentFlow.collectAsState(initial = null)
+    val accentValue = accentMode ?: "amber"
     val startOptions = listOf("list" to "Channel list", "last" to "Last channel")
 
     val versionName = remember {
@@ -145,6 +147,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val rows: List<SRow> = buildList {
         add(SRow.Section("General"))
         add(SRow.Item("theme", "Appearance", value = themes.first { it.first == themeValue }.second) { sheet = Sheet.Theme })
+        add(SRow.Item("accent", "Accent colour", value = com.fenyx.jtv.theme.ACCENTS.firstOrNull { it.first == accentValue }?.second ?: "Amber",
+            description = "Used for highlights, the channel number and progress") { sheet = Sheet.Accent })
         add(SRow.Item("start", "Start with", value = if (autoplayLastChannel) "Last channel" else "Channel list",
             description = "What you see when the app opens") { sheet = Sheet.StartWith })
 
@@ -266,7 +270,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .then(if (form == FormFactor.Phone) Modifier.fillMaxWidth() else Modifier.widthIn(max = 900.dp).fillMaxWidth())
+                    .then(if (Jtv.isPhonePortrait) Modifier.fillMaxWidth() else Modifier.widthIn(max = 820.dp).fillMaxWidth())
                     .focusRestorer(),
                 contentPadding = PaddingValues(bottom = 16.dp),
             ) {
@@ -292,6 +296,10 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
 
         // ─── Second level ───
         when (sheet) {
+            Sheet.Accent -> PickerDialog("Accent colour", com.fenyx.jtv.theme.ACCENTS.map { it.first to it.second }, accentValue,
+                onSelect = { v -> scope.launch { settingsManager.setAccent(v) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None },
+                swatches = com.fenyx.jtv.theme.ACCENTS.associate { it.first to (if (c.isDark) it.third.first else it.third.second) })
             Sheet.Theme -> PickerDialog("Appearance", themes, themeValue,
                 onSelect = { v -> scope.launch { settingsManager.setThemeMode(v) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
@@ -498,7 +506,7 @@ fun SettingsItem(
 @Composable
 internal fun DialogPanel(onDismiss: () -> Unit, width: androidx.compose.ui.unit.Dp = 480.dp, content: @Composable ColumnScope.() -> Unit) {
     val c = Jtv.colors
-    val isPhone = Jtv.form == FormFactor.Phone
+    val isPhone = Jtv.isPhonePortrait
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             Modifier.fillMaxSize().background(c.bg.copy(alpha = 0.8f))
@@ -509,9 +517,12 @@ internal fun DialogPanel(onDismiss: () -> Unit, width: androidx.compose.ui.unit.
                 Modifier
                     .then(if (Jtv.isTv) Modifier else Modifier.keepTapsInside())
                     .then(if (isPhone) Modifier.fillMaxWidth() else Modifier.width(width))
+                    // Short screens (phone landscape): the whole panel scrolls instead of being cut off.
+                    .heightIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp - 32.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(c.s1)
-                    .padding(24.dp),
+                    .verticalScroll(rememberScrollState())
+                    .padding(if (Jtv.isPhoneLandscape) 18.dp else 24.dp),
                 content = content
             )
         }
@@ -524,7 +535,8 @@ private fun PickerDialog(
     options: List<Pair<String, String>>,
     currentValue: String,
     onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    swatches: Map<String, Color>? = null,
 ) {
     val c = Jtv.colors
     val selectedFocus = remember { FocusRequester() }
@@ -533,7 +545,7 @@ private fun PickerDialog(
         Text(title, style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
         Spacer(Modifier.height(12.dp))
         Column(
-            Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+            Modifier,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             val hasSelected = options.any { it.first == currentValue }
@@ -551,6 +563,10 @@ private fun PickerDialog(
                         Modifier.fillMaxWidth().padding(horizontal = 14.dp).align(Alignment.CenterStart),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        swatches?.get(value)?.let { sw ->
+                            Box(Modifier.size(22.dp).clip(androidx.compose.foundation.shape.CircleShape).background(sw))
+                            Spacer(Modifier.width(14.dp))
+                        }
                         Text(
                             label,
                             modifier = Modifier.weight(1f),
@@ -649,7 +665,7 @@ private fun UpdateDialog(
     onDismiss: () -> Unit
 ) {
     val c = Jtv.colors
-    val isPhone = Jtv.form == FormFactor.Phone
+    val isPhone = Jtv.isPhonePortrait
     val initialFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { initialFocus.requestFocus() } }
 

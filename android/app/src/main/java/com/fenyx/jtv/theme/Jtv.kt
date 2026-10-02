@@ -46,6 +46,24 @@ val JtvLight = JtvColors(
     acc = Color(0xFFE28E0B), accTx = Color(0xFF141414), plate = Color(0xFF1B1B1F), error = Color(0xFFC4332B),
 )
 
+/** Accent choices: (key, label, dark-theme colour, light-theme colour). Light values are deeper for contrast. */
+val ACCENTS = listOf(
+    Triple("amber", "Amber", Color(0xFFF0A12E) to Color(0xFFE28E0B)),
+    Triple("purple", "Purple", Color(0xFFB48CFF) to Color(0xFF7C3AED)),
+    Triple("blue", "Blue", Color(0xFF6CA8FF) to Color(0xFF2563EB)),
+    Triple("green", "Green", Color(0xFF5FCB86) to Color(0xFF15803D)),
+    Triple("rose", "Rose", Color(0xFFFF7A90) to Color(0xFFE11D48)),
+    Triple("teal", "Teal", Color(0xFF3CC8C0) to Color(0xFF0F766E)),
+)
+
+/** [base] with the chosen accent; text on the accent is dark or white, whichever reads better. */
+fun JtvColors.withAccent(key: String?): JtvColors {
+    val a = ACCENTS.firstOrNull { it.first == key } ?: return this
+    val acc = if (isDark) a.third.first else a.third.second
+    val lum = 0.2126f * acc.red + 0.7152f * acc.green + 0.0722f * acc.blue
+    return copy(acc = acc, accTx = if (lum > 0.45f) Color(0xFF141414) else Color(0xFFFFFFFF))
+}
+
 /** Anek Latin, subset to Latin + punctuation (≈48 KB per weight). `wide` is the extended cut for numbers. */
 object JtvFonts {
     val text = FontFamily(
@@ -60,15 +78,24 @@ enum class FormFactor { Tv, Phone, Tablet }
 
 val LocalJtvColors = staticCompositionLocalOf { JtvDark }
 val LocalFormFactor = staticCompositionLocalOf { FormFactor.Tv }
+val LocalAccentKey = staticCompositionLocalOf<String?> { null }
 
 object Jtv {
     val colors: JtvColors @Composable @ReadOnlyComposable get() = LocalJtvColors.current
     val form: FormFactor @Composable @ReadOnlyComposable get() = LocalFormFactor.current
     val isTv: Boolean @Composable @ReadOnlyComposable get() = LocalFormFactor.current == FormFactor.Tv
+    /** Phone held sideways: uses the tablet-style rail/card layouts (the screen is short, not narrow). */
+    val isPhoneLandscape: Boolean @Composable @ReadOnlyComposable get() =
+        LocalFormFactor.current == FormFactor.Phone &&
+            androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    /** Narrow phone layout (portrait): bottom tabs, full-width lists and dialogs. */
+    val isPhonePortrait: Boolean @Composable @ReadOnlyComposable get() =
+        LocalFormFactor.current == FormFactor.Phone && !isPhoneLandscape
 }
 
 /** The player is always dark, whatever the app theme. */
 @Composable
 fun JtvDarkOnly(content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalJtvColors provides JtvDark, content = content)
+    val accent = LocalAccentKey.current
+    CompositionLocalProvider(LocalJtvColors provides JtvDark.withAccent(accent), content = content)
 }

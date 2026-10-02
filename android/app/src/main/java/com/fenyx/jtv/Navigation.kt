@@ -104,7 +104,7 @@ private fun TopLevel(
     onTab: (PhoneTab) -> Unit,
     content: @Composable (Modifier) -> Unit,
 ) {
-    when (Jtv.form) {
+    when (if (Jtv.isPhoneLandscape) FormFactor.Tablet else Jtv.form) {
         FormFactor.Phone -> {
             val inset = LocalMiniBarInset.current
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -363,7 +363,7 @@ private fun BoxScope.PlayerHost(
 ) {
     val s = session.value ?: return
     val mini = s.mini
-    val phone = Jtv.form == FormFactor.Phone
+    val phone = Jtv.isPhonePortrait
 
     // System bars: hidden only while expanded.
     val view = androidx.compose.ui.platform.LocalView.current

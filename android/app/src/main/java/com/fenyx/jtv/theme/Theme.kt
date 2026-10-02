@@ -28,6 +28,7 @@ private fun tvScheme(c: JtvColors) = if (c.isDark) darkColorScheme(
 fun JioTVGoTVTheme(
     form: FormFactor = FormFactor.Tv,
     themeMode: String? = null,
+    accent: String? = null,
     content: @Composable () -> Unit,
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -37,7 +38,7 @@ fun JioTVGoTVTheme(
         "system" -> systemDark
         else -> form == FormFactor.Tv || systemDark
     }
-    val colors = if (dark) JtvDark else JtvLight
+    val colors = remember(dark, accent) { (if (dark) JtvDark else JtvLight).withAccent(accent) }
     val scheme = remember(colors) { tvScheme(colors) }
     // Status/navigation bar icons follow the theme (dark icons on the light background).
     val view = androidx.compose.ui.platform.LocalView.current
@@ -50,7 +51,7 @@ fun JioTVGoTVTheme(
             }
         }
     }
-    CompositionLocalProvider(LocalJtvColors provides colors, LocalFormFactor provides form) {
+    CompositionLocalProvider(LocalJtvColors provides colors, LocalFormFactor provides form, LocalAccentKey provides accent) {
         MaterialTheme(colorScheme = scheme, typography = Typography, content = content)
     }
 }

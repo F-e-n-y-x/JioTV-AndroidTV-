@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
@@ -997,7 +998,7 @@ fun TvPlayerScreen(
     // Mini drag offset (swipe to close) and the video's box in each mode.
     val miniDrag = remember { MiniDrag() }
     LaunchedEffect(mini) { miniDrag.reset() }
-    val card = Jtv.form == FormFactor.Tablet
+    val card = Jtv.form == FormFactor.Tablet || Jtv.isPhoneLandscape
     val videoMode = when {
         mini && !card -> VideoBox.MiniBar
         mini -> VideoBox.TopWide
@@ -1299,20 +1300,19 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
             },
             modifier = Modifier.fillMaxSize(),
         )
-        if (noVideo) androidx.compose.foundation.layout.Box(
-            Modifier.fillMaxSize().clipToBounds().drawBehind {
-                drawRect(androidx.compose.ui.graphics.Color(0xFF17171A))
-                val step = 28.dp.toPx(); var x = -size.height
-                while (x < size.width) {
-                    drawLine(androidx.compose.ui.graphics.Color(0xFF1E1E22), androidx.compose.ui.geometry.Offset(x, size.height),
-                        androidx.compose.ui.geometry.Offset(x + size.height, 0f), strokeWidth = step / 2)
-                    x += step
-                }
-            },
-            contentAlignment = Alignment.Center,
-        ) {
-            androidx.tv.material3.Text("LIVE PICTURE", color = androidx.compose.ui.graphics.Color(0xFF55555C),
-                style = com.fenyx.jtv.ui.components.textStyle(androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp)).copy(letterSpacing = androidx.compose.ui.unit.TextUnit(4f, androidx.compose.ui.unit.TextUnitType.Sp)))
+        if (noVideo) {
+            // Screenshot stand-in for channel video: a frame from "Big Buck Bunny" (CC BY 3.0, Blender
+            // Foundation) placed in the app's files dir as novideo.jpg; plain dark if it's missing.
+            val frame: androidx.compose.ui.graphics.ImageBitmap? = remember {
+                runCatching {
+                    android.graphics.BitmapFactory.decodeFile(java.io.File(ctx0.getExternalFilesDir(null), "novideo.jpg").path)
+                        ?.asImageBitmap()
+                }.getOrNull()
+            }
+            if (frame != null) androidx.compose.foundation.Image(
+                frame, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clipToBounds(),
+            ) else androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().drawBehind { drawRect(androidx.compose.ui.graphics.Color(0xFF17171A)) })
         }
     }
 }

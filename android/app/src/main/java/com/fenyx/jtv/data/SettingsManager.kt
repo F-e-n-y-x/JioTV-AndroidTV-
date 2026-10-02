@@ -58,6 +58,8 @@ class SettingsManager(private val context: Context) {
 
         // v2 appearance: "system" | "dark" | "light". Absent = system on phone/tablet, dark on TV.
         private val THEME_MODE = stringPreferencesKey("theme_mode")
+        // v2 accent colour key (see theme/Jtv.kt ACCENTS); absent = amber.
+        private val ACCENT = stringPreferencesKey("accent")
         // Recently watched channel ids, newest first (comma-joined, capped).
         private val RECENT_CHANNELS = stringPreferencesKey("recent_channels")
         private const val RECENT_MAX = 12
@@ -65,6 +67,12 @@ class SettingsManager(private val context: Context) {
 
     val recentChannelsFlow: Flow<List<String>> = context.dataStore.data.map { p ->
         p[RECENT_CHANNELS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
+    }
+
+    val accentFlow: Flow<String?> = context.dataStore.data.map { it[ACCENT] }
+
+    suspend fun setAccent(key: String) {
+        context.dataStore.edit { it[ACCENT] = key }
     }
 
     val themeModeFlow: Flow<String?> = context.dataStore.data.map { it[THEME_MODE] }
