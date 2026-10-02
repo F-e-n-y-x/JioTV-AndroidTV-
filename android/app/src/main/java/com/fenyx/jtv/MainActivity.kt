@@ -1,6 +1,8 @@
 package com.fenyx.jtv
 
 import android.os.Bundle
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,8 +29,17 @@ class MainActivity : ComponentActivity() {
 
         // No runtime storage-permission request: the app uses only app-scoped storage, so the prompt
         // was unnecessary and awkward to dismiss with a TV remote.
+        val isLeanback = packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+        val settings = com.fenyx.jtv.data.SettingsManager(applicationContext)
         setContent {
-            JioTVGoTVTheme {
+            val sw = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp
+            val form = when {
+                isLeanback -> com.fenyx.jtv.theme.FormFactor.Tv
+                sw < 600 -> com.fenyx.jtv.theme.FormFactor.Phone
+                else -> com.fenyx.jtv.theme.FormFactor.Tablet
+            }
+            val themeMode by settings.themeModeFlow.collectAsState(initial = null)
+            JioTVGoTVTheme(form = form, themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.background)

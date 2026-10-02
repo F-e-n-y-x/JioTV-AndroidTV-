@@ -2,32 +2,27 @@ package com.fenyx.jtv.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Premium TiviMate-inspired dark palette
-// Backgrounds - deep navy/charcoal
-val TvDarkBackground = Color(0xFF0D1117)
-val TvDarkSurface = Color(0xFF161B22)
-val TvDarkSurfaceVariant = Color(0xFF21262D)
+// v1 colour names, re-pointed at the v2 "Everyday" dark palette so screens that still use them match the
+// new look. New code reads the theme-aware tokens from [Jtv.colors] instead (light + dark).
+val TvDarkBackground = Color(0xFF111113)
+val TvDarkSurface = Color(0xFF19191C)
+val TvDarkSurfaceVariant = Color(0xFF222226)
 
-// Primary - vibrant purple
-val TvPrimary = Color(0xFF9C27B0)
-val TvPrimaryContainer = Color(0xFF6A1B9A)
-val TvOnPrimary = Color(0xFFFFFFFF)
-val TvOnPrimaryContainer = Color(0xFFF3E5F5)
+val TvPrimary = Color(0xFFF0A12E)
+val TvPrimaryContainer = Color(0xFF4A3412)
+val TvOnPrimary = Color(0xFF141414)
+val TvOnPrimaryContainer = Color(0xFFFCE9CC)
 
-// Secondary - subtle teal
-val TvSecondary = Color(0xFF3FB950)
-val TvOnSecondary = Color(0xFF0D1117)
+val TvSecondary = Color(0xFF6FBF73)
+val TvOnSecondary = Color(0xFF111113)
 
-// Text hierarchy
-val TvOnBackground = Color(0xFFF0F6FC)
-val TvOnSurface = Color(0xFFE6EDF3)
-val TvOnSurfaceVariant = Color(0xFF8B949E)
+val TvOnBackground = Color(0xFFECECEE)
+val TvOnSurface = Color(0xFFECECEE)
+val TvOnSurfaceVariant = Color(0xFFA8A8B0)
 
-// Status colors
-val TvError = Color(0xFFF85149)
-val TvLiveRed = Color(0xFFFF4444)
-val TvOnlineGreen = Color(0xFF3FB950)
+val TvError = Color(0xFFF2726B)
+val TvLiveRed = Color(0xFFE5484D)
+val TvOnlineGreen = Color(0xFF6FBF73)
 
-// Focus/selection
-val TvFocusBorder = Color(0xFF9C27B0)
-val TvSelectedGlow = Color(0x409C27B0)
+val TvFocusBorder = Color(0xFFECECEE)
+val TvSelectedGlow = Color(0x33F0A12E)

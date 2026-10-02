@@ -52,6 +52,15 @@ class SettingsManager(private val context: Context) {
         private val SETUP_MODE = stringPreferencesKey("setup_mode")
         private val SERVER_URL = stringPreferencesKey("server_url")
         private val SERVER_TOKEN = stringPreferencesKey("server_token")
+
+        // v2 appearance: "system" | "dark" | "light". Absent = system on phone/tablet, dark on TV.
+        private val THEME_MODE = stringPreferencesKey("theme_mode")
+    }
+
+    val themeModeFlow: Flow<String?> = context.dataStore.data.map { it[THEME_MODE] }
+
+    suspend fun setThemeMode(mode: String) {
+        context.dataStore.edit { it[THEME_MODE] = mode }
     }
 
     val setupModeFlow: Flow<String?> = context.dataStore.data.map { it[SETUP_MODE] }
