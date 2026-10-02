@@ -33,7 +33,7 @@ class DialogueAudioProcessorTest {
     private fun newProcessor(level: Int) = DialogueAudioProcessor().apply {
         setLevel(level)
         configure(stereo16)
-        flush()
+        flush(androidx.media3.common.audio.AudioProcessor.StreamMetadata.DEFAULT)
     }
 
     @Test
@@ -82,7 +82,7 @@ class DialogueAudioProcessorTest {
     fun emptyInput_afterReset_doesNotThrow_atEveryLevel() {
         for (lvl in 0..4) {
             val p = newProcessor(lvl)
-            p.reset(); p.configure(stereo16); p.flush()        // output buffer is EMPTY_BUFFER again
+            p.reset(); p.configure(stereo16); p.flush(androidx.media3.common.audio.AudioProcessor.StreamMetadata.DEFAULT)        // output buffer is EMPTY_BUFFER again
             p.queueInput(AudioProcessor.EMPTY_BUFFER)          // threw "The source buffer is this buffer"
             p.queueInput(ByteBuffer.allocateDirect(0))
             val input = pcm(64)

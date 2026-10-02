@@ -112,7 +112,7 @@ class DialogueAudioProcessor : BaseAudioProcessor() {
         output.flip()
     }
 
-    override fun onFlush() {
+    override fun onFlush(streamMetadata: androidx.media3.common.audio.AudioProcessor.StreamMetadata) {
         hpSide.reset(); presenceMid.reset()
     }
 

@@ -45,7 +45,7 @@ object JioExoPlayerFactory {
         // speed control) is preserved.
         val sinkBuilder = DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
-            .setEnableAudioTrackPlaybackParams(false)
+            .setEnableAudioOutputPlaybackParameters(false)
         if (dialogueProcessor != null) {
             sinkBuilder.setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(dialogueProcessor)
