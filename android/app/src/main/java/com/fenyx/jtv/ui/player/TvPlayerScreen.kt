@@ -1,42 +1,34 @@
 package com.fenyx.jtv.ui.player
 
 import android.annotation.SuppressLint
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateDpAsState
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
@@ -45,28 +37,17 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Icon
-import androidx.tv.material3.MaterialTheme
-import com.fenyx.jtv.theme.Surface
-import androidx.tv.material3.Text
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.fenyx.jtv.data.Channel
 import com.fenyx.jtv.data.SettingsManager
-import com.fenyx.jtv.theme.*
-import com.fenyx.jtv.ui.settings.SettingsItem
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.theme.JtvDarkOnly
+import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.*
 
 /** One selectable audio track from the currently playing stream. */
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -104,10 +85,17 @@ fun TvPlayerScreen(
     var currentIndex by rememberSaveable { mutableIntStateOf(initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))) }
     // Derived from the saved group so it rebuilds correctly after a state restore. For pseudo-categories
     // ("All"/"Favorites") there's no per-group entry, so fall back to the passed `channels` list.
-    val currentChannels = remember(currentGroup, allChannelsByGroup, channels) {
-        val g = currentGroup
-        if (g != null) (allChannelsByGroup[g] ?: channels) else channels
+    // The shared MainViewModel (activity-scoped, same instance Navigation uses) for the guide data and
+    // categories the player wasn't handed (e.g. "All" when launched from News).
+    val vm = remember(context) {
+        context.findActivity()?.let { runCatching { ViewModelProvider(it)[MainViewModel::class.java] }.getOrNull() }
     }
+    fun resolveGroup(g: String?): List<Channel> = when {
+        g == null -> channels
+        g == initialGroup -> allChannelsByGroup[g] ?: channels
+        else -> allChannelsByGroup[g] ?: vm?.getChannelsByGroup(g) ?: emptyList()
+    }
+    val currentChannels = remember(currentGroup, allChannelsByGroup, channels) { resolveGroup(currentGroup) }
     val currentChannel = remember(currentIndex, currentChannels) { currentChannels.getOrNull(currentIndex) }
 
     // Collapsed per-language feeds for the channel on screen (empty when it isn't a language family).
@@ -117,12 +105,9 @@ fun TvPlayerScreen(
     // derived lower down, once `language` (the preferred audio language) is in scope.
     var langOverride by remember { mutableStateOf<Channel?>(null) }
     LaunchedEffect(currentChannel) { langOverride = null }
-    var showLangSelector by remember { mutableStateOf(false) }
 
-    var showOverlay by remember { mutableStateOf(true) }
-    var showChannelList by remember { mutableStateOf(false) }
-    var showCategoryList by remember { mutableStateOf(false) }
-    var showSettingsOverlay by remember { mutableStateOf(false) }
+    // Overlay state (banner / browse / options / menu / number entry) lives apart from playback state.
+    val ui = remember { PlayerUi(PlayerOverlay.Banner) }
     
     val settingsManager = remember { SettingsManager(context) }
     val favoriteChannels by settingsManager.favoriteChannelsFlow.collectAsState(initial = emptySet())
@@ -130,13 +115,9 @@ fun TvPlayerScreen(
     // "Refresh Login" (server mode) state shown in the right-side overlay.
     var refreshingCreds by remember { mutableStateOf(false) }
 
-    // Auto-hide overlay
-    LaunchedEffect(showOverlay) {
-        if (showOverlay && !showChannelList && !showCategoryList) {
-            delay(5000)
-            showOverlay = false
-        }
-    }
+    // Programme guide in the strap: only when the guide is turned on.
+    val epgModeState = settingsManager.epgModeFlow.collectAsState(initial = false)
+    val epg = remember(vm) { EpgSource(vm, epgModeState) }
 
     var quality by remember { mutableStateOf("auto") }
     var language by remember { mutableStateOf("hi") }
@@ -150,8 +131,6 @@ fun TvPlayerScreen(
     }
     val playingChannel = langOverride ?: preferredVariant ?: currentChannel
     
-    var showAudioSelector by remember { mutableStateOf(false) }
-    var showQualitySelector by remember { mutableStateOf(false) }
 
     // Real audio tracks exposed by the current stream (for reliable language switching).
     var audioTracks by remember { mutableStateOf<List<AudioOption>>(emptyList()) }
@@ -180,10 +159,10 @@ fun TvPlayerScreen(
 
     // Player state
     var isBuffering by remember { mutableStateOf(true) }
-    // True when the user paused via long-press OK.
+    // True when the user paused (quick menu "Pause" or the Play/Pause key).
     var userPaused by remember { mutableStateOf(false) }
     // Non-null only when playback has failed and auto-recovery has been exhausted.
-    var playbackError by remember { mutableStateOf<String?>(null) }
+    var playbackError by remember { mutableStateOf<PlayerError?>(null) }
 
     // Stream auto-recovery: Jio live URLs carry a short-lived Akamai cookie (__hdnea__) that expires
     // after a while, which surfaces as a sudden black screen. On error we re-fetch the stream URL
@@ -389,7 +368,7 @@ fun TvPlayerScreen(
                     // Auto-recovery exhausted: stop the spinner and show an actionable message
                     // instead of an indefinite black screen.
                     isBuffering = false
-                    playbackError = "Playback stopped. Press OK to retry."
+                    playbackError = PlayerError("The picture stopped.", ErrorAction.Retry, ErrorAction.NextChannel)
                 }
             }
         }
@@ -424,7 +403,7 @@ fun TvPlayerScreen(
             if (authData == null) {
                 android.util.Log.e("TvPlayer", "Missing auth data")
                 isBuffering = false
-                playbackError = "Not logged in. Please sign in again."
+                playbackError = PlayerError("You aren't signed in to Jio.", ErrorAction.Settings)
                 return@LaunchedEffect
             }
             
@@ -488,11 +467,15 @@ fun TvPlayerScreen(
                 // the next few seconds — say so at once instead of retrying 5x and then blaming the login.
                 if (fetchEx is com.fenyx.jtv.data.JioApiClient.SessionExpiredException) {
                     isBuffering = false
-                    playbackError = fetchErr
-                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException ||
-                    fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
+                    playbackError = if (playerSetupMode == "server" || playerSetupMode == "jtv")
+                        PlayerError("The Jio sign-in on your JTV server has expired.", ErrorAction.Retry)
+                    else PlayerError("Your Jio sign-in has expired.", ErrorAction.Settings, ErrorAction.Retry)
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException) {
                     isBuffering = false
-                    playbackError = "$fetchErr\n\nPress OK to retry, or CH+/CH− for another channel."
+                    playbackError = PlayerError("Jio isn't providing this channel right now.", ErrorAction.NextChannel, ErrorAction.Retry)
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
+                    isBuffering = false
+                    playbackError = PlayerError("This channel is offline at Jio right now.", ErrorAction.Retry, ErrorAction.NextChannel)
                 // Let the auto-recovery budget retry transient fetch failures; only show the error
                 // once it's exhausted, so a one-off hiccup doesn't flash a message.
                 } else if (retryCount.intValue >= 5) {
@@ -503,9 +486,9 @@ fun TvPlayerScreen(
                     val authExpired = fetchErr.contains("401") || fetchErr.contains("403")
                     playbackError = when {
                         authExpired && (playerSetupMode == "server" || playerSetupMode == "jtv") ->
-                            "Server login expired. Re-login the Jio account on your JTV server, then press OK."
-                        authExpired -> "Login expired. Please sign in again."
-                        else -> "Couldn't load this channel. Press OK to retry."
+                            PlayerError("The Jio sign-in on your JTV server has expired.", ErrorAction.Retry)
+                        authExpired -> PlayerError("Your Jio sign-in has expired.", ErrorAction.Settings, ErrorAction.Retry)
+                        else -> PlayerError("This channel didn't load.", ErrorAction.Retry, ErrorAction.NextChannel)
                     }
                 } else {
                     retryCount.intValue++
@@ -543,7 +526,7 @@ fun TvPlayerScreen(
                     }
                     else -> {
                         isBuffering = false
-                        playbackError = "Playback stopped. Press OK to retry."
+                        playbackError = PlayerError("The picture stopped.", ErrorAction.Retry, ErrorAction.NextChannel)
                     }
                 }
             }
@@ -618,944 +601,468 @@ fun TvPlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Current time. Formatter is hoisted (was reallocated on every 30s tick).
-    val clockFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-    var currentTime by remember { mutableStateOf("") }
+    // ─────────────────────────── v2 overlay + key model ───────────────────────────
+
+    val isTv = Jtv.isTv
+    val portrait = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+    // Phone portrait has no banner state (its info is always on screen), so Back skips that step.
+    val phonePortrait = Jtv.form == FormFactor.Phone && portrait
+    val errorFocus = remember { FocusRequester() }
+    // Plain (non-state) bookkeeping for the hold-OK gesture and Back de-duplication.
+    val press = remember {
+        object {
+            var job: kotlinx.coroutines.Job? = null
+            var longFired = false
+            var swallow = false
+            /** OK went down here in clean/banner state (a key-up alone, e.g. after tuning from the rail, is ignored). */
+            var downSeen = false
+            var lastKeyBack = 0L
+        }
+    }
+    var numberJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
+    val browseGroups = remember(groups, currentGroup) {
+        buildList {
+            if (MainViewModel.GROUP_FAVORITES in groups) add(MainViewModel.GROUP_FAVORITES)
+            add(MainViewModel.GROUP_ALL)
+            groups.forEach { if (it != MainViewModel.GROUP_FAVORITES && it != MainViewModel.GROUP_ALL) add(it) }
+            currentGroup?.let { if (it !in this) add(0, it) }
+        }
+    }
+
+    // Banner on every tune.
+    LaunchedEffect(currentChannel?.id) { if (currentChannel != null) ui.showBanner() }
+
+    fun setPaused(p: Boolean) {
+        if (p) { exoPlayer.pause(); userPaused = true } else { exoPlayer.play(); userPaused = false }
+    }
+
+    fun doZap(delta: Int) {
+        val n = currentChannels.size
+        if (n == 0) return
+        currentIndex = ((currentIndex + delta) % n + n) % n
+        ui.showBanner()
+    }
+
+    fun doTune(group: String?, index: Int) {
+        val list = if (group == currentGroup) currentChannels else resolveGroup(group)
+        if (list.isEmpty()) return
+        currentGroup = group
+        currentIndex = index.coerceIn(0, list.size - 1)
+        ui.overlay = PlayerOverlay.Banner
+        ui.bannerToken++
+    }
+
+    fun doRetry() {
+        playbackError = null
+        retryCount.intValue = 0
+        isBuffering = true
+        streamRefreshTrigger++
+    }
+
+    fun openBrowse() {
+        val gs = browseGroups
+        var g: String = currentGroup ?: MainViewModel.GROUP_ALL
+        var list = resolveGroup(g)
+        if (list.isEmpty()) {
+            g = gs.firstOrNull { resolveGroup(it).isNotEmpty() } ?: return
+            list = resolveGroup(g)
+        }
+        ui.browseGroup = g
+        ui.browseIndex = list.indexOfFirst { it.id == currentChannel?.id }.coerceAtLeast(0)
+        ui.browseFocusToken++
+        ui.overlay = PlayerOverlay.Browse
+    }
+
+    fun browseCategory(delta: Int) {
+        val gs = browseGroups
+        if (gs.isEmpty()) return
+        var i = gs.indexOf(ui.browseGroup ?: MainViewModel.GROUP_ALL).coerceAtLeast(0)
+        // Skip empty categories so focus always has a tile to land on.
+        repeat(gs.size) {
+            i = ((i + delta) % gs.size + gs.size) % gs.size
+            val list = resolveGroup(gs[i])
+            if (list.isNotEmpty()) {
+                ui.browseGroup = gs[i]
+                ui.browseIndex = list.indexOfFirst { it.id == currentChannel?.id }.takeIf { it >= 0 } ?: 0
+                ui.browseFocusToken++
+                return
+            }
+        }
+    }
+
+    /** Real Jio channel number → (group, index): the current category first, then all channels. */
+    fun findByNumber(num: Int): Pair<String?, Int>? {
+        val i = currentChannels.indexOfFirst { it.channelNumber == num }
+        if (i >= 0) return currentGroup to i
+        val j = resolveGroup(MainViewModel.GROUP_ALL).indexOfFirst { it.channelNumber == num }
+        return if (j >= 0) MainViewModel.GROUP_ALL to j else null
+    }
+
+    fun commitNumber() {
+        numberJob?.cancel()
+        val num = ui.number.toIntOrNull()
+        ui.number = ""
+        if (num == null) return
+        val hit = findByNumber(num)
+        if (hit != null) {
+            doTune(hit.first, hit.second)
+        } else {
+            ui.numberMiss = "No channel $num"
+            scope.launch { delay(2_000); if (ui.number.isEmpty()) ui.numberMiss = null }
+        }
+    }
+    val commitLatest by rememberUpdatedState({ commitNumber() })
+
+    fun restartNumberTimer() {
+        numberJob?.cancel()
+        numberJob = scope.launch { delay(1_500); commitLatest() }
+    }
+
+    /** Back ladder: entry/menu/panel/browse → close; banner → hide; clean video → leave the player. */
+    fun backLadder() {
+        when {
+            ui.number.isNotEmpty() -> { numberJob?.cancel(); ui.number = "" }
+            ui.overlay == PlayerOverlay.Menu || ui.overlay == PlayerOverlay.Browse -> ui.overlay = PlayerOverlay.None
+            ui.overlay == PlayerOverlay.Options ->
+                if (ui.optionsPage != OptionsPage.Main && ui.optionsEntry == OptionsPage.Main) ui.optionsPage = OptionsPage.Main
+                else ui.overlay = PlayerOverlay.None
+            ui.overlay == PlayerOverlay.Banner && !phonePortrait -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
+            else -> onBack()
+        }
+    }
+
+    val actions = object : PlayerActions {
+        override fun toggleFavourite() {
+            val id = currentChannel?.id ?: return
+            scope.launch { settingsManager.toggleFavoriteChannel(id) }
+        }
+        override fun pickSound(value: String) {
+            if (audioTracks.isNotEmpty()) {
+                // Real tracks from the stream — reliable even when channels label languages oddly.
+                val opt = value.toIntOrNull()?.let { audioTracks.getOrNull(it) } ?: return
+                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                    .setOverrideForType(androidx.media3.common.TrackSelectionOverride(opt.group, listOf(opt.trackIndex)))
+                    .build()
+                // Remember the chosen language as the default for other channels too.
+                opt.group.getFormat(opt.trackIndex).language?.let { lang ->
+                    language = lang
+                    scope.launch { settingsManager.setDefaultLanguage(lang) }
+                }
+            } else {
+                // Before tracks are known: pick a preferred language by code.
+                language = value
+                scope.launch { settingsManager.setDefaultLanguage(value) }
+            }
+        }
+        override fun pickLanguage(channelId: String) {
+            val v = currentVariants.firstOrNull { it.channel.id == channelId } ?: return
+            langOverride = v.channel
+            // Remember the chosen language so other channels + this one default to it.
+            v.langCode?.let { lc ->
+                language = lc
+                scope.launch { settingsManager.setDefaultLanguage(lc) }
+            }
+        }
+        override fun pickQuality(value: String) {
+            quality = value
+            scope.launch { settingsManager.setDefaultQuality(value) }
+        }
+        override fun pickAspect(mode: Int) {
+            resizeMode = mode
+            scope.launch { settingsManager.setPlayerResizeMode(mode) }
+        }
+        override fun pickVoice(level: Int) { scope.launch { settingsManager.setVoiceBoost(level) } }
+        override fun toggleAutoVolume() { scope.launch { settingsManager.setAudioNormalize(!audioNormalize) } }
+        override fun pickSleep(minutes: Int) { sleepTimerMin = minutes }
+        override fun togglePause() { setPaused(!userPaused) }
+        override fun openChannelList() {
+            if (isTv) openBrowse() else { ui.overlay = PlayerOverlay.None; ui.showBanner() }
+        }
+        override fun openSettings() {
+            ui.overlay = PlayerOverlay.None
+            onSettings()
+        }
+        override fun refreshLogin() {
+            // Server mode: force a credential re-pull from the proxy and reload the stream, so a
+            // rotated/expired shared token can be fixed without leaving the player.
+            if (!refreshingCreds) scope.launch {
+                refreshingCreds = true
+                com.fenyx.jtv.data.JioApiClient.refreshCredentials(context)
+                refreshingCreds = false
+                doRetry()
+                ui.overlay = PlayerOverlay.None
+            }
+        }
+        override fun zap(delta: Int) = doZap(delta)
+        override fun tune(group: String?, index: Int) = doTune(group, index)
+        override fun back() = backLadder()
+        override fun leave() = onBack()
+        override fun retry() = doRetry()
+    }
+    val actionsState = rememberUpdatedState<PlayerActions>(actions)
+
+    val model = OptionsModel(
+        favourite = currentChannel?.id?.let { it in favoriteChannels } ?: false,
+        soundLabel = audioTracks.firstOrNull { it.selected }?.label
+            ?: LANGUAGE_OPTIONS.firstOrNull { it.first == language }?.second ?: "Default",
+        soundChoices = if (audioTracks.isNotEmpty()) audioTracks.mapIndexed { i, t -> i.toString() to t.label } else LANGUAGE_OPTIONS,
+        soundCurrent = if (audioTracks.isNotEmpty()) audioTracks.indexOfFirst { it.selected }.let { if (it >= 0) it.toString() else "" } else language,
+        langChoices = currentVariants.map { it.channel.id to com.fenyx.jtv.data.ChannelLanguage.displayName(it.langCode) },
+        langCurrent = playingChannel?.id ?: "",
+        quality = quality,
+        aspect = resizeMode,
+        voice = voiceBoost,
+        autoVolume = audioNormalize,
+        sleep = sleepTimerMin,
+        paused = userPaused,
+        showRefresh = playerSetupMode == "server" || playerSetupMode == "jtv",
+        refreshing = refreshingCreds,
+    )
+
+    val overlayData = OverlayData(
+        playing = currentChannel,
+        currentGroup = currentGroup,
+        browseGroups = browseGroups,
+        resolveGroup = ::resolveGroup,
+        findByNumber = { n ->
+            findByNumber(n)?.let { (g, i) -> if (g == currentGroup) currentChannels.getOrNull(i) else resolveGroup(g).getOrNull(i) }
+        },
+        epg = epg,
+        model = model,
+        actions = actions,
+    )
+
+    // Keep focus somewhere sensible: on the error's first button (TV), else on the player itself, so
+    // keys keep arriving after a panel, rail or pointer bar goes away.
     LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = clockFormat.format(Date())
-            delay(30000)
-        }
+        snapshotFlow { Triple(ui.overlay, ui.pointerChrome, playbackError != null && !isBuffering) }
+            .collect { (ov, _, err) ->
+                if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) {
+                    withFrameNanos { }
+                    runCatching { if (err && isTv) errorFocus.requestFocus() else focusRequester.requestFocus() }
+                }
+            }
     }
 
-    // ─── Key handler ───
-    var numericBuffer by remember { mutableStateOf("") }
-    var showNumericOverlay by remember { mutableStateOf(false) }
-    var numericJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-    // Long-press OK to pause/resume. A short OK still toggles the info overlay (or resumes if paused).
-    var centerLongFired by remember { mutableStateOf(false) }
-    var centerLongJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-    var listSelectedIndex by remember { mutableIntStateOf(0) }
-    var categorySelectedIndex by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(showChannelList, currentChannels) {
-        if (showChannelList) listSelectedIndex = currentIndex
-    }
-    LaunchedEffect(showCategoryList, groups) {
-        if (showCategoryList) categorySelectedIndex = groups.indexOf(currentGroup).coerceAtLeast(0)
+    // System back (gesture / predictive back). Key-event Back is handled in the key handler below; skip
+    // the duplicate if both arrive for one press.
+    androidx.activity.compose.BackHandler {
+        if (android.os.SystemClock.uptimeMillis() - press.lastKeyBack > 1_000) backLadder()
     }
 
-    fun commitNumericEntry() {
-        val num = numericBuffer.toIntOrNull()
-        if (num != null && currentChannels.isNotEmpty()) {
-            val idx = (num - 1).coerceIn(0, currentChannels.size - 1)
-            currentIndex = idx
-        }
-        numericBuffer = ""
-        showNumericOverlay = false
-    }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .focusRequester(focusRequester)
-            .focusable()
-            .onPreviewKeyEvent { keyEvent ->
-                // ── Long-press OK = pause/resume (only in the normal watching view) ──
-                val isCenter = keyEvent.key == Key.Enter ||
-                    keyEvent.key == Key.DirectionCenter ||
-                    keyEvent.key == Key.NumPadEnter
-                val normalWatching = !showCategoryList && !showChannelList &&
-                    !showAudioSelector && !showQualitySelector && !showSettingsOverlay &&
-                    !showLangSelector && !showNumericOverlay && playbackError == null
-                if (isCenter && normalWatching) {
-                    when (keyEvent.type) {
-                        KeyEventType.KeyDown -> {
-                            if (keyEvent.nativeKeyEvent.repeatCount == 0) {
-                                centerLongFired = false
-                                centerLongJob?.cancel()
-                                centerLongJob = scope.launch {
-                                    delay(450) // long-press threshold
-                                    centerLongFired = true
-                                    if (userPaused) { exoPlayer.play(); userPaused = false }
-                                    else { exoPlayer.pause(); userPaused = true; showOverlay = true }
+    JtvDarkOnly {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .focusRequester(focusRequester)
+                .focusable()
+                .pointerInput(ui) {
+                    // Mouse / air-mouse: move shows the banner + top bar, wheel zaps, right-click opens the
+                    // quick menu. Touch: any touch while controls show restarts their hide timer.
+                    awaitPointerEventScope {
+                        var lastWheel = 0L
+                        while (true) {
+                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                            val ch = e.changes.firstOrNull() ?: continue
+                            val mouse = ch.type == PointerType.Mouse
+                            when (e.type) {
+                                PointerEventType.Move -> if (mouse) {
+                                    if (!ui.pointerChrome) ui.pointerChrome = true
+                                    if (ui.overlay == PlayerOverlay.None) ui.showBanner() else ui.bumpThrottled()
+                                } else if (ui.overlay == PlayerOverlay.Banner) ui.bumpThrottled()
+                                PointerEventType.Scroll -> {
+                                    val ov = ui.overlay
+                                    if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) {
+                                        val t = android.os.SystemClock.uptimeMillis()
+                                        val dy = ch.scrollDelta.y
+                                        if (dy != 0f && t - lastWheel > 250) {
+                                            lastWheel = t
+                                            actionsState.value.zap(if (dy > 0) 1 else -1)
+                                        }
+                                        e.changes.forEach { it.consume() }
+                                    }
                                 }
+                                PointerEventType.Press -> if (mouse && e.buttons.isSecondaryPressed) {
+                                    ui.overlay = PlayerOverlay.Menu
+                                    e.changes.forEach { it.consume() }
+                                } else if (!mouse && ui.overlay == PlayerOverlay.Banner) ui.bumpThrottled()
+                                else -> {}
                             }
-                            return@onPreviewKeyEvent true
                         }
-                        KeyEventType.KeyUp -> {
-                            centerLongJob?.cancel()
-                            if (!centerLongFired) {
-                                // Short press: resume if paused, else toggle the info overlay.
-                                if (userPaused) { exoPlayer.play(); userPaused = false }
-                                else showOverlay = !showOverlay
-                            }
-                            centerLongFired = false
-                            return@onPreviewKeyEvent true
-                        }
-                        else -> return@onPreviewKeyEvent true
                     }
                 }
+                .onPreviewKeyEvent { ev ->
+                    val k = ev.key
+                    val down = ev.type == KeyEventType.KeyDown
+                    val isCenter = k == Key.Enter || k == Key.DirectionCenter || k == Key.NumPadEnter
+                    val ov = ui.overlay
+                    val clean = ov == PlayerOverlay.None || ov == PlayerOverlay.Banner
+                    val errShown = playbackError != null && !isBuffering
+                    val entering = ui.number.isNotEmpty()
 
-                if (keyEvent.type == KeyEventType.KeyDown) {
-                    val digit = when (keyEvent.key) {
-                        Key.Zero -> 0; Key.One -> 1; Key.Two -> 2; Key.Three -> 3
-                        Key.Four -> 4; Key.Five -> 5; Key.Six -> 6; Key.Seven -> 7
-                        Key.Eight -> 8; Key.Nine -> 9
-                        else -> null
+                    // The rest of a hold-OK that already opened the menu (repeats + key-up) is swallowed so
+                    // it doesn't also press the menu's first item.
+                    if (isCenter && press.swallow) {
+                        if (!down) press.swallow = false
+                        return@onPreviewKeyEvent true
                     }
-                    if (digit != null) {
-                        if (!(numericBuffer.isEmpty() && digit == 0) && numericBuffer.length < 4) {
-                            numericBuffer += digit.toString()
-                            showNumericOverlay = true
-                            numericJob?.cancel()
-                            numericJob = scope.launch {
-                                delay(1200)
-                                commitNumericEntry()
+                    // Number entry: OK goes now.
+                    if (isCenter && entering) {
+                        if (down) commitNumber()
+                        return@onPreviewKeyEvent true
+                    }
+                    // Clean / banner: short OK toggles the banner (or resumes), hold OK opens the quick menu.
+                    if (isCenter && clean && !errShown) {
+                        if (down) {
+                            if (ev.nativeKeyEvent.repeatCount == 0) {
+                                press.downSeen = true
+                                press.longFired = false
+                                press.job?.cancel()
+                                press.job = scope.launch {
+                                    delay(450) // long-press threshold
+                                    press.longFired = true
+                                    press.swallow = true
+                                    ui.overlay = PlayerOverlay.Menu
+                                }
                             }
+                        } else {
+                            press.job?.cancel()
+                            if (press.downSeen && !press.longFired) {
+                                when {
+                                    userPaused -> setPaused(false)
+                                    ui.overlay == PlayerOverlay.Banner -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
+                                    else -> ui.showBanner()
+                                }
+                            }
+                            press.longFired = false
+                            press.downSeen = false
                         }
                         return@onPreviewKeyEvent true
                     }
 
-                    if (keyEvent.key == Key.Back || keyEvent.key == Key.Escape) {
-                        if (showAudioSelector) { showAudioSelector = false; return@onPreviewKeyEvent true }
-                        if (showLangSelector) { showLangSelector = false; return@onPreviewKeyEvent true }
-                        if (showQualitySelector) { showQualitySelector = false; return@onPreviewKeyEvent true }
-                        if (showSettingsOverlay) { showSettingsOverlay = false; return@onPreviewKeyEvent true }
-                        if (showCategoryList) { showCategoryList = false; return@onPreviewKeyEvent true }
-                        if (showChannelList) { showChannelList = false; return@onPreviewKeyEvent true }
-                        if (showNumericOverlay) { showNumericOverlay = false; numericBuffer = ""; return@onPreviewKeyEvent true }
-                        return@onPreviewKeyEvent false
+                    if (!down) return@onPreviewKeyEvent false
+
+                    val digit = when (k) {
+                        Key.Zero, Key.NumPad0 -> 0; Key.One, Key.NumPad1 -> 1; Key.Two, Key.NumPad2 -> 2
+                        Key.Three, Key.NumPad3 -> 3; Key.Four, Key.NumPad4 -> 4; Key.Five, Key.NumPad5 -> 5
+                        Key.Six, Key.NumPad6 -> 6; Key.Seven, Key.NumPad7 -> 7; Key.Eight, Key.NumPad8 -> 8
+                        Key.Nine, Key.NumPad9 -> 9
+                        else -> null
+                    }
+                    if (digit != null) {
+                        if (ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu) return@onPreviewKeyEvent false
+                        if (!(ui.number.isEmpty() && digit == 0) && ui.number.length < 4) {
+                            ui.number += digit.toString()
+                            ui.numberMiss = null
+                            restartNumberTimer()
+                        }
+                        return@onPreviewKeyEvent true
                     }
 
-                    when (keyEvent.key) {
-                        Key.ChannelUp -> {
-                            if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                currentIndex = (currentIndex + 1) % currentChannels.size
-                                showOverlay = true
+                    if (k == Key.Back || k == Key.Escape) {
+                        press.lastKeyBack = android.os.SystemClock.uptimeMillis()
+                        backLadder()
+                        return@onPreviewKeyEvent true
+                    }
+
+                    if (entering) {
+                        when (k) {
+                            Key.DirectionLeft, Key.Backspace -> {
+                                ui.number = ui.number.dropLast(1)
+                                if (ui.number.isEmpty()) numberJob?.cancel() else restartNumberTimer()
+                                return@onPreviewKeyEvent true
                             }
-                            true
+                            Key.DirectionUp, Key.DirectionDown, Key.DirectionRight -> return@onPreviewKeyEvent true
+                            else -> {}
                         }
-                        Key.ChannelDown -> {
-                            if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                currentIndex = (currentIndex - 1 + currentChannels.size) % currentChannels.size
-                                showOverlay = true
-                            }
-                            true
-                        }
-                        Key.DirectionUp -> {
-                            if (showSettingsOverlay) {
-                                false
-                            } else if (showCategoryList) {
-                                if (groups.isNotEmpty()) {
-                                    categorySelectedIndex = (categorySelectedIndex - 1 + groups.size) % groups.size
-                                }
-                                true
-                            } else if (showChannelList) {
-                                if (currentChannels.isNotEmpty()) {
-                                    listSelectedIndex = (listSelectedIndex - 1 + currentChannels.size) % currentChannels.size
-                                }
-                                true
-                            } else {
-                                if (currentChannels.isNotEmpty()) {
-                                    currentIndex = (currentIndex - 1 + currentChannels.size) % currentChannels.size
-                                    showOverlay = true
-                                }
-                                true
-                            }
-                        }
-                        Key.DirectionDown -> {
-                            if (showSettingsOverlay) {
-                                false
-                            } else if (showCategoryList) {
-                                if (groups.isNotEmpty()) {
-                                    categorySelectedIndex = (categorySelectedIndex + 1) % groups.size
-                                }
-                                true
-                            } else if (showChannelList) {
-                                if (currentChannels.isNotEmpty()) {
-                                    listSelectedIndex = (listSelectedIndex + 1) % currentChannels.size
-                                }
-                                true
-                            } else {
-                                if (currentChannels.isNotEmpty()) {
-                                    currentIndex = (currentIndex + 1) % currentChannels.size
-                                    showOverlay = true
-                                }
-                                true
-                            }
-                        }
-                        Key.DirectionLeft -> {
-                            if (showSettingsOverlay) {
-                                showSettingsOverlay = false
-                                true
-                            } else if (showCategoryList) {
-                                false
-                            } else if (showChannelList) {
-                                showCategoryList = true
-                                true
-                            } else {
-                                showChannelList = true
-                                showOverlay = true
-                                true
-                            }
-                        }
-                        Key.DirectionRight -> {
-                            if (showCategoryList) { showCategoryList = false; true }
-                            else if (showChannelList) { showChannelList = false; true }
-                            else if (!showSettingsOverlay) { showSettingsOverlay = true; true }
-                            else false
-                        }
-                        Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
-                            if (showCategoryList) {
-                                val group = groups.getOrNull(categorySelectedIndex)
-                                if (group != null) {
-                                    currentGroup = group // currentChannels derives from this
-                                    currentIndex = 0
-                                    showCategoryList = false
-                                }
-                                true
-                            } else if (showChannelList) {
-                                currentIndex = listSelectedIndex
-                                showChannelList = false
-                                showCategoryList = false
-                                true
-                            } else if (playbackError != null) {
-                                // Manual retry after auto-recovery was exhausted.
-                                playbackError = null
-                                retryCount.intValue = 0
-                                isBuffering = true
-                                streamRefreshTrigger++
-                                true
-                            } else {
-                                showOverlay = !showOverlay
-                                true
-                            }
-                        }
-                        Key.Back, Key.Escape -> {
-                            if (showCategoryList) { showCategoryList = false; true }
-                            else if (showChannelList) { showChannelList = false; true }
-                            else if (showOverlay) { showOverlay = false; true }
-                            else { onBack(); true }
-                        }
-                        // ── Standard TV media remote keys ──
-                        // Play/Pause toggle from the dedicated remote key.
-                        Key.MediaPlayPause -> {
-                            if (userPaused) { exoPlayer.play(); userPaused = false }
-                            else { exoPlayer.pause(); userPaused = true; showOverlay = true }
-                            true
-                        }
-                        Key.MediaPlay -> {
-                            if (userPaused) { exoPlayer.play(); userPaused = false }
-                            true
-                        }
-                        Key.MediaPause -> {
-                            exoPlayer.pause(); userPaused = true; showOverlay = true
-                            true
-                        }
-                        // MEDIA_NEXT/PREVIOUS zap channels like CH+/-.
-                        Key.MediaNext -> {
-                            if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                currentIndex = (currentIndex + 1) % currentChannels.size
-                                showOverlay = true
-                            }
-                            true
-                        }
-                        Key.MediaPrevious -> {
-                            if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                currentIndex = (currentIndex - 1 + currentChannels.size) % currentChannels.size
-                                showOverlay = true
-                            }
-                            true
-                        }
-                        // GUIDE opens the channel list; INFO toggles the now-playing banner.
-                        Key.Guide -> {
-                            if (!showSettingsOverlay) { showChannelList = true; showOverlay = true }
-                            true
-                        }
+                    }
+
+                    if (k == Key.DirectionUp || k == Key.DirectionDown || k == Key.DirectionLeft || k == Key.DirectionRight) {
+                        ui.pointerChrome = false
+                    }
+                    val panel = ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu
+
+                    when (k) {
+                        Key.ChannelUp, Key.MediaNext, Key.PageUp -> { if (!panel) doZap(1); true }
+                        Key.ChannelDown, Key.MediaPrevious, Key.PageDown -> { if (!panel) doZap(-1); true }
+                        Key.MediaPlayPause -> { setPaused(!userPaused); if (userPaused) ui.showBanner(); true }
+                        Key.MediaPlay -> { setPaused(false); true }
+                        Key.MediaPause -> { setPaused(true); ui.showBanner(); true }
+                        Key.Menu -> { ui.overlay = if (ov == PlayerOverlay.Menu) PlayerOverlay.None else PlayerOverlay.Menu; true }
+                        Key.Guide -> { if (ov != PlayerOverlay.Browse) openBrowse(); true }
                         Key.Info -> {
-                            if (!showChannelList && !showCategoryList && !showSettingsOverlay) {
-                                showOverlay = !showOverlay
-                            }
+                            if (ov == PlayerOverlay.Banner) ui.overlay = PlayerOverlay.None
+                            else if (ov == PlayerOverlay.None) ui.showBanner()
                             true
+                        }
+                        Key.DirectionUp -> when (ov) {
+                            PlayerOverlay.Browse -> { browseCategory(-1); true }
+                            PlayerOverlay.Options, PlayerOverlay.Menu -> false
+                            else -> { doZap(-1); true }
+                        }
+                        Key.DirectionDown -> when (ov) {
+                            PlayerOverlay.Browse -> { browseCategory(1); true }
+                            PlayerOverlay.Options, PlayerOverlay.Menu -> false
+                            else -> { doZap(1); true }
+                        }
+                        Key.DirectionLeft -> when (ov) {
+                            PlayerOverlay.Browse, PlayerOverlay.Menu -> false
+                            PlayerOverlay.Options -> { backLadder(); true }
+                            else -> if (errShown) false else { openBrowse(); true }
+                        }
+                        Key.DirectionRight -> when (ov) {
+                            PlayerOverlay.Browse, PlayerOverlay.Options, PlayerOverlay.Menu -> false
+                            else -> if (errShown) false else { ui.openOptions(); true }
                         }
                         else -> false
                     }
-                } else false
-            }
-    ) {
-        AndroidView(
-            factory = { ctx ->
-                androidx.media3.ui.PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                    keepScreenOn = true
                 }
-            },
-            update = { view ->
-                view.resizeMode = resizeMode
-                // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
-                if (view.player !== exoPlayer) view.player = exoPlayer
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // ─── Buffering Indicator ───
-        if (isBuffering) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = TvPrimary, strokeWidth = 3.dp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    val ch = currentChannel
-                    Text(
-                        ch?.name ?: "Loading...",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        // ─── Pause Indicator ───
-        if (userPaused) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.55f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 12.dp, height = 40.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(Color.White)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(width = 12.dp, height = 40.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(Color.White)
-                        )
-                    }
-                }
-            }
-        }
-
-        // ─── Playback Error Overlay ───
-        if (playbackError != null && !isBuffering) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.widthIn(max = 720.dp).padding(horizontal = 48.dp)
-                ) {
-                    Text("⚠", fontSize = 40.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        playbackError ?: "",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        currentChannel?.name ?: "",
-                        color = Color.White.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        // ─── Numeric Channel Entry Overlay ───
-        if (showNumericOverlay && numericBuffer.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = numericBuffer,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 28.sp
-                )
-            }
-        }
-
-        // ─── Channel Info Overlay (Top) ───
-        AnimatedVisibility(
-            visible = showOverlay,
-            enter = fadeIn() + slideInVertically { -it },
-            exit = fadeOut() + slideOutVertically { -it },
-            modifier = Modifier.align(Alignment.TopCenter)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
-                        )
-                    )
-                    // Overscan-safe: keep the channel info off the panel edge (gradient still bleeds).
-                    .padding(horizontal = TvDimens.OverscanHorizontal, vertical = TvDimens.OverscanVertical)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val ch = currentChannel
-                    if (ch?.logoUrl?.isNotEmpty() == true) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(ch.logoUrl)
-                                .size(96)
-                                .build(),
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp).clip(CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Channel number
-                            Text(
-                                String.format("%02d", currentIndex + 1),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                ch?.name ?: "",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val isFav = favoriteChannels.contains(ch?.id)
-                            Box(
-                                modifier = Modifier
-                                    .background(if (isFav) Color(0xFFFFD700).copy(alpha = 0.2f) else TvPrimary.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    if (isFav) "⭐ FAVORITE" else "LIVE",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isFav) Color(0xFFFFD700) else TvPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                ch?.group ?: "",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        currentTime,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontWeight = FontWeight.Light
-                    )
-                }
+            val name = currentChannel?.name
+            val buffering = isBuffering && playbackError == null
+            val paused = userPaused && !isBuffering
+            val status: @Composable BoxScope.() -> Unit = {
+                if (buffering) BufferingIndicator(name, Modifier.align(Alignment.Center))
+                if (paused) PausedBadge(touch = !isTv, onPlay = { setPaused(false) }, modifier = Modifier.align(Alignment.Center))
             }
-        }
-        
-        // ─── Player Settings Overlay (Right) ───
-        val settingsFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-        LaunchedEffect(showSettingsOverlay) {
-            if (showSettingsOverlay) {
-                try {
-                    settingsFocusRequester.requestFocus()
-                } catch (e: Exception) { }
+
+            if (phonePortrait) {
+                PhonePortraitPlayer(
+                    ui = ui, d = overlayData, actionsState = actionsState,
+                    video = { VideoSurface(exoPlayer, resizeMode, Modifier.fillMaxSize()) },
+                    videoStatus = status,
+                )
             } else {
-                try {
-                    focusRequester.requestFocus()
-                } catch (e: Exception) { }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = showSettingsOverlay,
-            enter = fadeIn() + slideInHorizontally { it },
-            exit = fadeOut() + slideOutHorizontally { it },
-            modifier = Modifier.align(Alignment.CenterEnd)
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(320.dp)
-                    .fillMaxHeight()
-                    .background(TvDarkSurface.copy(alpha = 0.95f))
-                    .padding(24.dp)
-            ) {
-                Column(
-                    // Scrollable so all items (incl. Open Settings at the bottom) are reachable; the
-                    // focused item auto-scrolls into view as you press Down on the remote.
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
+                Box(
+                    Modifier.fillMaxSize()
+                        .then(if (!isTv) Modifier.touchVideoGestures(ui, actionsState, tapToggles = true) else Modifier),
                 ) {
-                    Text(
-                        "Player Settings",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    val chId = currentChannel?.id ?: ""
-                    val isFav = favoriteChannels.contains(chId)
-                    
-                    val qualities = listOf("auto", "high", "medium", "low")
-                    val languages = listOf("hi", "en", "ta", "te", "ml", "bn", "mr", "gu", "pa", "or", "as")
-
-                    
-                    Box(modifier = Modifier.focusRequester(settingsFocusRequester)) {
-                        SettingsItem(
-                            title = "Favorite Channel",
-                            subtitle = if (isFav) "Remove from favorites" else "Add to favorites",
-                            value = if (isFav) "★" else "☆",
-                            valueColor = if (isFav) Color(0xFFFFD700) else TvOnSurfaceVariant,
-                            onClick = {
-                                scope.launch { settingsManager.toggleFavoriteChannel(chId) }
-                            }
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    SettingsItem(
-                        title = "Video Quality",
-                        subtitle = "Current: $quality",
-                        value = "Change",
-                        valueColor = TvPrimary,
-                        onClick = {
-                            showQualitySelector = true
-                        }
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Language-feed switch for collapsed channel families (e.g. Star Sports Hindi/Tamil).
-                    // Selecting a language reloads that sibling feed. Distinct from in-stream audio tracks.
-                    if (currentVariants.size > 1) {
-                        val curLang = currentVariants.firstOrNull { it.channel.id == playingChannel?.id }?.langCode
-                        SettingsItem(
-                            title = "Language",
-                            subtitle = "Switch language feed for this channel",
-                            value = com.fenyx.jtv.data.ChannelLanguage.displayName(curLang),
-                            valueColor = TvPrimary,
-                            onClick = { showLangSelector = true }
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    SettingsItem(
-                        title = "Audio Track / Language",
-                        subtitle = audioTracks.firstOrNull { it.selected }?.label?.let { "Current: $it" } ?: "Default",
-                        value = if (audioTracks.size > 1) "${audioTracks.size} tracks" else "Change",
-                        valueColor = TvPrimary,
-                        onClick = {
-                            showAudioSelector = true
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    SettingsItem(
-                        title = "Voice Boost",
-                        subtitle = "Suppress background & clear dialogue",
-                        value = when (voiceBoost) { 0 -> "Off"; 1 -> "Low"; 2 -> "Medium"; 3 -> "High"; else -> "Max" },
-                        valueColor = if (voiceBoost == 0) TvOnSurfaceVariant else TvPrimary,
-                        onClick = {
-                            val next = (voiceBoost + 1) % 5 // Off -> Low -> Medium -> High -> Max -> Off
-                            scope.launch { settingsManager.setVoiceBoost(next) }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    SettingsItem(
-                        title = "Auto Volume",
-                        subtitle = "Normalize loudness across channels",
-                        value = if (audioNormalize) "On" else "Off",
-                        valueColor = if (audioNormalize) TvPrimary else TvOnSurfaceVariant,
-                        onClick = {
-                            scope.launch { settingsManager.setAudioNormalize(!audioNormalize) }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    SettingsItem(
-                        title = "Sleep Timer",
-                        subtitle = if (sleepTimerMin == 0) "Off" else "Turns off in $sleepTimerMin min",
-                        value = if (sleepTimerMin == 0) "Off" else "$sleepTimerMin min",
-                        valueColor = if (sleepTimerMin == 0) TvOnSurfaceVariant else TvPrimary,
-                        onClick = {
-                            // Cycle Off -> 15 -> 30 -> 60 -> Off
-                            sleepTimerMin = when (sleepTimerMin) {
-                                0 -> 15
-                                15 -> 30
-                                30 -> 60
-                                else -> 0
-                            }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Server mode: force a credential re-pull from the proxy and reload the stream, so a
-                    // rotated/expired shared token can be fixed without leaving the player.
-                    if (playerSetupMode == "server" || playerSetupMode == "jtv") {
-                        SettingsItem(
-                            title = "Refresh Login",
-                            subtitle = "Fetch fresh credentials from your server",
-                            value = if (refreshingCreds) "Refreshing…" else "Refresh",
-                            valueColor = TvPrimary,
-                            onClick = {
-                                if (!refreshingCreds) scope.launch {
-                                    refreshingCreds = true
-                                    com.fenyx.jtv.data.JioApiClient.refreshCredentials(context)
-                                    refreshingCreds = false
-                                    // Reload the current stream with the fresh credentials.
-                                    retryCount.intValue = 0
-                                    playbackError = null
-                                    isBuffering = true
-                                    streamRefreshTrigger++
-                                    showSettingsOverlay = false
-                                }
-                            }
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    SettingsItem(
-                        title = "Open Settings",
-                        subtitle = "Go to full app settings",
-                        icon = Icons.Default.Settings,
-                        valueColor = TvPrimary,
-                        onClick = {
-                            showSettingsOverlay = false
-                            onSettings()
-                        }
-                    )
+                    VideoSurface(exoPlayer, resizeMode, Modifier.fillMaxSize())
                 }
+                Box(Modifier.fillMaxSize()) { status() }
+                if (isTv) TvOverlays(ui, overlayData)
+                else TouchOverlays(ui, overlayData, compact = Jtv.form == FormFactor.Phone)
             }
-        }
 
-        val qualityOptions = listOf(
-            "auto" to "Auto", "high" to "High (1080p)", "medium" to "Medium (720p)", "low" to "Low (480p)"
-        )
-        val languageOptions = listOf(
-            "hi" to "Hindi", "en" to "English", "ta" to "Tamil", "te" to "Telugu", 
-            "ml" to "Malayalam", "bn" to "Bengali", "mr" to "Marathi", "gu" to "Gujarati", 
-            "pa" to "Punjabi", "or" to "Oriya", "as" to "Assamese"
-        )
-
-        if (showQualitySelector) {
-            Dialog(onDismissRequest = { showQualitySelector = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                TvPickerDialog(
-                    title = "Select Quality",
-                    options = qualityOptions,
-                    currentValue = quality,
-                    onSelect = { value ->
-                        quality = value
-                        scope.launch { settingsManager.setDefaultQuality(value) }
-                        showQualitySelector = false
+            val err = playbackError
+            if (err != null && !isBuffering) {
+                ErrorPanel(
+                    error = err,
+                    channel = currentChannel,
+                    firstFocus = errorFocus,
+                    touch = !isTv,
+                    onAction = { a ->
+                        when (a) {
+                            ErrorAction.Retry -> doRetry()
+                            ErrorAction.NextChannel -> doZap(1)
+                            ErrorAction.Settings -> onSettings()
+                        }
                     },
-                    onDismiss = { showQualitySelector = false }
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
                 )
-            }
-        }
-
-        if (showAudioSelector) {
-            Dialog(onDismissRequest = { showAudioSelector = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                if (audioTracks.isNotEmpty()) {
-                    // Real tracks from the stream — reliable even when channels label languages oddly.
-                    val opts = audioTracks.mapIndexed { i, t -> i.toString() to t.label }
-                    val current = audioTracks.indexOfFirst { it.selected }.let { if (it >= 0) it.toString() else "" }
-                    TvPickerDialog(
-                        title = "Audio Track / Language",
-                        options = opts,
-                        currentValue = current,
-                        onSelect = { value ->
-                            val opt = value.toIntOrNull()?.let { audioTracks.getOrNull(it) }
-                            if (opt != null) {
-                                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                                    .setOverrideForType(
-                                        androidx.media3.common.TrackSelectionOverride(opt.group, listOf(opt.trackIndex))
-                                    )
-                                    .build()
-                                // Remember the chosen language as the default for other channels too.
-                                opt.group.getFormat(opt.trackIndex).language?.let { lang ->
-                                    language = lang
-                                    scope.launch { settingsManager.setDefaultLanguage(lang) }
-                                }
-                            }
-                            showAudioSelector = false
-                        },
-                        onDismiss = { showAudioSelector = false }
-                    )
-                } else {
-                    // Fallback before tracks are known: pick a preferred language by code.
-                    TvPickerDialog(
-                        title = "Preferred Audio Language",
-                        options = languageOptions,
-                        currentValue = language,
-                        onSelect = { value ->
-                            language = value
-                            scope.launch { settingsManager.setDefaultLanguage(value) }
-                            showAudioSelector = false
-                        },
-                        onDismiss = { showAudioSelector = false }
-                    )
-                }
-            }
-        }
-
-        if (showLangSelector) {
-            Dialog(onDismissRequest = { showLangSelector = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                val opts = currentVariants.map { it.channel.id to com.fenyx.jtv.data.ChannelLanguage.displayName(it.langCode) }
-                TvPickerDialog(
-                    title = "Channel Language",
-                    options = opts,
-                    currentValue = playingChannel?.id ?: "",
-                    onSelect = { value ->
-                        val v = currentVariants.firstOrNull { it.channel.id == value }
-                        if (v != null) {
-                            langOverride = v.channel
-                            // Remember the chosen language so other channels + this one default to it.
-                            v.langCode?.let { lc ->
-                                language = lc
-                                scope.launch { settingsManager.setDefaultLanguage(lc) }
-                            }
-                        }
-                        showLangSelector = false
-                    },
-                    onDismiss = { showLangSelector = false }
-                )
-            }
-        }
-
-        // ─── Bottom Hint Bar ───
-        AnimatedVisibility(
-            visible = showOverlay && !showChannelList && !showCategoryList,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                        )
-                    )
-                    // Overscan-safe hint bar.
-                    .padding(horizontal = TvDimens.OverscanHorizontal, vertical = TvDimens.SpaceMd)
-            ) {
-                Text(
-                    "↑↓ / CH+- Change Channel  •  ← Channel List  •  0-9 Go To  •  OK Info  •  Back Exit",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-        }
-
-        // ─── Category List Sidebar (Far Left side) ───
-        AnimatedVisibility(
-            visible = showCategoryList,
-            enter = fadeIn() + slideInHorizontally { -it },
-            exit = fadeOut() + slideOutHorizontally { -it },
-            modifier = Modifier.align(Alignment.CenterStart)
-        ) {
-            val catState = rememberLazyListState()
-            LaunchedEffect(categorySelectedIndex) {
-                catState.animateScrollToItem(categorySelectedIndex.coerceAtLeast(0))
-            }
-            Box(
-                modifier = Modifier
-                    .width(220.dp)
-                    .fillMaxHeight()
-                    .background(Color.Black.copy(alpha = 0.95f))
-                    .padding(8.dp)
-            ) {
-                Column {
-                    Text(
-                        "Categories",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-
-                    LazyColumn(state = catState) {
-                        itemsIndexed(items = groups, key = { _, group -> group }) { index: Int, group: String ->
-                            val isSelected = index == categorySelectedIndex
-                            val isCurrentGroup = group == currentGroup
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                onClick = {
-                                    categorySelectedIndex = index
-                                    currentGroup = group // currentChannels derives from this
-                                    currentIndex = 0
-                                    showCategoryList = false
-                                },
-                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = if (isSelected) TvPrimaryContainer.copy(alpha = 0.4f) else Color.Transparent,
-                                    focusedContainerColor = TvDarkSurfaceVariant
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (isCurrentGroup) {
-                                        Box(
-                                            modifier = Modifier
-                                                .width(3.dp)
-                                                .height(18.dp)
-                                                .clip(RoundedCornerShape(2.dp))
-                                                .background(TvPrimary)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                    }
-                                    Text(
-                                        groupLabel(group),
-                                        color = if (isSelected || isCurrentGroup) TvPrimary else Color.White,
-                                        fontWeight = if (isSelected || isCurrentGroup) FontWeight.Bold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ─── Channel List Sidebar (Left side, pushed by Category list if open) ───
-        val channelListOffset by animateDpAsState(if (showCategoryList) 220.dp else 0.dp)
-        AnimatedVisibility(
-            visible = showChannelList,
-            enter = fadeIn() + slideInHorizontally { -it },
-            exit = fadeOut() + slideOutHorizontally { -it },
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = channelListOffset)
-        ) {
-            val listState = rememberLazyListState()
-            LaunchedEffect(listSelectedIndex) {
-                listState.animateScrollToItem(listSelectedIndex.coerceAtLeast(0))
-            }
-
-            Box(
-                modifier = Modifier
-                    .width(300.dp)
-                    .fillMaxHeight()
-                    .background(Color.Black.copy(alpha = 0.9f))
-                    .padding(8.dp)
-            ) {
-                Column {
-                    Text(
-                        currentGroup?.let { groupLabel(it) } ?: "Channels",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-                    Text(
-                        "← Categories  •  ${currentChannels.size} channels",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TvOnSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    LazyColumn(state = listState) {
-                        itemsIndexed(items = currentChannels, key = { _, channel -> channel.id }) { index: Int, channel: Channel ->
-                            val isSelected = index == listSelectedIndex
-                            val isPlaying = index == currentIndex
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                onClick = {
-                                    listSelectedIndex = index
-                                    currentIndex = index
-                                    showChannelList = false
-                                    showCategoryList = false
-                                    showOverlay = true
-                                },
-                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = if (isSelected) TvPrimaryContainer.copy(alpha = 0.4f) else Color.Transparent,
-                                    focusedContainerColor = TvDarkSurfaceVariant
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // Channel number
-                                    Text(
-                                        String.format("%02d", index + 1),
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.width(32.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    if (channel.logoUrl.isNotEmpty()) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(context)
-                                                .data(channel.logoUrl)
-                                                .size(64)
-                                                .build(),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(32.dp).clip(CircleShape)
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier.size(32.dp).clip(CircleShape).background(TvDarkSurfaceVariant),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Default.PlayArrow, null, tint = TvOnSurfaceVariant, modifier = Modifier.size(16.dp))
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        channel.name,
-                                        color = if (isPlaying) TvPrimary else Color.White,
-                                        fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -1565,87 +1072,39 @@ fun TvPlayerScreen(
     }
 }
 
+/** The video. Its own composable so overlay changes never recompose (or re-layout) the PlayerView. */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier) {
+    AndroidView(
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                this.player = player
+                useController = false
+                keepScreenOn = true
+            }
+        },
+        update = { view ->
+            view.resizeMode = resizeMode
+            // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
+            if (view.player !== player) view.player = player
+        },
+        modifier = modifier,
+    )
+}
+
+private fun android.content.Context.findActivity(): ComponentActivity? {
+    var c: android.content.Context? = this
+    while (c is android.content.ContextWrapper) {
+        if (c is ComponentActivity) return c
+        c = c.baseContext
+    }
+    return null
+}
+
 /** AES-128 key URIs of Jio's non-DRM "Fallback" HLS (same rule the companion server uses). */
 private val JIO_KEY_HOST = Regex("(^|//)tv\\.media\\.jio\\.com/", RegexOption.IGNORE_CASE)
 
 private fun isHlsKeyUri(uri: String): Boolean =
     uri.contains(".pkey", ignoreCase = true) || uri.contains("aes128.key", ignoreCase = true) ||
         JIO_KEY_HOST.containsMatchIn(uri)
-
-/** Display name for a category, including the Home screen's "All" / "Favorites" pseudo-categories. */
-private fun groupLabel(group: String): String = when (group) {
-    com.fenyx.jtv.ui.main.MainViewModel.GROUP_ALL -> "All Channels"
-    com.fenyx.jtv.ui.main.MainViewModel.GROUP_FAVORITES -> "★ Favorites"
-    else -> group
-}
-
-@Composable
-fun TvPickerDialog(
-    title: String,
-    options: List<Pair<String, String>>,
-    currentValue: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .width(400.dp)
-                .background(com.fenyx.jtv.theme.TvDarkSurface, RoundedCornerShape(16.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = com.fenyx.jtv.theme.TvOnBackground
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.heightIn(max = 400.dp)
-            ) {
-                items(options.size) { index ->
-                    val (value, label) = options[index]
-                    val isSelected = value == currentValue
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { onSelect(value) },
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = if (isSelected) com.fenyx.jtv.theme.TvPrimaryContainer.copy(alpha = 0.3f) else Color.Transparent,
-                            focusedContainerColor = com.fenyx.jtv.theme.TvDarkSurfaceVariant
-                        ),
-                        border = ClickableSurfaceDefaults.border(
-                            focusedBorder = androidx.tv.material3.Border(
-                                border = androidx.compose.foundation.BorderStroke(2.dp, com.fenyx.jtv.theme.TvPrimary),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                label,
-                                color = if (isSelected) com.fenyx.jtv.theme.TvPrimary else com.fenyx.jtv.theme.TvOnSurfaceVariant,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
