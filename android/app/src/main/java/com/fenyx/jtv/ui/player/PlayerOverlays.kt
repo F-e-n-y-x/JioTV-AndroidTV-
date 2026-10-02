@@ -21,6 +21,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.tv.material3.Icon
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -162,7 +169,7 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                         Spacer(Modifier.height(10.dp))
                     }
                     val strapCh = if (browsing) browseList.getOrNull(ui.browseIndex) ?: d.playing else d.playing
-                    if (strapCh != null) EpgStrap(strapCh, d.epg, TvStrap)
+                    if (strapCh != null) EpgStrap(strapCh, d.epg, TvStrap, playing = strapCh.id == d.playing?.id)
                     Spacer(Modifier.height(8.dp))
                     Plaque(Modifier.padding(0.dp)) {
                         KeyHint(if (browsing) BrowseHint else BannerHint, keyColor = c.t2, color = c.t3)
@@ -205,6 +212,33 @@ internal fun OverVideoButton(
         modifier = modifier.clip(RoundedCornerShape(6.dp)).background(StrapBg),
         icon = icon, minHeight = minHeight, fontSize = if (Jtv.isTv) 16.sp else 17.sp,
     )
+}
+
+/**
+ * Icon-only control over the video (touch): a solid #141416 plate at 80% alpha, never a scrim.
+ * Always carries a contentDescription.
+ */
+@Composable
+internal fun OverVideoIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 48.dp,
+    iconSize: Dp = 26.dp,
+) {
+    val c = Jtv.colors
+    JtvClickable(
+        onClick = onClick,
+        modifier = modifier.size(size).semantics { contentDescription = description; role = Role.Button },
+        shape = CircleShape,
+        container = StrapBg.copy(alpha = 0.8f),
+    ) { focused ->
+        Icon(
+            icon, contentDescription = null, tint = if (focused) c.invTx else c.tx,
+            modifier = Modifier.align(Alignment.Center).size(iconSize),
+        )
+    }
 }
 
 /** Options panel (right) and quick menu (centre), shared by TV and touch. */
@@ -319,6 +353,8 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean) {
                             modifier = Modifier.weight(1f),
                         )
                         OverVideoButton("Options", { ui.openOptions() })
+                        // Phone landscape: the way back to the portrait page (Back leaves the player).
+                        if (compact) OverVideoIcon(PlayerIcons.FullscreenExit, "Exit full screen", { act.fullScreen(false) }, size = 56.dp)
                         if (!compact) Plaque { JtvClock(now, size = 32.sp, dateColor = Jtv.colors.t2) }
                     }
                     Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = pad, end = pad, bottom = pad)) {

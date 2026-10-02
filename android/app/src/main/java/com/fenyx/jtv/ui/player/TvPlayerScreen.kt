@@ -49,13 +49,15 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One selectable audio track from the currently playing stream. */
+/** One audio track of the playing stream, raw (de-duplicated later by [buildLanguageChoices]). */
 @androidx.annotation.OptIn(UnstableApi::class)
 private data class AudioOption(
-    val label: String,
     val group: androidx.media3.common.TrackGroup,
     val trackIndex: Int,
-    val selected: Boolean
+    val language: String?,
+    val name: String?,
+    val selected: Boolean,
+    val supported: Boolean,
 )
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -115,7 +117,7 @@ fun TvPlayerScreen(
     // "Refresh Login" (server mode) state shown in the right-side overlay.
     var refreshingCreds by remember { mutableStateOf(false) }
 
-    // Programme guide in the strap: only when the guide is turned on.
+    // Programme guide: the channel being watched always gets its guide; other rows follow the setting.
     val epgModeState = settingsManager.epgModeFlow.collectAsState(initial = false)
     val epg = remember(vm) { EpgSource(vm, epgModeState) }
 
@@ -309,23 +311,16 @@ fun TvPlayerScreen(
                         for (i in 0 until g.length) {
                             val f = g.getTrackFormat(i)
                             val lang = f.language
-                            val label = f.label
-                                ?: lang?.takeIf { it.isNotBlank() && it != "und" }?.let {
-                                    runCatching { java.util.Locale(it).displayLanguage }
-                                        .getOrNull()?.replaceFirstChar { c -> c.uppercase() }
-                                }
-                                ?: "Audio ${i + 1}"
                             diag.append("\n  [${lang ?: "?"}] label=${f.label} codec=${f.codecs ?: f.sampleMimeType} " +
                                 "ch=${f.channelCount} supported=${g.isTrackSupported(i)} selected=${g.isTrackSelected(i)}")
-                            // Keep offering every track (don't hide unsupported ones — that would look
-                            // like the language is "missing"); the log records support so we can tell
-                            // whether a silent track is an unsupported codec vs. genuinely absent.
-                            opts.add(AudioOption(label, g.mediaTrackGroup, i, g.isTrackSelected(i)))
+                            opts.add(AudioOption(g.mediaTrackGroup, i, lang, f.label, g.isTrackSelected(i), g.isTrackSupported(i)))
                         }
                     }
                 }
-                android.util.Log.d("TvPlayerAudio", "audio tracks (${opts.size} playable):$diag")
-                audioTracks = opts
+                android.util.Log.d("TvPlayerAudio", "audio tracks (${opts.size}):$diag")
+                // Offer only tracks the device can play, unless none are (then offer all, so the
+                // language never looks "missing"; the log above says which codec failed).
+                audioTracks = opts.filter { it.supported }.ifEmpty { opts }
 
                 // Diagnostic: which VIDEO rendition did ABR actually pick? Filter logcat by tag
                 // "TvPlayerVideo" to confirm the quality setting is being honoured (the selected line
@@ -454,6 +449,9 @@ fun TvPlayerScreen(
                 val mediaSource = mediaSourceFactory.createMediaSource(mediaItemBuilder.build())
 
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    // A track override belongs to one stream; a new stream picks by preferred language.
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                        .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO).build()
                     exoPlayer.setMediaSource(mediaSource)
                     exoPlayer.prepare()
                     exoPlayer.playWhenReady = true
@@ -606,7 +604,8 @@ fun TvPlayerScreen(
     val isTv = Jtv.isTv
     val portrait = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
     // Phone portrait has no banner state (its info is always on screen), so Back skips that step.
-    val phonePortrait = Jtv.form == FormFactor.Phone && portrait
+    val isPhone = Jtv.form == FormFactor.Phone
+    val phonePortrait = isPhone && portrait
     val errorFocus = remember { FocusRequester() }
     // Plain (non-state) bookkeeping for the hold-OK gesture and Back de-duplication.
     val press = remember {
@@ -620,6 +619,47 @@ fun TvPlayerScreen(
         }
     }
     var numberJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
+    // Phone "Full screen": lock landscape until the phone is actually turned, then hand rotation back
+    // to the sensor (so turning it upright again returns to the portrait page). "Exit full screen" does
+    // the same towards portrait. With auto-rotate off the lock simply stays until the other button.
+    val activity = remember(context) { context.findActivity() }
+    var orientationLock by remember { mutableStateOf<Int?>(null) } // null = not locked by us
+    fun setFullScreen(on: Boolean) {
+        val a = activity ?: return
+        val lock = if (on) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                   else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        a.requestedOrientation = lock
+        orientationLock = lock
+    }
+    DisposableEffect(activity, orientationLock) {
+        val a = activity
+        val lock = orientationLock
+        val autoRotate = a != null && runCatching {
+            android.provider.Settings.System.getInt(a.contentResolver, android.provider.Settings.System.ACCELEROMETER_ROTATION) == 1
+        }.getOrDefault(false)
+        val listener = if (a != null && lock != null && autoRotate) {
+            object : android.view.OrientationEventListener(a) {
+                override fun onOrientationChanged(deg: Int) {
+                    if (deg == ORIENTATION_UNKNOWN) return
+                    val landscape = deg in 60..120 || deg in 240..300
+                    val upright = deg <= 25 || deg >= 335
+                    val wantLand = lock == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    if ((wantLand && landscape) || (!wantLand && upright)) {
+                        a.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        disable()
+                    }
+                }
+            }.also { if (it.canDetectOrientation()) it.enable() }
+        } else null
+        onDispose { listener?.disable() }
+    }
+    // Leaving the player always gives rotation back.
+    DisposableEffect(activity) {
+        onDispose {
+            if (orientationLock != null) activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
     val browseGroups = remember(groups, currentGroup) {
         buildList {
@@ -728,6 +768,9 @@ fun TvPlayerScreen(
                 if (ui.optionsPage != OptionsPage.Main && ui.optionsEntry == OptionsPage.Main) ui.optionsPage = OptionsPage.Main
                 else ui.overlay = PlayerOverlay.None
             ui.overlay == PlayerOverlay.Banner && !phonePortrait -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
+            // Phone full screen: Back returns to the portrait page first.
+            isPhone && !portrait && orientationLock == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ->
+                setFullScreen(false)
             else -> onBack()
         }
     }
@@ -737,31 +780,38 @@ fun TvPlayerScreen(
             val id = currentChannel?.id ?: return
             scope.launch { settingsManager.toggleFavoriteChannel(id) }
         }
-        override fun pickSound(value: String) {
-            if (audioTracks.isNotEmpty()) {
-                // Real tracks from the stream — reliable even when channels label languages oddly.
-                val opt = value.toIntOrNull()?.let { audioTracks.getOrNull(it) } ?: return
-                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                    .setOverrideForType(androidx.media3.common.TrackSelectionOverride(opt.group, listOf(opt.trackIndex)))
-                    .build()
-                // Remember the chosen language as the default for other channels too.
-                opt.group.getFormat(opt.trackIndex).language?.let { lang ->
-                    language = lang
-                    scope.launch { settingsManager.setDefaultLanguage(lang) }
+        override fun pickLanguage(value: String) {
+            when {
+                value.startsWith(LANG_AUDIO) -> {
+                    // In-stream language: a preference, not an override, so ExoPlayer picks the matching
+                    // rendition for whichever video variant is playing (HD masters carry one per group).
+                    val code = value.removePrefix(LANG_AUDIO)
+                    // Stay on this feed: the language preference must not also hop to a sibling channel.
+                    if (currentVariants.isNotEmpty()) langOverride = playingChannel
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                        .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO)
+                        .setPreferredAudioLanguage(code)
+                        .build()
+                    language = code
+                    scope.launch { settingsManager.setDefaultLanguage(code) }
                 }
-            } else {
-                // Before tracks are known: pick a preferred language by code.
-                language = value
-                scope.launch { settingsManager.setDefaultLanguage(value) }
-            }
-        }
-        override fun pickLanguage(channelId: String) {
-            val v = currentVariants.firstOrNull { it.channel.id == channelId } ?: return
-            langOverride = v.channel
-            // Remember the chosen language so other channels + this one default to it.
-            v.langCode?.let { lc ->
-                language = lc
-                scope.launch { settingsManager.setDefaultLanguage(lc) }
+                value.startsWith(LANG_TRACK) -> {
+                    // Unnamed track: only an override can tell them apart.
+                    val opt = value.removePrefix(LANG_TRACK).toIntOrNull()?.let { audioTracks.getOrNull(it) } ?: return
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                        .setOverrideForType(androidx.media3.common.TrackSelectionOverride(opt.group, listOf(opt.trackIndex)))
+                        .build()
+                }
+                value.startsWith(LANG_CHANNEL) -> {
+                    val id = value.removePrefix(LANG_CHANNEL)
+                    val v = currentVariants.firstOrNull { it.channel.id == id } ?: return
+                    langOverride = v.channel
+                    // Remember the chosen language so other channels + this one default to it.
+                    v.langCode?.let { lc ->
+                        language = lc
+                        scope.launch { settingsManager.setDefaultLanguage(lc) }
+                    }
+                }
             }
         }
         override fun pickQuality(value: String) {
@@ -799,17 +849,25 @@ fun TvPlayerScreen(
         override fun back() = backLadder()
         override fun leave() = onBack()
         override fun retry() = doRetry()
+        override fun fullScreen(on: Boolean) = setFullScreen(on)
     }
     val actionsState = rememberUpdatedState<PlayerActions>(actions)
 
+    val langChoices = remember(audioTracks, currentVariants, playingChannel) {
+        val pid = playingChannel?.id
+        buildLanguageChoices(
+            tracks = audioTracks.mapIndexed { i, t -> StreamAudio(i, t.language, t.name, t.selected) },
+            variants = currentVariants,
+            playingId = pid,
+            playingLang = currentVariants.firstOrNull { it.channel.id == pid }?.langCode,
+            fallbackLabel = playingChannel?.language?.takeIf { it.isNotBlank() } ?: "Original sound",
+        )
+    }
     val model = OptionsModel(
         favourite = currentChannel?.id?.let { it in favoriteChannels } ?: false,
-        soundLabel = audioTracks.firstOrNull { it.selected }?.label
-            ?: LANGUAGE_OPTIONS.firstOrNull { it.first == language }?.second ?: "Default",
-        soundChoices = if (audioTracks.isNotEmpty()) audioTracks.mapIndexed { i, t -> i.toString() to t.label } else LANGUAGE_OPTIONS,
-        soundCurrent = if (audioTracks.isNotEmpty()) audioTracks.indexOfFirst { it.selected }.let { if (it >= 0) it.toString() else "" } else language,
-        langChoices = currentVariants.map { it.channel.id to com.fenyx.jtv.data.ChannelLanguage.displayName(it.langCode) },
-        langCurrent = playingChannel?.id ?: "",
+        langChoices = langChoices.options,
+        langCurrent = langChoices.current,
+        langLabel = langChoices.label,
         quality = quality,
         aspect = resizeMode,
         voice = voiceBoost,
@@ -1030,10 +1088,10 @@ fun TvPlayerScreen(
             }
 
             if (phonePortrait) {
+                // Draws its own buffering ring and keeps its Play control up while paused.
                 PhonePortraitPlayer(
-                    ui = ui, d = overlayData, actionsState = actionsState,
+                    ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering,
                     video = { VideoSurface(exoPlayer, resizeMode, Modifier.fillMaxSize()) },
-                    videoStatus = status,
                 )
             } else {
                 Box(

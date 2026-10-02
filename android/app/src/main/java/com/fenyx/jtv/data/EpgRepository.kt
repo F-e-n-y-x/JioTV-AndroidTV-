@@ -28,7 +28,21 @@ data class EpgProgram(
     val srno: String? = null,
     val showId: String? = null,
     val showtime: String? = null,
-    val catchup: Boolean = false
+    val catchup: Boolean = false,
+    // Native-guide extras (null for XMLTV). Kept small: cast is trimmed, the poster is not stored.
+    /** Episode synopsis, only when it differs from [description]. */
+    val episodeDesc: String? = null,
+    /** "Series", "Movie", "Sports", "News"... */
+    val category: String? = null,
+    /** First genre only, e.g. "Sitcom". */
+    val genre: String? = null,
+    /** Age rating: "U", "UA" or "A". */
+    val rating: String? = null,
+    /** Up to four names, roles stripped, joined with ", ". */
+    val cast: String? = null,
+    val director: String? = null,
+    /** Episode number, null when the guide has none. */
+    val episodeNum: Int? = null,
 )
 
 enum class EpgSyncStatus {
@@ -44,6 +58,37 @@ class EpgRepository(private val context: Context) {
          * passed in (not created here) because it is not thread-safe and the parse loop reuses a single
          * instance — so this stays allocation-free on the hot path while remaining unit-testable.
          */
+        /** A trimmed string field, or null when it is missing, blank or JSON null. */
+        internal fun jsonText(obj: org.json.JSONObject, key: String): String? {
+            if (!obj.has(key) || obj.isNull(key)) return null
+            return obj.optString(key, "").trim().takeIf { it.isNotEmpty() && it != "null" }
+        }
+
+        /** `showGenre` is an array (["Sitcom"]); a string is accepted too. First entry only. */
+        internal fun firstGenre(obj: org.json.JSONObject): String? {
+            val arr = obj.optJSONArray("showGenre")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val g = arr.optString(i, "").trim()
+                    if (g.isNotEmpty() && g != "null") return g
+                }
+                return null
+            }
+            return jsonText(obj, "showGenre")?.trim('[', ']', ' ')?.split(',')?.firstOrNull()
+                ?.trim(' ', '\'', '"')?.takeIf { it.isNotEmpty() }
+        }
+
+        private val ROLE = Regex("\\([^)]*\\)")
+
+        /** "Name (Role),Name (Role),..." -> "Name, Name, Name, Name" (first four, roles dropped). */
+        internal fun shortCast(raw: String?): String? = shortNames(raw?.replace(ROLE, ""), 4)
+
+        internal fun shortNames(raw: String?, max: Int): String? {
+            if (raw.isNullOrBlank()) return null
+            return raw.split(',').asSequence().map { it.trim() }.filter { it.isNotEmpty() }
+                .distinct().take(max).joinToString(", ").takeIf { it.isNotEmpty() }
+        }
+
         internal fun parseXmltvMillis(value: String?, fmt: SimpleDateFormat): Long {
             if (value.isNullOrBlank()) return 0
             return try { fmt.parse(value)?.time ?: 0 } catch (e: Exception) { 0 }
@@ -241,6 +286,10 @@ class EpgRepository(private val context: Context) {
                 val json = org.json.JSONObject(text)
                 val epgArray = json.optJSONArray("epg") ?: return@withContext emptyList()
                 val programs = mutableListOf<EpgProgram>()
+                // The same category/genre/cast/director repeats on every slot of a channel: share one
+                // String instance per distinct value so a day of programmes stays light.
+                val pool = HashMap<String, String>()
+                fun shared(v: String?): String? = v?.let { pool.getOrPut(it) { it } }
                 for (i in 0 until epgArray.length()) {
                     val obj = epgArray.getJSONObject(i)
                     val title = obj.optString("showname", "")
@@ -252,7 +301,18 @@ class EpgRepository(private val context: Context) {
                     val showtime = if (obj.has("showtime")) obj.optString("showtime") else null
                     val catchup = obj.optBoolean("isCatchupAvailable", false)
                     if (title.isNotEmpty() && startMs > 0 && stopMs > 0) {
-                        programs.add(EpgProgram(title, desc, startMs, stopMs, srno, showId, showtime, catchup))
+                        programs.add(
+                            EpgProgram(
+                                title, desc, startMs, stopMs, srno, showId, showtime, catchup,
+                                episodeDesc = jsonText(obj, "episode_desc")?.takeIf { it != desc.trim() },
+                                category = shared(jsonText(obj, "showCategory")),
+                                genre = shared(firstGenre(obj)),
+                                rating = shared(jsonText(obj, "pcr")),
+                                cast = shared(shortCast(jsonText(obj, "starCast"))),
+                                director = shared(shortNames(jsonText(obj, "director"), 3)),
+                                episodeNum = obj.opt("episode_num")?.toString()?.trim()?.toIntOrNull()?.takeIf { it > 0 },
+                            )
+                        )
                     }
                 }
                 return@withContext programs

@@ -13,7 +13,7 @@ import com.fenyx.jtv.ui.main.MainViewModel
 enum class PlayerOverlay { None, Banner, Browse, Options, Menu }
 
 /** Pages of the right-side options panel. Sub pages are inline lists, never a separate dialog window. */
-enum class OptionsPage { Main, Sound, Language, Quality, Aspect, Voice, Sleep }
+enum class OptionsPage { Main, Language, Quality, Aspect, Voice, Sleep }
 
 /** The ways a failed channel is explained. Each maps to one sentence and one or two buttons. */
 enum class ErrorAction { Retry, NextChannel, Settings }
@@ -79,17 +79,14 @@ internal fun groupLabel(group: String?): String = when (group) {
     else -> group
 }
 
-internal val QUALITY_OPTIONS = listOf("auto" to "Auto", "high" to "High", "medium" to "Medium", "low" to "Low (saves data)")
+internal val QUALITY_OPTIONS = listOf(
+    "auto" to "Auto (recommended)", "high" to "Best picture", "medium" to "Good picture", "low" to "Data saver",
+)
 internal val ASPECT_OPTIONS = listOf(0 to "Fit", 3 to "Stretch", 4 to "Zoom")
 internal val VOICE_OPTIONS = listOf(0 to "Off", 1 to "Low", 2 to "Medium", 3 to "High", 4 to "Most")
 internal val SLEEP_OPTIONS = listOf(0 to "Off", 15 to "15 min", 30 to "30 min", 60 to "1 hour", 90 to "1 hour 30 min", 120 to "2 hours")
-internal val LANGUAGE_OPTIONS = listOf(
-    "hi" to "Hindi", "en" to "English", "ta" to "Tamil", "te" to "Telugu",
-    "ml" to "Malayalam", "bn" to "Bengali", "mr" to "Marathi", "gu" to "Gujarati",
-    "pa" to "Punjabi", "or" to "Oriya", "as" to "Assamese",
-)
 
-internal fun qualityLabel(q: String) = QUALITY_OPTIONS.firstOrNull { it.first == q }?.second ?: "Auto"
+internal fun qualityLabel(q: String) = QUALITY_OPTIONS.firstOrNull { it.first == q }?.second ?: "Auto (recommended)"
 internal fun aspectLabel(m: Int) = ASPECT_OPTIONS.firstOrNull { it.first == m }?.second ?: "Fit"
 internal fun voiceLabel(v: Int) = VOICE_OPTIONS.firstOrNull { it.first == v }?.second ?: "Off"
 internal fun sleepLabel(m: Int) = if (m == 0) "Off" else SLEEP_OPTIONS.firstOrNull { it.first == m }?.second ?: "$m min"

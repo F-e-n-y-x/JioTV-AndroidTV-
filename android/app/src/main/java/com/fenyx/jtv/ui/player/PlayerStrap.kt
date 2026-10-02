@@ -87,15 +87,15 @@ internal val PhoneLandTiles = TileSizes(88.dp, 64.dp, 54.dp, 30.dp, 14.sp, 8.dp)
 // ───────────────────────── EPG ─────────────────────────
 
 /**
- * Programme data for the strap, read from the shared MainViewModel. Only used when the programme guide
- * is turned on; asks for the native EPG of the one channel shown (debounced, so fast zapping or rail
- * browsing doesn't fire a request per channel).
+ * Programme data for the player, read from the shared MainViewModel. The channel being watched
+ * ([always] = true) always gets its guide: one small native request, debounced so fast zapping doesn't
+ * fire a request per channel. Other channels (list rows, rail tiles) follow the programme-guide setting.
  */
 @Stable
 internal class EpgSource(private val vm: MainViewModel?, private val enabled: State<Boolean>) {
     @Composable
-    fun programs(channelId: String): List<EpgProgram>? {
-        if (vm == null || !enabled.value) return null
+    fun programs(channelId: String, always: Boolean = false): List<EpgProgram>? {
+        if (vm == null || !(always || enabled.value)) return null
         val map by vm.epgData.collectAsState()
         LaunchedEffect(channelId) {
             delay(350)
@@ -106,8 +106,8 @@ internal class EpgSource(private val vm: MainViewModel?, private val enabled: St
 }
 
 @Composable
-internal fun rememberNowNext(epg: EpgSource, channelId: String): NowNext? {
-    val programs = epg.programs(channelId)
+internal fun rememberNowNext(epg: EpgSource, channelId: String, always: Boolean = false): NowNext? {
+    val programs = epg.programs(channelId, always)
     val now = LocalNow.current
     return remember(programs, now) { programs?.takeIf { it.isNotEmpty() }?.let { nowNext(it, now) } }
 }
@@ -115,20 +115,30 @@ internal fun rememberNowNext(epg: EpgSource, channelId: String): NowNext? {
 internal fun channelSubtitle(ch: Channel): String =
     listOf(ch.group, ch.language).filter { it.isNotBlank() }.distinct().joinToString(" · ")
 
+/** "Series · Sitcom · U · Hindi" (like the official app), skipping what the guide doesn't have. */
+internal fun programMeta(p: EpgProgram, language: String?): String {
+    val genre = p.genre?.takeUnless { it.equals(p.category, ignoreCase = true) }
+    return listOfNotNull(p.category, genre, p.rating, language)
+        .filter { it.isNotBlank() }.distinct().joinToString(" · ")
+}
+
 // ───────────────────────── Info strap ─────────────────────────
 
 @Composable
-internal fun EpgStrap(channel: Channel, epg: EpgSource, s: StrapSizes, modifier: Modifier = Modifier) {
-    val nn = rememberNowNext(epg, channel.id)
+internal fun EpgStrap(channel: Channel, epg: EpgSource, s: StrapSizes, modifier: Modifier = Modifier, playing: Boolean = true) {
+    val nn = rememberNowNext(epg, channel.id, always = playing)
     InfoStrap(channel, nn, LocalNow.current, s, modifier)
 }
 
-/** Amber number block · channel / show / times + progress · NEXT column (D-tv-player-dark). */
+/** Amber number block · channel / show / meta / times + progress · NEXT column (D-tv-player-dark). */
 @Composable
 internal fun InfoStrap(channel: Channel, nn: NowNext?, now: Long, s: StrapSizes, modifier: Modifier = Modifier) {
     val c = Jtv.colors
+    val meta = nn?.now?.let { programMeta(it, channel.language) }.orEmpty()
+    // The meta line adds one line of height only when there is one, so straps without it are unchanged.
+    val extra = if (meta.isNotEmpty()) with(androidx.compose.ui.platform.LocalDensity.current) { (s.metaSize * 1.3f).toDp() } + 2.dp else 0.dp
     Row(
-        modifier.fillMaxWidth().height(s.height).clip(RoundedCornerShape(8.dp)).background(StrapBg),
+        modifier.fillMaxWidth().height(s.height + extra).clip(RoundedCornerShape(8.dp)).background(StrapBg),
     ) {
         NumberBlock(channel.channelNumber, Modifier.width(s.numW).fillMaxHeight(), s.numSize)
         val cur = nn?.now
@@ -139,6 +149,7 @@ internal fun InfoStrap(channel: Channel, nn: NowNext?, now: Long, s: StrapSizes,
             if (cur != null) {
                 JText(channel.name, s.nameSize, color = c.t2, weight = FontWeight.SemiBold)
                 JText(cur.title, s.titleSize, weight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+                if (meta.isNotEmpty()) JText(meta, s.metaSize, color = c.t2, modifier = Modifier.padding(top = 2.dp))
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     JText("${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)}", s.metaSize, color = c.t2)
                     Spacer(Modifier.width(12.dp))

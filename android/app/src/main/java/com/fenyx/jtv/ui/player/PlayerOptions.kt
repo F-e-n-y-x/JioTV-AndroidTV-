@@ -42,11 +42,11 @@ import com.fenyx.jtv.ui.components.JtvClickable
 @Immutable
 internal data class OptionsModel(
     val favourite: Boolean,
-    val soundLabel: String,
-    val soundChoices: List<Pair<String, String>>,
-    val soundCurrent: String,
+    /** The one Language choice: in-stream sound tracks plus sibling-language channels. */
     val langChoices: List<Pair<String, String>>,
     val langCurrent: String,
+    /** The playing language, for display. */
+    val langLabel: String,
     val quality: String,
     val aspect: Int,
     val voice: Int,
@@ -60,8 +60,8 @@ internal data class OptionsModel(
 /** Player actions the overlays can trigger. */
 internal interface PlayerActions {
     fun toggleFavourite()
-    fun pickSound(value: String)
-    fun pickLanguage(channelId: String)
+    /** A value from [OptionsModel.langChoices]. */
+    fun pickLanguage(value: String)
     fun pickQuality(value: String)
     fun pickAspect(mode: Int)
     fun pickVoice(level: Int)
@@ -77,6 +77,8 @@ internal interface PlayerActions {
     /** Leave the player (on-screen Back button). */
     fun leave()
     fun retry()
+    /** Phone: go to landscape full screen, or back. */
+    fun fullScreen(on: Boolean) {}
 }
 
 /**
@@ -122,8 +124,7 @@ internal fun OptionsPanel(
     Column(modifier.verticalScroll(rememberScrollState())) {
         val title = when (page) {
             OptionsPage.Main -> "Options"
-            OptionsPage.Sound -> "Sound"
-            OptionsPage.Language -> "Channel language"
+            OptionsPage.Language -> "Language"
             OptionsPage.Quality -> "Picture quality"
             OptionsPage.Aspect -> "Aspect"
             OptionsPage.Voice -> "Voice boost"
@@ -145,12 +146,16 @@ internal fun OptionsPanel(
         when (page) {
             OptionsPage.Main -> {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    OptionRow("Sound", model.soundLabel, rowH, Modifier.focusRequester(first).focusRequester(subFocus.getValue(OptionsPage.Sound))) { open(OptionsPage.Sound) }
-                    if (model.langChoices.size > 1) {
-                        val lang = model.langChoices.firstOrNull { it.first == model.langCurrent }?.second ?: ""
-                        OptionRow("Channel language", lang, rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Language))) { open(OptionsPage.Language) }
+                    val pickable = model.langChoices.size > 1
+                    if (pickable) {
+                        OptionRow("Language", model.langLabel, rowH, Modifier.focusRequester(first).focusRequester(subFocus.getValue(OptionsPage.Language))) { open(OptionsPage.Language) }
+                    } else {
+                        InfoRow("Language", model.langLabel, rowH)
                     }
-                    OptionRow("Picture quality", qualityLabel(model.quality), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Quality))) { open(OptionsPage.Quality) }
+                    OptionRow(
+                        "Picture quality", qualityLabel(model.quality), rowH,
+                        (if (pickable) Modifier else Modifier.focusRequester(first)).focusRequester(subFocus.getValue(OptionsPage.Quality)),
+                    ) { open(OptionsPage.Quality) }
                     OptionRow("Aspect", aspectLabel(model.aspect), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Aspect))) { open(OptionsPage.Aspect) }
                     OptionRow("Voice boost", voiceLabel(model.voice), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Voice))) { open(OptionsPage.Voice) }
                     OptionRow("Auto volume", if (model.autoVolume) "On" else "Off", rowH) { actions.toggleAutoVolume() }
@@ -165,7 +170,6 @@ internal fun OptionsPanel(
             }
             else -> {
                 val (choices, cur) = when (page) {
-                    OptionsPage.Sound -> model.soundChoices to model.soundCurrent
                     OptionsPage.Language -> model.langChoices to model.langCurrent
                     OptionsPage.Quality -> QUALITY_OPTIONS to model.quality
                     OptionsPage.Aspect -> ASPECT_OPTIONS.map { it.first.toString() to it.second } to model.aspect.toString()
@@ -181,7 +185,6 @@ internal fun OptionsPanel(
                             if (i == curIndex) Modifier.focusRequester(current) else Modifier,
                         ) {
                             when (page) {
-                                OptionsPage.Sound -> actions.pickSound(value)
                                 OptionsPage.Language -> actions.pickLanguage(value)
                                 OptionsPage.Quality -> actions.pickQuality(value)
                                 OptionsPage.Aspect -> actions.pickAspect(value.toInt())
@@ -207,6 +210,16 @@ private fun OptionRow(label: String, value: String, h: Dp, modifier: Modifier = 
             JText(label, 18.sp, color = if (focused) c.invTx else c.tx, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             if (value.isNotEmpty()) JText(value, 16.sp, color = if (focused) c.invTx else c.t2)
         }
+    }
+}
+
+/** A fact, not a choice (one language only): never focusable, so the D-pad skips it. */
+@Composable
+private fun InfoRow(label: String, value: String, h: Dp) {
+    val c = Jtv.colors
+    Row(Modifier.fillMaxWidth().height(h).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        JText(label, 18.sp, color = c.tx, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        JText(value, 16.sp, color = c.t2)
     }
 }
 
@@ -257,7 +270,7 @@ internal fun QuickMenu(
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             OptionRow("Favourite", if (model.favourite) "On" else "Off", rowH, Modifier.focusRequester(first)) { actions.toggleFavourite() }
-            OptionRow("Sound", model.soundLabel, rowH) { onOpenPage(OptionsPage.Sound) }
+            if (model.langChoices.size > 1) OptionRow("Language", model.langLabel, rowH) { onOpenPage(OptionsPage.Language) }
             OptionRow("Picture quality", qualityLabel(model.quality), rowH) { onOpenPage(OptionsPage.Quality) }
             OptionRow("Aspect", aspectLabel(model.aspect), rowH) { onOpenPage(OptionsPage.Aspect) }
             OptionRow(if (model.paused) "Play" else "Pause", "", rowH) { actions.togglePause(); onClose() }
