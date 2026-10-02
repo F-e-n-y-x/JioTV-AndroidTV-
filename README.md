@@ -223,6 +223,15 @@ The **"Everyday"** redesign for TV, phone and tablet:
 - A Recent category.
 - Wi-Fi favourites sync with "Play on TV", plus favourites backup.
 
+### v1.5.9
+- **Streams no longer stop with Voice Boost off** (reported by @sant009m in #3). With Voice Boost
+  and Auto Volume both off, the audio effect JTV keeps on the stream sat at exactly zero gain, which
+  some TV boxes treat as idle. It now uses a tiny gain you can't hear (0.1 dB), the same active state
+  as Low and above.
+- **Automatic recovery if a stream freezes.** If the picture and sound stop without an error or a
+  spinner, JTV now notices within about 8 seconds. It first restarts the audio and, if that doesn't
+  help, reloads the same channel.
+
 ### v1.5.8
 - **Hold OK now keeps the menu open** (reported in issue #1). On remotes without a mouse, releasing a
   held OK used to count as a click: the channel opened at once and the menu disappeared, so you

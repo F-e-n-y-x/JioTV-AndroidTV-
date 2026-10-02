@@ -62,8 +62,10 @@ class DialogueAudioProcessor : BaseAudioProcessor() {
         }
     }
 
-    private fun recompute() {
-        val lvl = level
+    private fun recompute(lvl: Int) {
+        // Coming back from Off (or after a reconfigure), the filters' history is stale: start clean
+        // so the first processed samples don't carry an old transient.
+        if (appliedLevel <= 0) { hpSide.reset(); presenceMid.reset() }
         when (lvl) {
             1 -> { sideGain = 0.80f; midGain = 1.00f; presenceMid.setPeaking(2600f, 0.9f, 3.0f, sampleRate) }
             2 -> { sideGain = 0.65f; midGain = 1.00f; presenceMid.setPeaking(2600f, 0.9f, 4.5f, sampleRate) }
@@ -80,19 +82,29 @@ class DialogueAudioProcessor : BaseAudioProcessor() {
         val position = inputBuffer.position()
         val limit = inputBuffer.limit()
         val size = limit - position
+        // Read the (volatile, UI-thread-written) level ONCE per buffer, so a buffer is never checked
+        // at one level and processed with another's coefficients.
+        val lvl = level
+        if (lvl != appliedLevel) recompute(lvl)
+        // The output is always exactly the input size at every level, so the sink's frame accounting
+        // is identical whether Voice Boost is on or off.
         val output = replaceOutputBuffer(size)
 
-        if (level == 0) {
+        if (lvl == 0) {
+            // Pass-through (verified correct): ByteBuffer.put(src) copies position..limit and advances
+            // the input's position to its limit, which is what BaseAudioProcessor requires (an input
+            // that isn't fully consumed is re-queued by the sink). A byte-for-byte copy doesn't depend
+            // on byte order, and replaceOutputBuffer() has already set native order on the output.
             output.put(inputBuffer)
             output.flip()
             return
         }
-        if (level != appliedLevel) recompute()
 
         val mg = midGain
         val sg = sideGain
         var i = position
-        while (i < limit) {
+        val frameEnd = limit - 3 // whole 4-byte stereo frames only; never read past the limit
+        while (i < frameEnd) {
             val l = inputBuffer.getShort(i).toInt()
             val r = inputBuffer.getShort(i + 2).toInt()
             val mid = (l + r) * 0.5f
@@ -103,6 +115,9 @@ class DialogueAudioProcessor : BaseAudioProcessor() {
             output.putShort(clamp16(midOut - sideOut))
             i += 4
         }
+        // A trailing partial frame can't occur for 16-bit stereo PCM, but if it ever did, copy it
+        // verbatim so the output still matches the input size.
+        while (i < limit) { output.put(inputBuffer.get(i)); i++ }
         inputBuffer.position(limit)
         output.flip()
     }

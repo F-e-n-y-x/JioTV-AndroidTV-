@@ -550,6 +550,67 @@ fun TvPlayerScreen(
         }
     }
 
+    // READY-state stall watchdog (issue #3). The buffering watchdog above only acts in STATE_BUFFERING,
+    // but a stream can also just stop in STATE_READY: no error, no spinner, the clock simply stops
+    // (e.g. the AudioTrack stops consuming, so the audio clock that drives video stops too). One cheap
+    // coroutine samples progress every 2 s while playback should be running; after 8 s with no
+    // progress it re-attaches the audio effect (audioKick), and if that hasn't helped 6 s later it
+    // soft re-prepares the same channel (streamRefreshTrigger). It reuses the per-channel kickCount and
+    // the retryCount budget, so it can't loop faster than the existing recovery.
+    LaunchedEffect(exoPlayer, playingChannel) {
+        if (playingChannel == null) return@LaunchedEffect
+        val detector = com.fenyx.jtv.player.PlaybackStallDetector()
+        val window = androidx.media3.common.Timeline.Window()
+        while (true) {
+            delay(2_000)
+            val shouldBePlaying = exoPlayer.playWhenReady &&
+                exoPlayer.playbackState == Player.STATE_READY &&
+                !userPaused && playbackError == null
+            // For live HLS/DASH the position inside the sliding window can stay roughly constant
+            // (the window moves with us), so measure the position in the period instead.
+            val timeline = exoPlayer.currentTimeline
+            val windowOffsetMs = if (!timeline.isEmpty) {
+                timeline.getWindow(exoPlayer.currentMediaItemIndex, window).positionInFirstPeriodMs
+            } else 0L
+            val positionMs = exoPlayer.currentPosition + windowOffsetMs
+            val frames = exoPlayer.videoDecoderCounters?.let {
+                it.ensureUpdated(); it.renderedOutputBufferCount.toLong()
+            } ?: -1L
+            when (detector.onSample(android.os.SystemClock.elapsedRealtime(), shouldBePlaying, positionMs, frames)) {
+                com.fenyx.jtv.player.PlaybackStallDetector.Action.KICK_AUDIO -> {
+                    if (kickCount.intValue < 3) {
+                        kickCount.intValue++
+                        android.util.Log.w("TvPlayer", "Stall watchdog: no progress in READY at ${positionMs}ms, audio kick ${kickCount.intValue}")
+                        audioKick++
+                    } else {
+                        // Kick budget for this channel is used up: go straight to the re-prepare step.
+                        android.util.Log.w("TvPlayer", "Stall watchdog: no progress in READY at ${positionMs}ms, kicks exhausted")
+                        if (retryCount.intValue < 5) {
+                            retryCount.intValue++
+                            android.util.Log.w("TvPlayer", "Stall watchdog: re-prepare ${retryCount.intValue}")
+                            streamRefreshTrigger++
+                        } else {
+                            playbackError = "Playback stopped. Press OK to retry."
+                        }
+                        detector.reset()
+                    }
+                }
+                com.fenyx.jtv.player.PlaybackStallDetector.Action.REPREPARE -> {
+                    if (retryCount.intValue < 5) {
+                        retryCount.intValue++
+                        android.util.Log.w("TvPlayer", "Stall watchdog: still stuck after audio kick, re-prepare ${retryCount.intValue}")
+                        streamRefreshTrigger++
+                    } else {
+                        android.util.Log.w("TvPlayer", "Stall watchdog: recovery exhausted")
+                        playbackError = "Playback stopped. Press OK to retry."
+                    }
+                    detector.reset()
+                }
+                com.fenyx.jtv.player.PlaybackStallDetector.Action.NONE -> Unit
+            }
+        }
+    }
+
     // ─── Transparent token refresh ───
     // The Jio `__hdnea__` token expires ~120s after issue. This loop fetches a fresh stream URL a few
     // seconds BEFORE expiry and publishes the new token to tokenHolder, so the ResolvingDataSource
