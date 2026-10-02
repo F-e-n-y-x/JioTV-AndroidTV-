@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -313,8 +314,9 @@ fun GuideScreen(
                     Modifier
                         .fillMaxSize()
                         .clipToBounds()
-                        // Low-opacity now-line, behind the cells so it never cuts through names.
-                        .drawBehind {
+                        // Now-line drawn OVER the cells (owner's choice), kept at low opacity so names stay readable.
+                        .drawWithContent {
+                            drawContent()
                             if (nowX in 0f..timelinePx) {
                                 val w = 2.dp.toPx()
                                 drawRect(nowLineColor, Offset(frozenPx + nowX - w / 2, 0f), Size(w, size.height))
