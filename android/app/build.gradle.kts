@@ -148,7 +148,7 @@ dependencies {
   baselineProfile(project(":baselineprofile"))
 }
 
-// v2 lab convenience: after every debug build, copy the APK to the folder named by the
+// Dev convenience: after every debug build, copy the APK to the folder named by the
 // `jtvLabApkDir` Gradle property (set per machine in ~/.gradle/gradle.properties, not in the repo).
 providers.gradleProperty("jtvLabApkDir").orNull?.let { labDir ->
   tasks.matching { it.name == "assembleDebug" }.configureEach {
@@ -156,8 +156,8 @@ providers.gradleProperty("jtvLabApkDir").orNull?.let { labDir ->
       val apk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile
       if (apk.exists()) {
         val dest = file(labDir).apply { mkdirs() }
-        apk.copyTo(dest.resolve("JTV-v2-design-lab-latest.apk"), overwrite = true)
-        println("Design lab APK copied to ${dest.resolve("JTV-v2-design-lab-latest.apk")}")
+        apk.copyTo(dest.resolve("JTV-v2-debug-latest.apk"), overwrite = true)
+        println("Design lab APK copied to ${dest.resolve("JTV-v2-debug-latest.apk")}")
       }
     }
   }
