@@ -80,11 +80,14 @@
 
 Your order is used everywhere, including the player: press ← twice while watching and ★ Favorites is the first category, and CH+/CH− follow your order.
 
+4. **Back up and restore**: in **Settings → Favourites**, choose **Back Up Favourites** to save them to `Downloads/JTV-favourites-backup.json`. The file stays after you uninstall JTV. After a fresh install, choose **Restore Favourites**. If Android asks, pick that file. On TV boxes without a file picker, open the file with JTV from any file manager. Restoring adds the backed-up channels to the ones you already have.
+
 <div align="center">
   <img src="screenshot/v154_favorites_grid.png" width="48%" alt="Favorites grid" />
   <img src="screenshot/v154_favorites_menu.png" width="48%" alt="Hold-OK menu in Favorites" />
   <img src="screenshot/v154_move_mode.png" width="48%" alt="Moving a favorite" />
   <img src="screenshot/v154_hold_ok_menu.png" width="48%" alt="Add to favorites from any channel" />
+  <img src="screenshot/v158_favourites_backup.png" width="48%" alt="Back up and restore favourites in Settings" />
 </div>
 
 ---
@@ -191,6 +194,16 @@ Then build the signed, minified release (~3–4 MB):
 ---
 
 ## 📝 Changelog
+
+### v1.5.8
+- **Hold OK now keeps the menu open** (reported in issue #1). On remotes without a mouse, releasing a
+  held OK used to count as a click: the channel opened at once and the menu disappeared, so you
+  couldn't pick **Add to Favorites** or **Move**. Now the menu stays open until you press OK on the
+  option you want.
+- **Back up and restore favourites.** In **Settings → Favourites**, save your favourites to
+  `Downloads/JTV-favourites-backup.json` and restore them after reinstalling. Restore adds to your
+  current favourites and never deletes any. On boxes without a file picker, open the backup file
+  with JTV from a file manager.
 
 ### v1.5.7
 - **Stays signed in even if Jio drops the session.** If Jio ever rejects the saved login, JTV now
