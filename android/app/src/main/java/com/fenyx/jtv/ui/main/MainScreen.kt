@@ -58,6 +58,7 @@ fun MainScreen(
     onChannelClick: (Int, String?) -> Unit,
     onSettingsClick: () -> Unit,
     onSearchClick: () -> Unit = {},
+    onDesignLabClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: MainViewModel = viewModel()
 ) {
@@ -233,6 +234,19 @@ fun MainScreen(
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = TvOnSurfaceVariant, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Text("Refresh", color = TvOnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            // Debug builds only: entry to the v2 Design Lab prototypes.
+            if (onDesignLabClick != null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                    onClick = onDesignLabClick,
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
+                    colors = ClickableSurfaceDefaults.colors(containerColor = Color.Transparent, focusedContainerColor = TvDarkSurfaceVariant)
+                ) {
+                    Text("Design lab (v2)", color = TvOnSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
                 }
             }
 
