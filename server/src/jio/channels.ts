@@ -13,10 +13,10 @@ export interface Channel {
 
 // JioTV language-id → name (well-known ids).
 const JIO_LANG: Record<string, string> = {
-  "1": "Hindi", "2": "Marathi", "3": "Punjabi", "4": "Urdu", "5": "Tamil", "6": "English",
-  "7": "Malayalam", "8": "Telugu", "9": "Bengali", "10": "Kannada", "11": "Oriya",
-  "12": "Gujarati", "13": "Assamese", "14": "Nepali", "15": "French", "16": "Bhojpuri",
-  "17": "Kokborok", "18": "Odia", "19": "Rajasthani", "23": "Arabic",
+  // Jio's languageIdMapping (apis/v1.3/dictionary/dictionary); the old table had 10 ids wrong.
+  "1": "Hindi", "2": "Marathi", "3": "Punjabi", "4": "Urdu", "5": "Bengali", "6": "English",
+  "7": "Malayalam", "8": "Tamil", "9": "Gujarati", "10": "Odia", "11": "Telugu",
+  "12": "Bhojpuri", "13": "Kannada", "14": "Assamese", "15": "Nepali", "16": "French",
 };
 
 const CHANNEL_TTL_MS = 24 * 60 * 60 * 1000;
