@@ -141,6 +141,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val updateAvailable = updateInfo?.isUpdateAvailable == true
 
     // ─── Rows (built as data so the list stays a flat, keyed LazyColumn) ───
+    val backup = rememberFavoritesBackup { id -> mainViewModel.getAllChannels().firstOrNull { it.id == id }?.name }
     val rows: List<SRow> = buildList {
         add(SRow.Section("General"))
         add(SRow.Item("theme", "Appearance", value = themes.first { it.first == themeValue }.second) { sheet = Sheet.Theme })
@@ -177,6 +178,12 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             description = "One entry per channel; pick the language while watching") {
             scope.launch { settingsManager.setGroupLanguageVariants(!groupLanguageVariants) }
         })
+
+        add(SRow.Section("Favourites backup"))
+        add(SRow.Item("favSave", "Back up favourites", value = "Save",
+            description = "Saves them to Downloads, to restore after reinstalling") { backup.save() })
+        add(SRow.Item("favRestore", "Restore favourites", value = "Restore",
+            description = "Adds the favourites from your backup file") { backup.restore() })
 
         add(SRow.Section("Devices"))
         add(SRow.Item("devName", "This device's name", value = deviceName) { showNameDialog = true })
