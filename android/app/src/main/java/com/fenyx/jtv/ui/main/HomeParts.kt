@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -258,7 +259,14 @@ fun TvTabs(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier 
             val sel = tab == selected
             JtvClickable(
                 onClick = { if (!sel) onSelect(tab) },
-                modifier = Modifier.height(40.dp),
+                // Underline drawn behind (a fillMaxWidth child would stretch the tab across the header).
+                modifier = Modifier.height(40.dp).then(
+                    if (sel) Modifier.drawBehind {
+                        val w = size.width * 0.7f
+                        drawRect(c.acc, topLeft = androidx.compose.ui.geometry.Offset((size.width - w) / 2, size.height - 2.dp.toPx()),
+                            size = androidx.compose.ui.geometry.Size(w, 2.dp.toPx()))
+                    } else Modifier
+                ),
                 container = if (sel) c.s2 else Color.Transparent,
             ) { focused ->
                 Row(Modifier.align(Alignment.Center).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -266,7 +274,6 @@ fun TvTabs(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier 
                     Box(Modifier.width(8.dp))
                     Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1)
                 }
-                if (sel && !focused) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.7f).height(2.dp).background(c.acc))
             }
         }
     }
