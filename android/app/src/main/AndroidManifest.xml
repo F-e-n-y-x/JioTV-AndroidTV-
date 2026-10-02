@@ -30,6 +30,10 @@
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:theme="@style/Theme.JioTVGoTV">
+        <receiver
+            android:name=".data.TokenRefreshReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

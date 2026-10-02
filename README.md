@@ -192,6 +192,17 @@ Then build the signed, minified release (~3–4 MB):
 
 ## 📝 Changelog
 
+### v1.5.6
+- **Streams no longer stop after a while** (issue #3). Jio's login has a 12-hour access token and a
+  refresh token that breaks if it's used several times at once. JTV used to refresh only *after* the
+  token had expired, and also on every channel Jio refuses (each Zee channel press), sometimes in
+  parallel. That eventually made Jio reject the refresh token, and only a new sign-in helped.
+  Now the app and the server:
+  - refresh **before** the token expires (and in the background while the TV is idle),
+  - allow **only one refresh at a time**,
+  - never refresh because of a refused channel,
+  - and, if Jio does end the session, say so clearly ("sign in again") instead of retrying forever.
+
 ### v1.5.5
 - **More Zee channels play again.** Zee Bangla, Zee Tamil, Zee Yuva, Zee Cinemalu, Zee Sarthak,
   Zee Classic and Zee Bangla Sonar were failing because Jio sends a broken DASH link for them. JTV now

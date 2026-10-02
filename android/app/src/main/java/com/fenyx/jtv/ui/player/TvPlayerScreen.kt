@@ -486,7 +486,10 @@ fun TvPlayerScreen(
                 android.util.Log.e("TvPlayer", "Failed to fetch stream: $fetchErr")
                 // Jio refusing the channel, or its stream being gone from the CDN, won't fix itself in
                 // the next few seconds — say so at once instead of retrying 5x and then blaming the login.
-                if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException ||
+                if (fetchEx is com.fenyx.jtv.data.JioApiClient.SessionExpiredException) {
+                    isBuffering = false
+                    playbackError = fetchErr
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException ||
                     fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
                     isBuffering = false
                     playbackError = "$fetchErr\n\nPress OK to retry, or CH+/CH− for another channel."

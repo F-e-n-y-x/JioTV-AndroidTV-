@@ -1,8 +1,8 @@
 import { getStreamData, GeturlAuthError, type StreamData, type CatchupParams } from "../jio/stream";
 import type { AuthData } from "../jio/types";
 import { extractHdneaToken, extractTokenExpiryEpochSec } from "../jio/hdnea";
-import { refreshTokens } from "../jio/tokens";
-import { getStoredCredentials, updateTokens } from "../store/db";
+import { refreshNow } from "../refresh";
+import { getStoredCredentials } from "../store/db";
 
 interface CachedStream {
   key: string;
@@ -85,9 +85,14 @@ async function resolve(key: string): Promise<CachedStream> {
   } catch (e) {
     if (e instanceof GeturlAuthError) {
       if (e.status === 403) throw blocked();
-      // 401/419 usually means the SSO token went stale — refresh once and retry (like the app).
-      const refreshed = await refreshTokens(creds);
-      updateTokens(refreshed, Date.now());
+      // 401/419 means the access token is stale — refresh once (shared, single-flight) and retry.
+      // If another request already refreshed while this one was in flight, just use the new token.
+      const latest = getStoredCredentials();
+      const r = latest && latest.authToken !== creds.authToken ? { ok: true } : await refreshNow({ force: true });
+      const refreshed = getStoredCredentials();
+      if (!r.ok || !refreshed || refreshed.authToken === creds.authToken) {
+        throw markDead(new Error(r.error ?? "The Jio sign-in on this server has expired — sign in again on the Account page."));
+      }
       activeCreds = refreshed;
       try {
         data = await getStreamData(channelId, refreshed, opts);

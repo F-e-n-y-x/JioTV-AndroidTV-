@@ -167,7 +167,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/api/admin/refresh", { preHandler: requireAdmin }, async (_req, reply) => {
-    const r = await refreshNow();
+    const r = await refreshNow({ force: true });
     if (!r.ok) return reply.code(400).send({ error: r.error ?? "Refresh failed" });
     return { ok: true };
   });
@@ -193,9 +193,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // ── Machine endpoint: a TV can FORCE a token refresh and get the fresh credentials in one call.
   // Protected by the same access code as /api/credentials so a TV (which only has its code) can use it
-  // from the app's "Refresh from Server" button or to self-heal when a stream 401s. We still return the
-  // stored credentials even if the upstream refresh had a transient failure, because the existing token
-  // is usually still valid — the TV can retry the refresh later.
+  // from the app's "Refresh from Server" button or to self-heal when a stream 401s. This only calls Jio
+  // when the stored token is actually close to expiry (see refresh.ts), so many TVs asking at once can't
+  // wear out the refresh token. The stored credentials are returned either way.
   app.post("/api/refresh", { preHandler: requireServerToken }, async (_req, reply) => {
     const r = await refreshNow();
     const c = getStoredCredentials();

@@ -4,6 +4,7 @@ import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -47,6 +48,35 @@ object JioApiClient {
         // refreshtoken endpoint. Empty for server-mode logins (the server refreshes centrally).
         val refreshToken: String = ""
     )
+
+    /** Jio rejected our refresh (e.g. "refresh token not found"): only a new sign-in fixes it. */
+    class SessionExpiredException(message: String) : Exception(message)
+
+    /** Thrown inside [refreshToken] when Jio's token service answers 4xx (as opposed to a network error). */
+    private class RefreshRejectedException(message: String) : Exception(message)
+
+    /**
+     * Only one credential refresh may run at a time. Jio's refresh token is fragile: firing several
+     * refreshes at once (parallel 401s, a retry storm) can leave it "not found", after which nothing
+     * but a new OTP sign-in works — the "streams stop after a while" bug (issue #3).
+     */
+    private val refreshMutex = kotlinx.coroutines.sync.Mutex()
+
+    /** Last ahead-of-time refresh attempt, so a failing refresh isn't retried on every stream request. */
+    @Volatile private var lastProactiveRefreshMs = 0L
+    private const val PROACTIVE_RETRY_GAP_MS = 10 * 60 * 1000L
+
+    /** Refresh the 12 h access token once it has less than this left, while it's still valid. */
+    private const val ACCESS_TOKEN_REFRESH_LEAD_SEC = 2 * 60 * 60L
+
+    /** `exp` claim (epoch seconds) of a JWT, or 0 when it can't be read. */
+    fun jwtExpirySec(token: String): Long = try {
+        val part = token.split(".").getOrNull(1) ?: ""
+        val json = String(Base64.decode(part, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP))
+        JSONObject(json).optLong("exp", 0L)
+    } catch (e: Exception) {
+        0L
+    }
 
     /** Jio refused this one channel (geturl 403 even with fresh credentials). Not a login problem. */
     class ChannelBlockedException(message: String) : Exception(message)
@@ -261,9 +291,12 @@ object JioApiClient {
                     return@withContext Result.success(true)
                 }
             }
+            val code = connection.responseCode
             val errText = readResponseBody(connection, isError = true)
-            Log.e(TAG, "Refresh failed ${connection.responseCode}: $errText")
-            Result.failure(Exception("Refresh failed with code ${connection.responseCode}"))
+            Log.e(TAG, "Refresh failed $code: $errText")
+            val jioMessage = runCatching { JSONObject(errText).optString("message") }.getOrNull().orEmpty()
+            if (code in 400..499) Result.failure(RefreshRejectedException("Refresh rejected ($code): $jioMessage"))
+            else Result.failure(Exception("Refresh failed with code $code"))
         } catch (e: Exception) {
             Log.e(TAG, "Exception in refreshToken", e)
             Result.failure(e)
@@ -277,8 +310,17 @@ object JioApiClient {
      *    silently failing once the shared token rotates.
      *  - **phone mode**: use Jio's own refreshtoken endpoint ([refreshToken]).
      */
-    suspend fun refreshCredentials(context: android.content.Context): Result<Boolean> {
+    suspend fun refreshCredentials(
+        context: android.content.Context,
+        failedAuthToken: String? = null
+    ): Result<Boolean> = refreshMutex.withLock {
         val settingsManager = com.fenyx.jtv.data.SettingsManager(context)
+        // Someone else refreshed while we waited for the lock: the token that failed is already
+        // replaced, so don't spend (and risk) another refresh.
+        if (failedAuthToken != null) {
+            val current = settingsManager.authDataFlow.first()
+            if (current != null && current.authToken != failedAuthToken) return@withLock Result.success(true)
+        }
         val mode = settingsManager.setupModeFlow.first()
         return if (mode == "server" || mode == "jtv") {
             val urls = ServerClient.candidateUrls(mode, settingsManager.serverUrlFlow.first())
@@ -292,6 +334,32 @@ object JioApiClient {
             refreshToken(context)
         }
     }
+
+    /**
+     * Refreshes the access token BEFORE it expires (it lives 12 h). Refreshing only after Jio has
+     * already answered 419 is what left long sessions stuck; this runs before every stream request and
+     * from the background alarm, under the same single-refresh lock. Returns the newest credentials.
+     */
+    suspend fun ensureFreshAccessToken(context: android.content.Context): AuthData? {
+        val settingsManager = com.fenyx.jtv.data.SettingsManager(context)
+        val auth = settingsManager.authDataFlow.first() ?: return null
+        val exp = jwtExpirySec(auth.authToken)
+        val nowMs = System.currentTimeMillis()
+        if (exp > 0 && exp - nowMs / 1000 < ACCESS_TOKEN_REFRESH_LEAD_SEC &&
+            nowMs - lastProactiveRefreshMs > PROACTIVE_RETRY_GAP_MS) {
+            lastProactiveRefreshMs = nowMs
+            Log.d(TAG, "Access token expires soon, refreshing ahead of time")
+            refreshCredentials(context, failedAuthToken = auth.authToken)
+            return settingsManager.authDataFlow.first() ?: auth
+        }
+        return auth
+    }
+
+    private fun sessionExpiredMessage(mode: String?): String =
+        if (mode == "server" || mode == "jtv")
+            "The Jio sign-in on your JTV server has expired. Sign in again on the server's web page, then press OK."
+        else
+            "Your Jio sign-in has expired. Open Settings → Logout and sign in again with OTP."
 
     private const val CHANNEL_CACHE_FILE = "channels_cache.json"
     const val CHANNEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000L // 24 hours
@@ -512,6 +580,9 @@ object JioApiClient {
         catchup: CatchupParams? = null
     ): Result<StreamData> = withContext(Dispatchers.IO) {
         try {
+            // Use the newest stored credentials (refreshed ahead of expiry if needed); the caller's copy
+            // may be stale if a refresh happened since it read them.
+            val authData = if (allowRefreshRetry) (ensureFreshAccessToken(context) ?: authData) else authData
             val url = URL("https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
@@ -559,25 +630,31 @@ object JioApiClient {
 
             val responseCode = connection.responseCode
             
-            if ((responseCode == 401 || responseCode == 403 || responseCode == 419) && allowRefreshRetry) {
-                // Token might be expired, try to refresh exactly once (allowRefreshRetry = false on the
-                // recursive call) so a persistently-failing token can never cause infinite recursion.
-                // In server mode this re-pulls fresh credentials from the proxy; in phone mode it uses
-                // Jio's refreshtoken endpoint.
-                Log.d(TAG, "Token expired, attempting refresh...")
-                val refreshResult = refreshCredentials(context)
+            val tokenExpired = responseCode == 401 || responseCode == 419
+            if (tokenExpired && allowRefreshRetry) {
+                // Access token expired: refresh exactly once (allowRefreshRetry = false on the recursive
+                // call). In server mode this re-pulls credentials from the proxy; in phone mode it uses
+                // Jio's refreshtoken endpoint. A 403 is NOT a token problem (see below), so it never
+                // triggers a refresh — every Zee press used to fire one, which wore the token out.
+                Log.d(TAG, "Token expired ($responseCode), attempting refresh...")
+                val refreshResult = refreshCredentials(context, failedAuthToken = authData.authToken)
+                val mode = com.fenyx.jtv.data.SettingsManager(context).setupModeFlow.first()
                 if (refreshResult.isSuccess) {
-                    val settingsManager = com.fenyx.jtv.data.SettingsManager(context)
-                    val newAuthData = settingsManager.authDataFlow.first()
+                    val newAuthData = com.fenyx.jtv.data.SettingsManager(context).authDataFlow.first()
                     if (newAuthData != null) {
                         return@withContext getStreamUrl(context, channelId, newAuthData, allowRefreshRetry = false, catchup = catchup)
                     }
+                } else if (refreshResult.exceptionOrNull() is RefreshRejectedException) {
+                    return@withContext Result.failure(SessionExpiredException(sessionExpiredMessage(mode)))
                 }
+            } else if (tokenExpired) {
+                val mode = com.fenyx.jtv.data.SettingsManager(context).setupModeFlow.first()
+                return@withContext Result.failure(SessionExpiredException(sessionExpiredMessage(mode)))
             }
 
-            // Still 403 after a successful credential refresh: Jio is refusing this specific channel
-            // (e.g. most Zee Entertainment channels since Jio dropped them). Retrying can't fix it.
-            if (responseCode == 403 && !allowRefreshRetry) {
+            // 403 from geturl is per channel: Jio refuses this one (e.g. most Zee Entertainment
+            // channels since Jio dropped them). No refresh or retry can fix it.
+            if (responseCode == 403) {
                 return@withContext Result.failure(ChannelBlockedException(
                     "Jio isn't providing this channel right now (it refused the stream request). " +
                     "This is on Jio's side, not a login problem. Try another channel."
