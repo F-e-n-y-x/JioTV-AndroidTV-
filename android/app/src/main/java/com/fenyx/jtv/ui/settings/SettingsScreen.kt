@@ -95,6 +95,15 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
 
     var sheet by remember { mutableStateOf(Sheet.None) }
 
+    // LAN sync ("Devices")
+    val syncDevices by com.fenyx.jtv.sync.LanSync.devices.collectAsState()
+    val deviceName by com.fenyx.jtv.sync.LanSync.deviceName.collectAsState()
+    val autoSync by com.fenyx.jtv.sync.LanSync.autoSync.collectAsState()
+    val syncStatus by com.fenyx.jtv.sync.LanSync.status.collectAsState()
+    var showPairFlow by remember { mutableStateOf(false) }
+    var showNameDialog by remember { mutableStateOf(false) }
+    var forgetDevice by remember { mutableStateOf<com.fenyx.jtv.sync.LanSync.Device?>(null) }
+
     // Initial focus so the first D-pad press works on entry (previously nothing was focused).
     val firstItemFocus = remember { FocusRequester() }
     // Touch screens get no initial focus highlight; TV lands on the first setting.
@@ -168,6 +177,17 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             description = "One entry per channel; pick the language while watching") {
             scope.launch { settingsManager.setGroupLanguageVariants(!groupLanguageVariants) }
         })
+
+        add(SRow.Section("Devices"))
+        add(SRow.Item("devName", "This device's name", value = deviceName) { showNameDialog = true })
+        add(SRow.Item("devPair", "Sync with another device", value = "",
+            description = "Share favourites with a phone, tablet or TV on the same Wi-Fi") { showPairFlow = true })
+        syncDevices.filter { it.paired }.forEach { d ->
+            add(SRow.Item("dev:${d.id}", d.name, value = "Forget", description = pairedDeviceLine(d)) { forgetDevice = d })
+        }
+        add(SRow.Item("devAuto", "Sync favourites automatically", value = if (autoSync) "On" else "Off",
+            description = "Changes on one device appear on the others") { com.fenyx.jtv.sync.LanSync.setAutoSync(!autoSync) })
+        add(SRow.Item("devNow", "Sync now", value = syncStatus ?: "Sync") { com.fenyx.jtv.sync.LanSync.syncNow() })
 
         add(SRow.Section("If the picture has problems"))
         add(SRow.Item("hw", "Hardware decoder", value = if (hwDecoder) "On" else "Off",
@@ -324,6 +344,20 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             }
             Sheet.None -> Unit
         }
+
+        // ─── Devices (LAN sync) ───
+        if (showPairFlow) SyncWithDeviceDialog(onDismiss = { showPairFlow = false })
+        if (showNameDialog) DeviceNameDialog(deviceName,
+            onSave = { n -> com.fenyx.jtv.sync.LanSync.setDeviceName(n); showNameDialog = false },
+            onDismiss = { showNameDialog = false })
+        forgetDevice?.let { d ->
+            ConfirmDialog(
+                title = "Forget ${d.name}?",
+                message = "Favourites stop syncing with it. You can pair again later.",
+                confirm = "Forget",
+                onConfirm = { com.fenyx.jtv.sync.LanSync.forget(d.id); forgetDevice = null },
+                onDismiss = { forgetDevice = null })
+        }
     }
 }
 
@@ -454,7 +488,7 @@ fun SettingsItem(
 // ───────────────────────── Dialogs ─────────────────────────
 
 @Composable
-private fun DialogPanel(onDismiss: () -> Unit, width: androidx.compose.ui.unit.Dp = 480.dp, content: @Composable ColumnScope.() -> Unit) {
+internal fun DialogPanel(onDismiss: () -> Unit, width: androidx.compose.ui.unit.Dp = 480.dp, content: @Composable ColumnScope.() -> Unit) {
     val c = Jtv.colors
     val isPhone = Jtv.form == FormFactor.Phone
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {

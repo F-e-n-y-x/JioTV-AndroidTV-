@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -165,6 +166,15 @@ internal fun OptionsPanel(
                         OptionRow("Refresh sign-in", if (model.refreshing) "Refreshing" else "Refresh", rowH) { actions.refreshLogin() }
                     }
                     OptionRow("Settings", "", rowH) { actions.openSettings() }
+                    // LAN sync: send this channel to a paired TV on the same Wi-Fi (phone/tablet only).
+                    if (touch && channel != null) {
+                        val tvs by com.fenyx.jtv.sync.LanSync.playTargets.collectAsState()
+                        tvs.forEach { tv ->
+                            OptionRow("Play on ${tv.name}", "", rowH) {
+                                com.fenyx.jtv.sync.LanSync.playOn(tv.id, channel.id); onClose()
+                            }
+                        }
+                    }
                     if (touch) OptionRow("Close", "", rowH) { onClose() }
                 }
             }

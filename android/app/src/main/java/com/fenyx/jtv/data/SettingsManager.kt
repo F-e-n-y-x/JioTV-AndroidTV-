@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -32,6 +33,8 @@ class SettingsManager(private val context: Context) {
         private val EPG_MODE = booleanPreferencesKey("epg_mode")
         private val EPG_URL = stringPreferencesKey("epg_url")
         private val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
+        // When the favourites list last changed (wall clock ms). LAN sync: the newer list wins.
+        private val FAVORITES_UPDATED_AT = longPreferencesKey("favorites_updated_at")
         
         private val AUTH_SSO_TOKEN = stringPreferencesKey("auth_sso_token")
         private val AUTH_AUTH_TOKEN = stringPreferencesKey("auth_auth_token")
@@ -166,6 +169,31 @@ class SettingsManager(private val context: Context) {
 
     val favoriteChannelsFlow: Flow<Set<String>> = favoriteOrderFlow.map { it.toSet() }
 
+    /** Favourites plus when they last changed, for LAN sync. */
+    val favoritesSnapshotFlow: Flow<com.fenyx.jtv.sync.FavoritesSnapshot> = context.dataStore.data.map { p ->
+        com.fenyx.jtv.sync.FavoritesSnapshot(parseFavorites(p[FAVORITE_CHANNELS]), p[FAVORITES_UPDATED_AT] ?: 0L)
+    }
+
+    /**
+     * Applies favourites that came from another device, keeping their timestamp, but only when they are
+     * newer than ours (checked inside the same transaction). Returns true when they were applied.
+     */
+    suspend fun applySyncedFavorites(ids: List<String>, updatedAt: Long): Boolean {
+        var applied = false
+        context.dataStore.edit { p ->
+            if (updatedAt > (p[FAVORITES_UPDATED_AT] ?: 0L)) {
+                p[FAVORITE_CHANNELS] = ids.filter { it.isNotBlank() }.distinct().joinToString(",")
+                p[FAVORITES_UPDATED_AT] = updatedAt
+                applied = true
+            }
+        }
+        return applied
+    }
+
+    private fun stampFavorites(p: androidx.datastore.preferences.core.MutablePreferences) {
+        p[FAVORITES_UPDATED_AT] = com.fenyx.jtv.sync.FavoritesSync.nextStamp(p[FAVORITES_UPDATED_AT] ?: 0L, System.currentTimeMillis())
+    }
+
     val authDataFlow: Flow<JioApiClient.AuthData?> = context.dataStore.data.map { preferences ->
         val ssoToken = preferences[AUTH_SSO_TOKEN]
         if (ssoToken.isNullOrEmpty()) {
@@ -286,13 +314,18 @@ class SettingsManager(private val context: Context) {
             val list = parseFavorites(preferences[FAVORITE_CHANNELS]).toMutableList()
             if (!list.remove(channelId)) list.add(channelId)
             preferences[FAVORITE_CHANNELS] = list.joinToString(",")
+            stampFavorites(preferences)
         }
     }
 
     /** Replaces the whole favorites order (used by the reorder / sort-by-category actions). */
     suspend fun setFavoriteOrder(ids: List<String>) {
         context.dataStore.edit { preferences ->
-            preferences[FAVORITE_CHANNELS] = ids.filter { it.isNotBlank() }.distinct().joinToString(",")
+            val joined = ids.filter { it.isNotBlank() }.distinct().joinToString(",")
+            if (joined != preferences[FAVORITE_CHANNELS].orEmpty()) {
+                preferences[FAVORITE_CHANNELS] = joined
+                stampFavorites(preferences)
+            }
         }
     }
 

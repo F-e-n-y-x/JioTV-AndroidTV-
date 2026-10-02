@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
                     colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.background)
                 ) {
                     MainNavigation()
+                    // LAN sync: "Pair with <device>? Code 1234" when another device asks, on any screen.
+                    com.fenyx.jtv.ui.settings.PairRequestHost()
                 }
             }
         }

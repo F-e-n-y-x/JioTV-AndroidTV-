@@ -12,6 +12,8 @@ class JioTvApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         // Keep the Jio access token fresh in the background (see TokenRefreshScheduler).
         com.fenyx.jtv.data.TokenRefreshScheduler.schedule(this)
+        // Device-to-device sync over the home Wi-Fi; runs only while the app is in the foreground.
+        com.fenyx.jtv.sync.LanSync.init(this)
     }
 
     override fun newImageLoader(): ImageLoader {

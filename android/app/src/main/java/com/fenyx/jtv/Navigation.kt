@@ -105,6 +105,18 @@ fun MainNavigation() {
         }
     }
 
+    // ── LAN sync: "Play on TV" from a paired phone opens the player on that channel. ──
+    // (One self-contained block so it merges easily with other Navigation changes.)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.fenyx.jtv.sync.LanSync.playRequests.collect { channelId ->
+            val index = mainViewModel.displayChannels.value.indexOfFirst { it.id == channelId }
+            if (index >= 0) {
+                if (backStack.lastOrNull() is Player) backStack.removeAt(backStack.lastIndex)
+                backStack.add(Player(channelIndex = index))
+            }
+        }
+    }
+
     // Onboarding router. When not logged in, pick the setup flow from the chosen method:
     //  - not chosen yet (first boot) -> Setup chooser
     //  - "phone" -> OTP LoginScreen (with a way back to the chooser)
