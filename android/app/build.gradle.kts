@@ -151,16 +151,21 @@ dependencies {
   baselineProfile(project(":baselineprofile"))
 }
 
-// Dev convenience: after every debug build, copy the APK to the folder named by the
-// `jtvLabApkDir` Gradle property (set per machine in ~/.gradle/gradle.properties, not in the repo).
+// Dev convenience: after every RELEASE build (fast, minified, release-signed), copy the APK to the folder
+// named by the `jtvLabApkDir` Gradle property (set per machine in ~/.gradle/gradle.properties, not in the
+// repo) as JTV-v<versionName>-build<N>.apk, where N counts up on this machine (~/.gradle/jtv-build-number).
 providers.gradleProperty("jtvLabApkDir").orNull?.let { labDir ->
-  tasks.matching { it.name == "assembleDebug" }.configureEach {
+  tasks.matching { it.name == "assembleRelease" }.configureEach {
     doLast {
-      val apk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile
+      val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
       if (apk.exists()) {
+        val counter = File(System.getProperty("user.home"), ".gradle/jtv-build-number")
+        val n = (counter.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() ?: 0) + 1
+        counter.writeText(n.toString())
         val dest = file(labDir).apply { mkdirs() }
-        apk.copyTo(dest.resolve("JTV-v2-debug-latest.apk"), overwrite = true)
-        println("Design lab APK copied to ${dest.resolve("JTV-v2-debug-latest.apk")}")
+        val out = dest.resolve("JTV-v${android.defaultConfig.versionName}-build$n.apk")
+        apk.copyTo(out, overwrite = true)
+        println("Release APK copied to $out")
       }
     }
   }
