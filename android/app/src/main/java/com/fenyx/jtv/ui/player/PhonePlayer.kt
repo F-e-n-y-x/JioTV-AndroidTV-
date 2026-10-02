@@ -260,10 +260,7 @@ private fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
     val c = Jtv.colors
     val now = LocalNow.current
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
-        JText(
-            if (ch.channelNumber > 0) "${ch.channelNumber}  ${ch.name}" else ch.name,
-            14.sp, color = c.t2, weight = FontWeight.SemiBold,
-        )
+        // Channel number + name are already on the amber tag over the video, so the card starts with the show.
         if (cur == null) {
             JText(ch.name, 20.sp, weight = FontWeight.Bold, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
             val sub = listOfNotNull(ch.group, language).filter { it.isNotBlank() }.distinct().joinToString(" · ")

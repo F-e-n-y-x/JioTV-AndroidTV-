@@ -405,15 +405,15 @@ internal fun CategoryChips(
             val isSel = g == sel
             JtvClickable(
                 onClick = { onPick(g) },
-                modifier = Modifier.height(56.dp),
+                modifier = Modifier.height(if (Jtv.isTv) 56.dp else 40.dp),
                 shape = RoundedCornerShape(28.dp),
                 container = if (isSel) c.inv else if (overVideo) StrapBg else c.s1,
             ) { focused ->
                 JText(
-                    groupLabel(g), 16.sp,
+                    groupLabel(g), if (Jtv.isTv) 16.sp else 14.sp,
                     color = if (isSel || focused) c.invTx else c.tx,
                     weight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
-                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 18.dp),
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = if (Jtv.isTv) 18.dp else 14.dp),
                 )
             }
         }
