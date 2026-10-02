@@ -28,6 +28,7 @@ export async function fetchOffset(channelId: string, offset: number): Promise<Ep
         os: jio.OS,
         devicetype: jio.DEVICE_TYPE,
       },
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return [];
     const json = (await res.json()) as any;

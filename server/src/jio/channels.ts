@@ -26,7 +26,7 @@ async function fetchDictionary(): Promise<Record<string, string>> {
   try {
     const res = await fetch(
       "https://jiotvapi.cdn.jio.com/apis/v1.3/dictionary/dictionary?langId=6",
-      { headers: { "User-Agent": jio.USER_AGENT } }
+      { headers: { "User-Agent": jio.USER_AGENT }, signal: AbortSignal.timeout(15_000) }
     );
     if (!res.ok) return {};
     const json = (await res.json()) as any;
@@ -38,7 +38,7 @@ async function fetchDictionary(): Promise<Record<string, string>> {
 
 async function fetchChannelPage(url: string, categoryMap: Record<string, string>, out: Map<number, Channel>) {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": jio.USER_AGENT } });
+    const res = await fetch(url, { headers: { "User-Agent": jio.USER_AGENT }, signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return;
     const json = (await res.json()) as any;
     const result: any[] = json.result ?? [];

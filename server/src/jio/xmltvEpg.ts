@@ -33,7 +33,7 @@ function decodeXml(s: string): string {
 export async function refreshXmltv(url: string): Promise<void> {
   status = "downloading";
   try {
-    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(120_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     let buf = Buffer.from(await res.arrayBuffer());
     if (buf[0] === 0x1f && buf[1] === 0x8b) buf = zlib.gunzipSync(buf); // gzip magic bytes

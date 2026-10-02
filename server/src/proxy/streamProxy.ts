@@ -20,6 +20,9 @@ const HDNEA_MARKER = "__hdnea__=";
 const cache = new Map<string, CachedStream>();
 const deadCache = new Map<string, DeadCacheEntry>();
 const DEAD_CACHE_TTL_MS = 60_000; // 60 seconds cooldown for 404/403/down channels
+/** Upstream timeouts: API-ish calls (manifest probe, license) vs. media segments (bigger bodies). */
+const API_TIMEOUT_MS = 15_000;
+const SEGMENT_TIMEOUT_MS = 20_000;
 
 /**
  * A playback key is either "channelId" (live) or "cu.<base64url-json>" (catch-up), where the JSON is
@@ -48,7 +51,7 @@ const streamMode = new Map<string, "hls" | "drm">();
  *  Some channels (e.g. Zee TV HD) hand back a token-signed URL whose CDN path doesn't actually exist. */
 async function masterAlive(url: string, headers: Record<string, string>): Promise<boolean> {
   try {
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(API_TIMEOUT_MS) });
     if (res.status < 200 || res.status >= 300) return false;
     const t = (await res.text()).trimStart();
     return t.startsWith("#EXTM3U") || t.startsWith("<?xml") || t.startsWith("<MPD");
@@ -176,7 +179,7 @@ export function isValidStreamKey(key: string): boolean {
 /** fetch() that follows redirects only while they stay on Jio hosts (credentials ride along). */
 async function fetchJio(url: string, init: RequestInit, hops = 3): Promise<Response> {
   if (!isJioUpstream(url)) throw new Error("Refusing to fetch a non-Jio URL through the stream proxy");
-  const res = await fetch(url, { ...init, redirect: "manual" });
+  const res = await fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(SEGMENT_TIMEOUT_MS) });
   const loc = res.headers.get("location");
   if (res.status >= 300 && res.status < 400 && loc && hops > 0) {
     return fetchJio(new URL(loc, url).toString(), init, hops - 1);
@@ -216,6 +219,7 @@ export async function proxyLicense(channelId: string, challenge: Buffer): Promis
     method: "POST",
     headers: c.data.licenseHeaders,
     body: new Uint8Array(challenge),
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`License request failed (HTTP ${res.status})`);
   return Buffer.from(await res.arrayBuffer());
