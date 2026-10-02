@@ -1,33 +1,214 @@
 <div align="center">
 
-# 📺 JTV — Live TV for Android TV
+<img src="screenshot/brand/jtv-hero.png" width="640" alt="JTV — Live TV, made easy" />
 
-**A fast, lightweight, no-nonsense Live TV client built for Android TV & TV boxes.**
+**Live TV that anyone at home can use: on the big TV with a plain remote, on your phone, and on your tablet.**
 
-![Platform](https://img.shields.io/badge/Platform-Android%20TV-3DDC84?logo=android&logoColor=white)
-![Android](https://img.shields.io/badge/Android-7.0%20%E2%86%92%2016-blue?logo=android&logoColor=white)
-[![Latest Release](https://img.shields.io/github/v/release/F-e-n-y-x/JioTV-AndroidTV-?label=Download&color=success)](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/F-e-n-y-x/JioTV-AndroidTV-/total?color=orange)](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases)
+[![Stable](https://img.shields.io/github/v/release/F-e-n-y-x/JioTV-AndroidTV-?label=stable&color=success)](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest)
+[![Beta](https://img.shields.io/github/v/release/F-e-n-y-x/JioTV-AndroidTV-?include_prereleases&label=v2%20beta&color=F0A12E)](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases)
+![Android](https://img.shields.io/badge/Android-7.0%20%E2%86%92%2016-3DDC84?logo=android&logoColor=white)
+[![Downloads](https://img.shields.io/github/downloads/F-e-n-y-x/JioTV-AndroidTV-/total?color=111113)](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-<a href="https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest">
-  <img src="https://img.shields.io/badge/⬇️%20Download%20Latest%20APK-1f6feb?style=for-the-badge" alt="Download latest APK" />
-</a>
+<a href="https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest"><b>⬇️ Download stable (1.5.x)</b></a>
+&nbsp;·&nbsp;
+<a href="https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases"><b>🧪 Try the v2 beta</b></a>
 
 </div>
 
 ---
 
-## ✨ Highlights
+## 👋 Why JTV exists
 
-- 🎬 **Plays DRM channels** (Star, Sony, Zee, Colors…) with the stream token refreshed in the background, so premium channels don't cut out mid-show.
-- ⚡ **Instant startup** — the channel list loads from cache immediately, then refreshes quietly in the background.
-- 🛡️ **Built for weak hardware** — hardware decoding, tuned buffers, and smart error recovery keep playback smooth on low-end TVs.
-- 🗣️ **Voice Boost** — a built-in dialogue enhancer that lifts speech and lowers background music/effects (great for TVs with poor built-in audio).
-- 🎚️ **Real controls** — pick the actual audio track/language, video quality (up to 1080p), aspect ratio, playback buffer, and a sleep timer.
-- ⭐ **Your favorites, your order**: hold OK on any channel to favorite it, then move favorites into any order or group them by category in one press.
-- 📅 **EPG** — optional Electronic Program Guide with a timeline view.
-- 🖥️ **Modern TV UI** — Jetpack Compose for TV, on-screen numpad login, and smooth D-pad navigation.
+JTV started with a simple wish: watch Jio channels on the TV in the living room, on a cheap Android TV box, with the remote that came in the box. No mouse, no fiddly menus, no adverts. Just the channels.
 
+Over time it grew. People asked for favourites, a guide, and a way to share one login across every TV in the house. Then the bigger goal arrived: **anyone at home should be able to use it, including parents and grandparents.** That's what **JTV 2.0** is about: big readable text, labelled buttons, nothing hidden behind secret gestures, and an app that stays fast on the cheapest boxes.
+
+JTV is free, open source, and made by one person in their spare time. If it makes your evenings a little easier, that's the whole point. ❤️
+
+— Ayush ([@F-e-n-y-x](https://github.com/F-e-n-y-x))
+
+---
+
+## 🧪 Meet JTV 2.0 (beta)
+
+A ground-up redesign called **"Everyday"**. It has a calm near-black or light look, one warm amber accent, and the same layout on every screen size. It is tuned for 10-foot TV viewing and for people who just want to watch TV.
+
+### On the TV
+
+<div align="center">
+  <img src="screenshot/v2/tv-home.png" width="49%" alt="TV home: categories, channels, and what's on now" />
+  <img src="screenshot/v2/tv-guide.png" width="49%" alt="TV guide with the now-line" />
+  <img src="screenshot/v2/tv-player.png" width="49%" alt="Player info strap with the amber channel number" />
+  <img src="screenshot/v2/tv-browse.png" width="49%" alt="Channel browser: tiles over the live picture" />
+</div>
+
+- **What's on now, at a glance.** Every channel shows its number, logo, current show and how long is left. Press **OK** to watch.
+- **A real programme guide.** A time grid with a gentle "now" line. Press **Up** for categories, and **Up** again for the Live TV · Guide · Search · Settings tabs.
+- **The amber channel strap.** Change channel and a broadcast-style strap shows the big channel number, the show, "Series · Drama · U · Hindi", time left and what's next.
+- **Browse without stopping the show.** Press **←** while watching to slide channel tiles over the picture. Use **← →** to look around, **↑ ↓** to change category, and **OK** to switch.
+- **One clear Options panel (→).** It holds **Language** (no more duplicate "Hindi, Hindi"), plain-word picture quality ("Best picture", "Data saver"), aspect, Voice Boost, sleep timer and favourite.
+
+### On your phone and tablet
+
+<div align="center">
+  <img src="screenshot/v2/phone-home-dark.png" width="19%" alt="Phone home, dark" />
+  <img src="screenshot/v2/phone-player.png" width="19%" alt="Phone player with show details" />
+  <img src="screenshot/v2/phone-mini.png" width="19%" alt="Mini player while browsing" />
+  <img src="screenshot/v2/phone-search.png" width="19%" alt="Search with recently watched and favourites" />
+  <img src="screenshot/v2/phone-home-light.png" width="19%" alt="Phone home, light" />
+</div>
+<div align="center">
+  <img src="screenshot/v2/tablet-player.png" width="49%" alt="Tablet player: video, details and channels side by side" />
+  <img src="screenshot/v2/tablet-mini.png" width="49%" alt="Tablet with the floating mini player" />
+</div>
+
+- **A YouTube-style player.**
+  - Phone: the video sits on top, with the show info, a compact action row and the channel list below it.
+  - Tablet: the video and details are on the left, the channels on the right.
+- **Mini player.** Press Back, or the ⌄ button, to shrink the video into a bar (phone) or a floating card (tablet). It keeps playing while you browse.
+- **Landscape that doesn't hide the picture.** Small round controls sit at the edges, with one slim info line. The channel tiles appear only when you tap the list icon.
+- **Light and near-black dark modes.** They follow your phone's setting, or you can choose one in Settings.
+
+### Everywhere
+
+- ⭐ **Favourites that follow you.** Pair your phone and TV once with a 4-digit code (**Settings → Devices**). After that, favourites stay in sync over home Wi-Fi, with no server needed.
+- 📺 **Play on TV.** From your phone, open a channel's options and choose **Play on <TV name>**. The TV switches channel.
+- 🕘 **Recent.** Your last channels are one tap away, on the home screen and in Search.
+- 💾 **Favourites backup.** Save them to a file and restore them after a fresh install.
+- 🪶 **Still tiny.** The APK is about **4 MB** and runs smoothly on cheap TV boxes.
+
+> **Beta notes:** v2 is released as a **pre-release**, so the stable app never updates to it by itself. Install the beta APK over 1.5.x and your login and favourites are kept. Once on the beta, you'll be offered newer betas and the final 2.0. Found something odd? [Open an issue](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/issues) and tell me your device. It really helps.
+
+---
+
+## 📥 Install
+
+1. Download the APK:
+   - **Stable:** `JTV-v1.5.x.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
+   - **Beta:** `JTV-v2.0-beta.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
+2. **Install it on your TV.**
+   - The easiest way is to copy it to a USB stick and open it with a file manager such as **X-plore** or **File Commander**.
+   - Or use ADB:
+     ```bash
+     adb connect <YOUR_TV_IP>:5555
+     adb install -r JTV-v1.5.8.apk
+     ```
+3. **Sign in.** Use your Jio number and OTP, or connect to your own [JTV server](#%EF%B8%8F-companion-server-optional) with an access code.
+
+Updates arrive through the in-app updater. All releases are signed with the same key, so updating keeps your login and favourites.
+
+---
+
+## 🎮 Remote controls (stable 1.5.x)
+
+| Button | In the channel grid | While watching |
+|---|---|---|
+| **↑ / ↓** | Move | Change channel |
+| **CH+ / CH−** | — | Change channel |
+| **←** | — | Open channel list / categories |
+| **→** | — | Player side panel (audio, quality, sleep timer…) |
+| **OK** | Open channel | Show/hide channel info |
+| **Hold OK** | Channel menu: favourite, move, group by category | — |
+| **0–9** | — | Jump to a channel number |
+| **Back** | Exit app | Close overlay / exit player |
+
+---
+
+## ⭐ Favourites: add, reorder, group, back up
+
+1. **Add:** on any channel, **hold OK** and choose **Add to Favorites**.
+2. **Reorder:** in **★ Favorites**, hold OK on a channel and choose **Move**.
+   - ◀ ▶ moves it one place; ▲ ▼ moves it a whole row.
+   - **OK** saves, **BACK** cancels.
+   - **Move to top** and **Move to bottom** are one-press shortcuts.
+3. **Group by category:** choose this to line them up as all News, then Movies, then Music. Categories keep the order they first appear in.
+4. **Back up and restore** (Settings → Favourites):
+   - **Back Up Favourites** saves them to `Downloads/JTV-favourites-backup.json`, which stays after you uninstall.
+   - After a fresh install, choose **Restore Favourites**.
+   - On boxes without a file picker, open the file with JTV from any file manager.
+
+Your order is used everywhere, including in the player: CH+/CH− follow it.
+
+<div align="center">
+  <img src="screenshot/v154_move_mode.png" width="48%" alt="Moving a favourite" />
+  <img src="screenshot/v158_favourites_backup.png" width="48%" alt="Back up and restore favourites" />
+</div>
+
+---
+
+## 🔊 Voice Boost (dialogue enhancer)
+
+Many channels mix dialogue too quietly under loud music and effects, and most TVs can't fix that. JTV can.
+
+1. Open the player panel (**→**).
+2. Choose **Voice Boost**: Off → Low → Medium → High → Max.
+
+It lifts the voice and lowers the background while keeping the bass full. **Medium** or **High** suits most shows. Pair it with **Auto Volume** to even out loudness between channels.
+
+---
+
+## 🖥️ Companion server (optional)
+
+A self-hosted server lets you **sign in once and share it with every TV** at home. It also gives you a web player and an M3U playlist for other apps. It's one Docker image (Node + React).
+
+- **One login for all your TVs.** The server keeps your Jio login fresh, and each TV connects with a short access code.
+- **Web player.** Channel grid, TV guide, catch-up and favourites in the browser.
+- **M3U and EPG for IPTV players.** VLC, TiviMate, OTT Navigator and Kodi, with a full programme guide.
+
+```bash
+cd server && docker compose up -d --build   # then open http://<host>:8080
+```
+
+See **[`server/README.md`](server/README.md)** for setup and the API.
+
+---
+
+## 🛠️ Building from source
+
+You need the Android SDK and JDK 17 or later.
+
+```bash
+git clone https://github.com/F-e-n-y-x/JioTV-AndroidTV-.git
+cd JioTV-AndroidTV-/android
+./gradlew assembleDebug        # → app/build/outputs/apk/debug/app-debug.apk
+```
+
+The v2 beta lives on the [`v2-lab`](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/tree/v2-lab) branch.
+
+<details>
+<summary><b>Signed release builds</b></summary>
+
+1. Put a `keystore.properties` file next to `android/gradlew`. It's gitignored.
+   ```properties
+   storeFile=jtv-release.keystore
+   storePassword=YOUR_STORE_PASSWORD
+   keyAlias=YOUR_ALIAS
+   keyPassword=YOUR_KEY_PASSWORD
+   ```
+2. Create the keystore once:
+   ```bash
+   keytool -genkeypair -v -keystore jtv-release.keystore -alias jtv -keyalg RSA -keysize 2048 -validity 10000
+   ```
+3. Build:
+   ```bash
+   ./gradlew assembleRelease
+   ```
+
+</details>
+
+| Area | Technology |
+|---|---|
+| UI | Jetpack Compose (Compose for TV on TV), custom "Everyday" design system |
+| Media | AndroidX Media3 / ExoPlayer (HLS + DASH/Widevine) |
+| Architecture | MVVM · Kotlin Coroutines · StateFlow · Navigation 3 |
+| Storage | DataStore + on-disk cache |
+| Sync | Local-network discovery (NSD) with paired devices, no cloud |
+
+---
+
+<details>
+<summary><b>📸 Stable 1.5.x screenshots</b></summary>
 <div align="center">
   <img src="screenshot/ui_screenshot_1.png" width="32%" alt="Home" />
   <img src="screenshot/ui_screenshot_2.png" width="32%" alt="Channels" />
@@ -36,161 +217,32 @@
   <img src="screenshot/ui_screenshot_5.png" width="32%" alt="Settings" />
   <img src="screenshot/ui_screenshot_6.png" width="32%" alt="Player settings" />
 </div>
-
----
-
-## 📥 Install
-
-1. **Download** the latest `JTV-vX.X.X.apk` from the [**Releases page**](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
-2. **Sideload** it onto your Android TV with ADB:
-
-   ```bash
-   adb connect <YOUR_TV_IP>:5555
-   adb install -r JTV-vX.X.X.apk
-   ```
-
-   > 💡 Don't have ADB set up? You can also copy the APK to a USB drive and install it with a file-manager app like **"File Commander"** or **"X-plore"** on your TV.
-
-3. **Log in** with your Jio mobile number + OTP using the on-screen numpad.
-
-> ⚠️ Updating from an older build that was signed with a different key? Uninstall first: `adb uninstall com.fenyx.jtv`
-
----
-
-## 🎮 Remote Controls
-
-| Button | In the channel grid | While watching |
-|---|---|---|
-| **D-pad ↑ / ↓** | Move | Change channel |
-| **CH+ / CH−** | — | Change channel |
-| **D-pad ←** | — | Open channel list / categories |
-| **D-pad →** | — | Open the player side panel (audio, quality, sleep timer…) |
-| **OK / Center** | Open channel | Show/hide channel info |
-| **Hold OK** | Channel menu: favorite, move, group by category | — |
-| **0–9** | — | Jump to a channel number |
-| **Back** | Exit app | Close overlay / exit player |
-
----
-
-## ⭐ Favorites: Add, Reorder, Group
-
-1. **Add**: on any channel, **hold OK** and choose **Add to Favorites**. The star can also be set from the player's side panel.
-2. **Reorder**: open **★ Favorites** in the sidebar, hold OK on a channel and choose **Move**. Use ◀ ▶ to move one place and ▲ ▼ to move a whole row. Press **OK** to save or **BACK** to cancel. **Move to top** and **Move to bottom** are one-press shortcuts.
-3. **Group by category**: choose **Group favorites by category** to line them up, e.g. all News, then Movies, then Music. Categories keep the order they first appear in, so move one News channel to the top first if you want News first.
-
-Your order is used everywhere, including the player: press ← twice while watching and ★ Favorites is the first category, and CH+/CH− follow your order.
-
-<div align="center">
-  <img src="screenshot/v154_favorites_grid.png" width="48%" alt="Favorites grid" />
-  <img src="screenshot/v154_favorites_menu.png" width="48%" alt="Hold-OK menu in Favorites" />
-  <img src="screenshot/v154_move_mode.png" width="48%" alt="Moving a favorite" />
-  <img src="screenshot/v154_hold_ok_menu.png" width="48%" alt="Add to favorites from any channel" />
-</div>
-
----
-
-## 🔊 Voice Boost (Dialogue Enhancer)
-
-Many channels mix dialogue too quietly under loud music and effects — and most TVs have no fix for it. JTV adds one.
-
-Open the **player side panel** (D-pad **→**) → **Voice Boost** and cycle through **Off → Low → Medium → High → Max**.
-
-It uses center-channel processing to **lift the voice and lower the background** while **keeping the bass full** (so it never sounds thin). **Medium** or **High** is the sweet spot for most content. Pair it with **Auto Volume** to even out loudness between channels.
-
----
-
-## ⚙️ Settings Overview
-
-| Setting | What it does |
-|---|---|
-| **EPG Mode** | Switch the home screen to a program-guide timeline |
-| **EPG Source URL** | Choose your own XMLTV guide source |
-| **Autoplay Last Channel** | Jump straight into your last channel on launch |
-| **Default Quality** | Auto / 1080p / 720p / 480p |
-| **Playback Buffer** | Data Saver → Max (more buffer = fewer interruptions) |
-| **Player View Mode** | Fit, Fill, Zoom, Stretch |
-| **Default Audio Language** | Preferred language for multi-audio channels |
-| **Hardware Decoder** | Keep **on** for low-end TVs |
-| **Tunneling** | Keep **off** unless you have audio-sync issues (can cause black screens on some TVs) |
-
----
-
-## 🖥️ Companion Server (optional)
-
-A self-hostable **companion server** lets you **log in once and share it across every TV** — plus watch
-in a browser and feed any IPTV player. It's a single Docker image (Node + React).
-
-- **One login for all your TVs** — the server stores your Jio login and refreshes tokens centrally.
-  Each TV connects with a short access code (**Settings → Sign-in Method → Connect to JTV Proxy
-  Server**); you never log in per device, and re-login only ever happens on the server.
-- **Web player** — a full JioTV experience in the browser: channel grid, TV guide, **catch-up**,
-  favourites and a language filter. Non-DRM channels play over plain HTTP (via hls.js); DRM channels
-  play over the server's HTTPS URL.
-- **M3U for external players** — generate a playlist (with EPG + catch-up) for **VLC, TiviMate, OTT
-  Navigator, Kodi**, filtered by language / category / quality.
-
-```bash
-cd server && docker compose up -d --build   # then open http://<host>:8080
-```
-
-See **[`server/README.md`](server/README.md)** for full setup, the API, and details.
-
----
-
-## 🛠️ Building from Source
-
-**Requirements:** Android Studio (or the command-line SDK) with JDK 17+.
-
-```bash
-git clone https://github.com/F-e-n-y-x/JioTV-AndroidTV-.git
-cd JioTV-AndroidTV-
-./gradlew assembleDebug
-```
-
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
-
-<details>
-<summary><b>Release builds (signed)</b></summary>
-
-Create a `keystore.properties` file in the project root (it's gitignored):
-
-```properties
-storeFile=jtv-release.keystore
-storePassword=YOUR_STORE_PASSWORD
-keyAlias=YOUR_ALIAS
-keyPassword=YOUR_KEY_PASSWORD
-```
-
-Generate a keystore once:
-
-```bash
-keytool -genkeypair -v -keystore jtv-release.keystore -alias jtv -keyalg RSA -keysize 2048 -validity 10000
-```
-
-Then build the signed, minified release (~3–4 MB):
-
-```bash
-./gradlew assembleRelease
-```
-
 </details>
 
----
+<details>
+<summary><b>📝 Changelog</b></summary>
 
-## 🧱 Tech Stack
+### v2.0-beta (pre-release)
 
-| Area | Technology |
-|---|---|
-| **UI** | Jetpack Compose for TV (Material 3) |
-| **Media** | AndroidX Media3 / ExoPlayer (HLS + DASH/Widevine) |
-| **Architecture** | MVVM · Kotlin Coroutines · StateFlow |
-| **Navigation** | AndroidX Navigation 3 |
-| **Storage** | DataStore Preferences + on-disk cache |
-| **Images** | Coil |
+The **"Everyday"** redesign for TV, phone and tablet:
+- New home, guide, player strap, channel browser, options panel and search.
+- YouTube-style phone and tablet player, with a mini player.
+- Light and near-black dark themes, and 12-hour time.
+- One clean Language menu, with plain-word picture quality.
+- Show details: type, genre, rating, cast and director.
+- A Recent category.
+- Wi-Fi favourites sync with "Play on TV", plus favourites backup.
+- A new logo.
 
----
-
-## 📝 Changelog
+### v1.5.8
+- **Hold OK now keeps the menu open** (reported in issue #1). On remotes without a mouse, releasing a
+  held OK used to count as a click: the channel opened at once and the menu disappeared, so you
+  couldn't pick **Add to Favorites** or **Move**. Now the menu stays open until you press OK on the
+  option you want.
+- **Back up and restore favourites.** In **Settings → Favourites**, save your favourites to
+  `Downloads/JTV-favourites-backup.json` and restore them after reinstalling. Restore adds to your
+  current favourites and never deletes any. On boxes without a file picker, open the backup file
+  with JTV from a file manager.
 
 ### v1.5.7
 - **Stays signed in even if Jio drops the session.** If Jio ever rejects the saved login, JTV now
@@ -298,25 +350,22 @@ Then build the signed, minified release (~3–4 MB):
 
 See the [Releases page](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases) for full notes and downloads.
 
+</details>
+
 ---
 
 ## 🙏 Credits
 
-Built with reference to and inspiration from:
-
+Built with reference to, and inspiration from:
 - [dineshintry/plugin.kodi.jiotv](https://github.com/dineshintry/plugin.kodi.jiotv)
 - [JioTV-Go/jiotv_go](https://github.com/JioTV-Go/jiotv_go)
 
----
+The UI font is [Anek Latin](https://github.com/EkType/Anek) (SIL Open Font License).
 
 ## ⚖️ Disclaimer
 
-This is an independent, third-party Android TV client made for **educational purposes**. It is **not** affiliated with, authorized, maintained, or endorsed by JioTV or Reliance Jio Infocomm Ltd. You are responsible for how you use it, and you need a valid Jio account to log in. Use at your own risk.
-
----
+JTV is an independent, unofficial client made for **educational purposes**. It is **not** affiliated with, authorised, maintained, or endorsed by JioTV, Jio Platforms or Reliance. You need a valid Jio account to sign in, and you're responsible for how you use it.
 
 ## 📄 License
 
-JTV is open source under the [Apache License 2.0](LICENSE). You're free to use, modify, fork or port it, including into your own projects, as long as you keep the copyright and licence notice ([NOTICE](NOTICE)).
-
-JTV is an unofficial client and is not affiliated with, endorsed by, or sponsored by Jio Platforms Ltd or Reliance.
+[Apache License 2.0](LICENSE). You're free to use, modify, fork or port JTV, as long as you keep the copyright and licence notice ([NOTICE](NOTICE)).

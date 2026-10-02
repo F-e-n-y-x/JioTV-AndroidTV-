@@ -19,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -1271,24 +1273,48 @@ fun TvPlayerScreen(
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier) {
-    AndroidView(
-        factory = { ctx ->
-            PlayerView(ctx).apply {
-                this.player = player
-                useController = false
-                keepScreenOn = true
-                // Letterbox black comes from the view itself: nothing opaque may be drawn over the
-                // surface by Compose (the portrait page sits above it and is transparent there).
-                setBackgroundColor(android.graphics.Color.BLACK)
-            }
-        },
-        update = { view ->
-            view.resizeMode = resizeMode
-            // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
-            if (view.player !== player) view.player = player
-        },
-        modifier = modifier,
-    )
+    // Debuggable builds only: a "novideo" file in the app's external files dir replaces the picture with
+    // a neutral placeholder, so UI screenshots for the README never contain channel video.
+    val ctx0 = LocalContext.current
+    val noVideo = remember {
+        (ctx0.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 &&
+            java.io.File(ctx0.getExternalFilesDir(null), "novideo").exists()
+    }
+    androidx.compose.foundation.layout.Box(modifier) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    this.player = if (noVideo) null else player
+                    useController = false
+                    keepScreenOn = true
+                    // Letterbox black comes from the view itself: nothing opaque may be drawn over the
+                    // surface by Compose (the portrait page sits above it and is transparent there).
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                }
+            },
+            update = { view ->
+                view.resizeMode = resizeMode
+                // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
+                if (!noVideo && view.player !== player) view.player = player
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (noVideo) androidx.compose.foundation.layout.Box(
+            Modifier.fillMaxSize().clipToBounds().drawBehind {
+                drawRect(androidx.compose.ui.graphics.Color(0xFF17171A))
+                val step = 28.dp.toPx(); var x = -size.height
+                while (x < size.width) {
+                    drawLine(androidx.compose.ui.graphics.Color(0xFF1E1E22), androidx.compose.ui.geometry.Offset(x, size.height),
+                        androidx.compose.ui.geometry.Offset(x + size.height, 0f), strokeWidth = step / 2)
+                    x += step
+                }
+            },
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.tv.material3.Text("LIVE PICTURE", color = androidx.compose.ui.graphics.Color(0xFF55555C),
+                style = com.fenyx.jtv.ui.components.textStyle(androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp)).copy(letterSpacing = androidx.compose.ui.unit.TextUnit(4f, androidx.compose.ui.unit.TextUnitType.Sp)))
+        }
+    }
 }
 
 private fun android.content.Context.findActivity(): ComponentActivity? {
