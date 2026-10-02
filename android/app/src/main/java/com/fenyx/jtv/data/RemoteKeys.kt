@@ -138,7 +138,7 @@ class RemoteKeyMap(bindings: Map<RemoteAction, List<KeySpec>>) {
 
     companion object {
         private val ENTRY = Regex("\"([a-z_]+)\"\\s*:\\s*\\[([^\\]]*)]")
-        private val OBJ = Regex("\\{([^}]*)}")
+        private val OBJ = Regex("\\{([^\\}]*)\\}")
         private val CODE = Regex("\"code\"\\s*:\\s*(-?\\d+)")
         private val SCAN = Regex("\"scan\"\\s*:\\s*(-?\\d+)")
         private val HOLD = Regex("\"hold\"\\s*:\\s*(true|false)")
