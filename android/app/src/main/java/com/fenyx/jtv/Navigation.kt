@@ -55,11 +55,6 @@ fun MainNavigation() {
     val settingsManager = androidx.compose.runtime.remember { SettingsManager(context) }
     val authData by settingsManager.authDataFlow.collectAsState(initial = null)
 
-    // Debug "Design Lab" builds open straight into the lab on phones/tablets (no leanback), where the
-    // v1 TV home isn't meant to be used. On TV the lab is an extra sidebar entry instead.
-    val isTvDevice = androidx.compose.runtime.remember {
-        context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
-    }
     val backStack = rememberNavBackStack(Main)
     val mainViewModel: MainViewModel = viewModel()
     // Phone tabs replace each other on top of Live TV (Back from a tab returns to Live TV).
@@ -167,16 +162,6 @@ fun MainNavigation() {
                         modifier = m
                     )
                   }
-                }
-                entry<Lab> {
-                    val lab = DesignLabHook.content
-                    if (lab != null) {
-                        lab(
-                            mainViewModel,
-                            { index, group -> backStack.add(Player(channelIndex = index, group = group)) },
-                            { if (backStack.size > 1) backStack.removeLastOrNull() else backStack.add(Main) }
-                        )
-                    }
                 }
                 entry<Guide> {
                   TopLevel(com.fenyx.jtv.ui.main.PhoneTab.Guide, onTab) { m ->
