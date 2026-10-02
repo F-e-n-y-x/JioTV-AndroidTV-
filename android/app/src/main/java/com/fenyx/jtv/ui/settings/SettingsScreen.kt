@@ -58,7 +58,7 @@ private enum class Sheet { None, Theme, StartWith, Quality, Language, PictureSiz
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, onBack: (() -> Unit)? = null) {
+fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, onBack: (() -> Unit)? = null, onTab: ((com.fenyx.jtv.ui.main.PhoneTab) -> Unit)? = null) {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
     val scope = rememberCoroutineScope()
@@ -229,14 +229,9 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                // Phone has the bottom tab bar; tablet gets a labelled Back.
-                if (form == FormFactor.Tablet && onBack != null) {
-                    com.fenyx.jtv.ui.components.JtvButton(
-                        "Back", onBack, icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, minHeight = 48.dp,
-                    )
-                    Spacer(Modifier.width(16.dp))
-                }
+                // No Back button: phone has the bottom tab bar, tablet the navigation rail, TV the tabs.
                 JText("Settings", if (isTv) 28.sp else 24.sp, Modifier.weight(1f), weight = FontWeight.Bold)
+                if (isTv && onTab != null) com.fenyx.jtv.ui.main.TvTabs(com.fenyx.jtv.ui.main.PhoneTab.Settings, onTab, Modifier.padding(end = 20.dp))
                 if (form != FormFactor.Phone) JtvClock(now, dateColor = c.t2, size = if (isTv) 34.sp else 28.sp)
             }
             Spacer(Modifier.height(8.dp))

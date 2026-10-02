@@ -119,10 +119,13 @@ fun MainScreen(
     val group = selectedGroup ?: MainViewModel.GROUP_ALL
     val isFavoritesGroup = group == MainViewModel.GROUP_FAVORITES
 
-    val categories = remember(displayChannels, groups, favoriteChannels) {
+    val recentIds by viewModel.recentIds.collectAsState()
+    val recentCount = remember(recentIds, displayChannels) { val ids = displayChannels.mapTo(HashSet()) { it.id }; recentIds.count { it in ids } }
+    val categories = remember(displayChannels, groups, favoriteChannels, recentCount) {
         val counts = displayChannels.groupingBy { it.group }.eachCount()
         buildList {
             if (favoriteChannels.isNotEmpty()) add(Category(MainViewModel.GROUP_FAVORITES, "Favourites", favoriteChannels.size))
+            if (recentCount > 0) add(Category(MainViewModel.GROUP_RECENT, "Recent", recentCount))
             add(Category(MainViewModel.GROUP_ALL, "All channels", displayChannels.size))
             groups.forEach { add(Category(it, it, counts[it] ?: 0)) }
         }
@@ -370,11 +373,10 @@ private fun WideHome(
                     color = if (movingName != null) c.acc else c.t3,
                 )
             }
-            Row(Modifier.focusGroup().padding(end = 20.dp, top = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                HeaderAction("Search", Icons.Filled.Search, onSearch)
-                HeaderAction("Guide", Icons.Filled.DateRange, onGuide)
-                HeaderAction("Settings", Icons.Filled.Settings, onSettings)
-            }
+            // TV: section tabs (Up from the list). Tablet: the left navigation rail does this job.
+            if (tv) TvTabs(PhoneTab.Live, { t ->
+                when (t) { PhoneTab.Guide -> onGuide(); PhoneTab.Search -> onSearch(); PhoneTab.Settings -> onSettings(); else -> {} }
+            }, Modifier.padding(end = 20.dp, top = 2.dp))
             JtvClock(now, size = 32.sp)
         }
         Spacer(Modifier.height(14.dp))

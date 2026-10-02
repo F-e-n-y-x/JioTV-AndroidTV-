@@ -49,6 +49,7 @@ import com.fenyx.jtv.ui.main.MainViewModel
 fun SearchScreen(
     viewModel: MainViewModel,
     onChannelClick: (Int, String?) -> Unit,
+    onTab: ((com.fenyx.jtv.ui.main.PhoneTab) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val c = Jtv.colors
@@ -100,6 +101,7 @@ fun SearchScreen(
         // ─── Title ───
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             JText("Search", if (isTv) 28.sp else 24.sp, modifier = Modifier.weight(1f), weight = FontWeight.Bold)
+            if (isTv && onTab != null) com.fenyx.jtv.ui.main.TvTabs(com.fenyx.jtv.ui.main.PhoneTab.Search, onTab, Modifier.padding(end = 20.dp, top = 2.dp))
             if (isTv) JtvClock(now, dateColor = c.t2)
         }
         Spacer(Modifier.height(if (isTv) 12.dp else 8.dp))

@@ -24,6 +24,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Sentinel category values for the Home sidebar. Real Jio categories never collide with these.
         const val GROUP_ALL: String = "__ALL__"
         const val GROUP_FAVORITES: String = "__FAVORITES__"
+        const val GROUP_RECENT: String = "__RECENT__"
     }
 
     private val settingsManager = SettingsManager(application)
@@ -109,7 +110,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _downloadedApkFile = MutableStateFlow<java.io.File?>(null)
     val downloadedApkFile: StateFlow<java.io.File?> = _downloadedApkFile.asStateFlow()
 
+    /** Recently watched channel ids, newest first (written by the player on every tune). */
+    private val _recentIds = MutableStateFlow<List<String>>(emptyList())
+    val recentIds: StateFlow<List<String>> = _recentIds.asStateFlow()
+
     init {
+        viewModelScope.launch {
+            settingsManager.recentChannelsFlow.distinctUntilChanged().collect { _recentIds.value = it }
+        }
         viewModelScope.launch {
             settingsManager.favoriteOrderFlow.distinctUntilChanged().collect { order ->
                 _favoriteOrder.value = order
@@ -136,8 +144,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Compute filtered/sorted channels reactively in the ViewModel (not in Compose)
         viewModelScope.launch {
-            combine(_displayChannels, _selectedGroup, _favoriteOrder) { all, group, order ->
-                channelsFor(all, group, order)
+            combine(_displayChannels, _selectedGroup, _favoriteOrder, _recentIds) { all, group, order, recent ->
+                // Recents only matter for the Recent category; other groups ignore them (the StateFlow
+                // dedups an identical list, so a zap doesn't recompose the home list).
+                channelsFor(all, group, order, if (group == GROUP_RECENT) recent else emptyList())
             }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { _filteredChannels.value = it }
         }
         // NOTE: EPG is intentionally NOT fetched here. Downloading + parsing the XMLTV file on every
@@ -209,14 +219,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Get channels filtered by group for channel switching within a category, sorted by favorites */
     fun getChannelsByGroup(group: String?): List<Channel> =
-        channelsFor(_displayChannels.value, group, _favoriteOrder.value)
+        channelsFor(_displayChannels.value, group, _favoriteOrder.value, if (group == GROUP_RECENT) _recentIds.value else emptyList())
 
     /**
      * One ordering rule for the grid AND the player's zapping list: the Favorites category follows the
      * user's saved order; every other category puts favorites first (in that same order), then the
      * rest by channel number.
      */
-    private fun channelsFor(all: List<Channel>, group: String?, order: List<String>): List<Channel> {
+    private fun channelsFor(all: List<Channel>, group: String?, order: List<String>, recent: List<String> = emptyList()): List<Channel> {
+        if (group == GROUP_RECENT) {
+            val byId = all.associateBy { it.id }
+            return recent.mapNotNull { byId[it] }
+        }
         if (group == GROUP_FAVORITES) return FavoriteOrder.sortedFavorites(all, order) { it.id }
         val list = if (group == null || group == GROUP_ALL) all else all.filter { it.group == group }
         if (order.isEmpty()) return list.sortedBy { it.channelNumber }

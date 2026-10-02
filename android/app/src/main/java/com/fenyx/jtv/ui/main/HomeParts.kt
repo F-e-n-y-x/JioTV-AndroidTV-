@@ -1,6 +1,7 @@
 package com.fenyx.jtv.ui.main
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -237,5 +238,36 @@ fun PhoneBottomBar(selected: PhoneTab, onSelect: (PhoneTab) -> Unit) {
         BottomNavItem("Guide", Icons.Filled.DateRange, selected == PhoneTab.Guide, { onSelect(PhoneTab.Guide) }, Modifier.weight(1f))
         BottomNavItem("Search", Icons.Filled.Search, selected == PhoneTab.Search, { onSelect(PhoneTab.Search) }, Modifier.weight(1f))
         BottomNavItem("Settings", Icons.Filled.Settings, selected == PhoneTab.Settings, { onSelect(PhoneTab.Settings) }, Modifier.weight(1f))
+    }
+}
+
+/**
+ * TV: the four sections as a tab row in every top-level screen's header (Up from the content reaches
+ * it). The current one has an s2 fill + amber underline; focus is the usual inverted fill.
+ */
+@Composable
+fun TvTabs(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier = Modifier) {
+    val c = Jtv.colors
+    Row(modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(
+            Triple(PhoneTab.Live, "Live TV", Icons.Filled.Home),
+            Triple(PhoneTab.Guide, "Guide", Icons.Filled.DateRange),
+            Triple(PhoneTab.Search, "Search", Icons.Filled.Search),
+            Triple(PhoneTab.Settings, "Settings", Icons.Filled.Settings),
+        ).forEach { (tab, label, icon) ->
+            val sel = tab == selected
+            JtvClickable(
+                onClick = { if (!sel) onSelect(tab) },
+                modifier = Modifier.height(40.dp),
+                container = if (sel) c.s2 else Color.Transparent,
+            ) { focused ->
+                Row(Modifier.align(Alignment.Center).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, contentDescription = null, tint = if (focused) c.invTx else if (sel) c.acc else c.t2, modifier = Modifier.size(20.dp))
+                    Box(Modifier.width(8.dp))
+                    Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1)
+                }
+                if (sel && !focused) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.7f).height(2.dp).background(c.acc))
+            }
+        }
     }
 }

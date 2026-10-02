@@ -123,6 +123,7 @@ fun GuideScreen(
     onPlay: (displayIndex: Int, group: String?) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    onTab: ((com.fenyx.jtv.ui.main.PhoneTab) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsManager(context) }
@@ -188,6 +189,7 @@ fun GuideScreen(
                     if (isTv) 16.sp else 14.sp, color = c.t2,
                 )
             }
+            if (isTv && onTab != null) com.fenyx.jtv.ui.main.TvTabs(com.fenyx.jtv.ui.main.PhoneTab.Guide, onTab, Modifier.padding(end = 20.dp, top = 2.dp))
             // Phones show the time in the status bar.
             if (Jtv.form != com.fenyx.jtv.theme.FormFactor.Phone) JtvClock(now, size = if (isTv) 34.sp else 26.sp, dateColor = c.t2)
         }
@@ -488,6 +490,7 @@ private fun dayLabel(t: Long, now: Long): String {
 private fun categoryLabel(group: String): String = when (group) {
     MainViewModel.GROUP_ALL -> "All channels"
     MainViewModel.GROUP_FAVORITES -> "Favourites"
+    MainViewModel.GROUP_RECENT -> "Recent"
     else -> group
 }
 
