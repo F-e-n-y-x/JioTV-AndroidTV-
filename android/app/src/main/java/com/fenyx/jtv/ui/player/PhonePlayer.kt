@@ -6,10 +6,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,6 +57,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
@@ -61,6 +65,7 @@ import androidx.tv.material3.Text
 import com.fenyx.jtv.data.Channel
 import com.fenyx.jtv.data.EpgProgram
 import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.theme.JtvDarkOnly
 import com.fenyx.jtv.ui.components.ChannelPlate
 import com.fenyx.jtv.ui.components.EndsSoonPill
 import com.fenyx.jtv.ui.components.JText
@@ -85,16 +90,18 @@ import kotlinx.coroutines.delay
  *     The amber number tag stays on the picture.
  *  2. One lazy page below it: what's on now, a compact row of labelled icon actions, what's next on
  *     this channel, then the channel list with sticky category chips. Tap a row to tune.
+ *
+ * Tablet portrait reuses this page as-is, with the content below the (full-width) video held to
+ * [maxContentWidth] so lines stay readable.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun PhonePortraitPlayer(
     ui: PlayerUi,
     d: OverlayData,
     actionsState: State<PlayerActions>,
     buffering: Boolean,
+    maxContentWidth: Dp = Dp.Unspecified,
 ) {
-    val c = Jtv.colors
     val now = rememberMinuteClock()
     val act by rememberUpdatedState(d.actions)
     val playing = d.playing
@@ -112,84 +119,130 @@ internal fun PhonePortraitPlayer(
                 // The watched channel always has its guide (one request), whatever the guide setting.
                 val nn = if (playing != null) rememberNowNext(d.epg, playing.id, always = true) else null
                 val later = nn?.later.orEmpty().take(3)
-                val m = d.model
-                val language = if (m.langCurrent.startsWith(LANG_TRACK) || m.langChoices.isEmpty()) playing?.language else m.langLabel
 
-                LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
-                    if (playing != null) {
-                        item(key = "now", contentType = "now") { NowCard(playing, nn?.now, language) }
-                        item(key = "actions", contentType = "actions") {
-                            ActionRow(m, onFavourite = { act.toggleFavourite() }, onOpen = { ui.openOptions(it) })
-                        }
-                        if (later.isNotEmpty()) {
-                            item(key = "next-h", contentType = "header") { SectionHeader("Next on ${playing.name}") }
-                            items(later, key = { "next:${it.startMs}" }, contentType = { "next" }) { NextRow(it) }
-                        }
-                    }
-                    stickyHeader(key = "channels-h", contentType = "chips") {
-                        Column(Modifier.fillMaxWidth().background(c.bg)) {
-                            SectionHeader("Channels")
-                            CategoryChips(
-                                d.browseGroups, bGroup, onPick = { ui.browseGroup = it },
-                                modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
-                                overVideo = false,
-                            )
-                        }
-                    }
-                    itemsIndexed(list, key = { _, ch -> "ch:${ch.id}" }, contentType = { _, _ -> "row" }) { i, ch ->
-                        val isPlaying = ch.id == playing?.id
-                        val onTap = remember(bGroup, i) { { act.tune(bGroup, i) } }
-                        val onHold = remember(bGroup, i, isPlaying) {
-                            {
-                                if (!isPlaying) act.tune(bGroup, i)
-                                ui.overlay = PlayerOverlay.Menu
-                            }
-                        }
-                        PhoneChannelRow(ch, isPlaying, d.epg, onTap, onHold)
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
+                    LazyColumn(
+                        Modifier.widthIn(max = maxContentWidth).fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 16.dp),
+                    ) {
+                        if (playing != null) nowSection(playing, nn?.now, later, d, ui, act)
+                        channelsSection(ui, d, bGroup, list, act)
                     }
                 }
             }
+            PlayerSheets(ui, d, sheetMaxWidth = maxContentWidth)
+        }
+    }
+}
 
-            // Options as a bottom sheet; the quick menu in the centre.
-            val ov = ui.overlay
-            if (ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu) {
-                Box(
-                    Modifier.fillMaxSize().clickable(
-                        interactionSource = remember { MutableInteractionSource() }, indication = null,
-                    ) { ui.overlay = PlayerOverlay.None },
-                )
-            }
-            if (ov == PlayerOverlay.Options) {
-                val maxH = (LocalConfiguration.current.screenHeightDp * 0.75f).dp
-                OptionsPanel(
-                    page = ui.optionsPage, entry = ui.optionsEntry, model = d.model, channel = playing,
-                    actions = d.actions, touch = true,
-                    onPage = { ui.optionsPage = it }, onClose = { ui.overlay = PlayerOverlay.None },
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = maxH)
-                        .background(c.s1, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                        .padding(16.dp),
-                )
-            }
-            if (ov == PlayerOverlay.Menu) {
-                QuickMenu(
-                    model = d.model, channel = playing, actions = d.actions, touch = true,
-                    onOpenPage = { ui.openOptions(it) }, onClose = { ui.overlay = PlayerOverlay.None },
-                    modifier = Modifier.align(Alignment.Center),
-                )
+/** Language label for the meta line: the picked audio language, else the channel's own. */
+internal fun pageLanguage(d: OverlayData): String? {
+    val m = d.model
+    return if (m.langCurrent.startsWith(LANG_TRACK) || m.langChoices.isEmpty()) d.playing?.language else m.langLabel
+}
+
+/** What's on now, the action row and "Next on <channel>" (phone page; tablet left column). */
+internal fun LazyListScope.nowSection(
+    playing: Channel,
+    cur: EpgProgram?,
+    later: List<EpgProgram>,
+    d: OverlayData,
+    ui: PlayerUi,
+    act: PlayerActions,
+) {
+    val language = pageLanguage(d)
+    item(key = "now", contentType = "now") { NowCard(playing, cur, language) }
+    item(key = "actions", contentType = "actions") {
+        ActionRow(d.model, onFavourite = { act.toggleFavourite() }, onOpen = { ui.openOptions(it) })
+    }
+    if (later.isNotEmpty()) {
+        item(key = "next-h", contentType = "header") { SectionHeader("Next on ${playing.name}") }
+        items(later, key = { "next:${it.startMs}" }, contentType = { "next" }) { NextRow(it) }
+    }
+}
+
+/** "Channels": the category chips (sticky) and one row per channel; the playing one is marked. */
+@OptIn(ExperimentalFoundationApi::class)
+internal fun LazyListScope.channelsSection(
+    ui: PlayerUi,
+    d: OverlayData,
+    bGroup: String,
+    list: List<Channel>,
+    act: PlayerActions,
+) {
+    val playingId = d.playing?.id
+    stickyHeader(key = "channels-h", contentType = "chips") {
+        Column(Modifier.fillMaxWidth().background(Jtv.colors.bg)) {
+            SectionHeader("Channels")
+            CategoryChips(
+                d.browseGroups, bGroup, onPick = { ui.browseGroup = it },
+                modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
+                overVideo = false,
+            )
+        }
+    }
+    itemsIndexed(list, key = { _, ch -> "ch:${ch.id}" }, contentType = { _, _ -> "row" }) { i, ch ->
+        val isPlaying = ch.id == playingId
+        val onTap = remember(bGroup, i) { { act.tune(bGroup, i) } }
+        val onHold = remember(bGroup, i, isPlaying) {
+            {
+                if (!isPlaying) act.tune(bGroup, i)
+                ui.overlay = PlayerOverlay.Menu
             }
         }
+        PhoneChannelRow(ch, isPlaying, d.epg, onTap, onHold)
+    }
+}
+
+/** Options as a bottom sheet, the quick menu in the centre; a tap outside closes either. */
+@Composable
+internal fun BoxScope.PlayerSheets(ui: PlayerUi, d: OverlayData, sheetMaxWidth: Dp = Dp.Unspecified) {
+    val c = Jtv.colors
+    val ov = ui.overlay
+    if (ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu) {
+        Box(
+            Modifier.fillMaxSize().clickable(
+                interactionSource = remember { MutableInteractionSource() }, indication = null,
+            ) { ui.overlay = PlayerOverlay.None },
+        )
+    }
+    if (ov == PlayerOverlay.Options) {
+        val maxH = (LocalConfiguration.current.screenHeightDp * 0.75f).dp
+        OptionsPanel(
+            page = ui.optionsPage, entry = ui.optionsEntry, model = d.model, channel = d.playing,
+            actions = d.actions, touch = true,
+            onPage = { ui.optionsPage = it }, onClose = { ui.overlay = PlayerOverlay.None },
+            modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = sheetMaxWidth).fillMaxWidth()
+                .heightIn(max = maxH)
+                .background(c.s1, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                // Tablet: a narrower sheet over a light page needs an edge to read as a sheet.
+                .then(
+                    if (sheetMaxWidth != Dp.Unspecified) {
+                        Modifier.border(1.dp, c.line, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    } else Modifier,
+                )
+                .padding(16.dp),
+        )
+    }
+    if (ov == PlayerOverlay.Menu) {
+        QuickMenu(
+            model = d.model, channel = d.playing, actions = d.actions, touch = true,
+            onOpenPage = { ui.openOptions(it) }, onClose = { ui.overlay = PlayerOverlay.None },
+            modifier = Modifier.align(Alignment.Center),
+        )
     }
 }
 
 // ───────────────────────── 1. Video ─────────────────────────
 
 @Composable
-private fun PhoneVideo(
+internal fun PhoneVideo(
     ui: PlayerUi,
     d: OverlayData,
     actionsState: State<PlayerActions>,
     buffering: Boolean,
-) {
+) = JtvDarkOnly {
+    // The controls sit on the picture, so they keep the player's dark plates whatever the page theme.
     val c = Jtv.colors
     val act by actionsState
     val playing = d.playing
@@ -261,7 +314,7 @@ private fun PhoneVideo(
 // ───────────────────────── 2. Now ─────────────────────────
 
 @Composable
-private fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
+internal fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
     val c = Jtv.colors
     val now = LocalNow.current
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
@@ -337,9 +390,10 @@ private fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
 
 /** One compact row of labelled icons (no boxes). Language only when there is a real choice. */
 @Composable
-private fun ActionRow(m: OptionsModel, onFavourite: () -> Unit, onOpen: (OptionsPage) -> Unit) {
+internal fun ActionRow(m: OptionsModel, onFavourite: () -> Unit, onOpen: (OptionsPage) -> Unit) {
     val c = Jtv.colors
-    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+    // Held together on wide pages (tablet) instead of spreading across the whole column.
+    Row(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 8.dp)) {
         val fav = m.favourite
         ActionIcon(
             if (fav) Icons.Filled.Star else PlayerIcons.StarBorder,
@@ -384,7 +438,7 @@ private fun androidx.compose.foundation.layout.RowScope.ActionIcon(
 // ───────────────────────── 4. Next ─────────────────────────
 
 @Composable
-private fun SectionHeader(text: String) {
+internal fun SectionHeader(text: String) {
     JText(
         text, 14.sp, color = Jtv.colors.t2, weight = FontWeight.SemiBold,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -393,7 +447,7 @@ private fun SectionHeader(text: String) {
 
 /** Information only: time, title, category. */
 @Composable
-private fun NextRow(p: EpgProgram) {
+internal fun NextRow(p: EpgProgram) {
     val c = Jtv.colors
     Row(
         Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 4.dp),
@@ -412,7 +466,7 @@ private fun NextRow(p: EpgProgram) {
 
 /** 64dp row. The playing one has a 4dp amber leading bar and a "Playing" label (no inverted fill). */
 @Composable
-private fun PhoneChannelRow(ch: Channel, playing: Boolean, epg: EpgSource, onClick: () -> Unit, onLongClick: () -> Unit) {
+internal fun PhoneChannelRow(ch: Channel, playing: Boolean, epg: EpgSource, onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = Jtv.colors
     val now = LocalNow.current
     val nn = rememberNowNext(epg, ch.id, always = playing)

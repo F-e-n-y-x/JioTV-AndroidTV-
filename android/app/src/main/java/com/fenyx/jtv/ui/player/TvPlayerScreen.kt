@@ -50,6 +50,7 @@ import com.fenyx.jtv.data.SettingsManager
 import com.fenyx.jtv.theme.FormFactor
 import com.fenyx.jtv.theme.Jtv
 import com.fenyx.jtv.theme.JtvDarkOnly
+import com.fenyx.jtv.theme.LocalJtvColors
 import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -637,6 +638,14 @@ fun TvPlayerScreen(
     // Phone portrait has no banner state (its info is always on screen), so Back skips that step.
     val isPhone = Jtv.form == FormFactor.Phone
     val phonePortrait = isPhone && portrait
+    // Tablet: the expanded player is a page (two columns when wide, else the phone page) until the
+    // user asks for full screen. Saved, so turning the tablet while full screen stays full screen.
+    val isTablet = Jtv.form == FormFactor.Tablet
+    var tabletFull by rememberSaveable { mutableStateOf(false) }
+    val tabletPage = isTablet && !tabletFull
+    val tabletTwoColumn = tabletPage && LocalConfiguration.current.screenWidthDp >= TabletTwoColumnMinWidthDp
+    // A page with the info always on screen (no banner step for Back).
+    val pagePlayer = phonePortrait || tabletPage
     val errorFocus = remember { FocusRequester() }
     // Plain (non-state) bookkeeping for the hold-OK gesture and Back de-duplication.
     val press = remember {
@@ -657,6 +666,12 @@ fun TvPlayerScreen(
     val activity = remember(context) { context.findActivity() }
     var orientationLock by remember { mutableStateOf<Int?>(null) } // null = not locked by us
     fun setFullScreen(on: Boolean) {
+        // Tablet: no rotation games, just the full-screen video and back to the page.
+        if (isTablet) {
+            tabletFull = on
+            ui.showBanner()
+            return
+        }
         val a = activity ?: return
         val lock = if (on) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                    else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -793,6 +808,7 @@ fun TvPlayerScreen(
     /** Into the mini player where the host offers one (rotation is handed back); else leave. */
     fun doMinimize() {
         val m = onMinimize ?: return onBack()
+        tabletFull = false // expanding again opens the page
         if (orientationLock != null) {
             activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             orientationLock = null
@@ -823,7 +839,9 @@ fun TvPlayerScreen(
             ui.overlay == PlayerOverlay.Options ->
                 if (ui.optionsPage != OptionsPage.Main && ui.optionsEntry == OptionsPage.Main) ui.optionsPage = OptionsPage.Main
                 else ui.overlay = PlayerOverlay.None
-            ui.overlay == PlayerOverlay.Banner && !phonePortrait -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
+            ui.overlay == PlayerOverlay.Banner && !pagePlayer -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
+            // Tablet full screen: Back returns to the page first.
+            isTablet && tabletFull -> setFullScreen(false)
             // Phone full screen: Back returns to the portrait page first.
             isPhone && !portrait && orientationLock == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ->
                 setFullScreen(false)
@@ -980,11 +998,19 @@ fun TvPlayerScreen(
     val card = Jtv.form == FormFactor.Tablet
     val videoMode = when {
         mini && !card -> VideoBox.MiniBar
-        mini || phonePortrait -> VideoBox.TopWide
+        mini -> VideoBox.TopWide
+        tabletTwoColumn -> VideoBox.TwoColumn
+        pagePlayer -> VideoBox.TopWide
         else -> VideoBox.Fill
     }
     val rootFrame = when {
-        !mini -> Modifier.fillMaxSize().background(if (phonePortrait) JtvDark.bg else Color.Black)
+        !mini -> Modifier.fillMaxSize().background(
+            when {
+                tabletPage -> appColors.bg // the tablet page follows the app theme
+                phonePortrait -> JtvDark.bg
+                else -> Color.Black
+            },
+        )
         card -> Modifier.width(MiniCardWidth)
             .offset { androidx.compose.ui.unit.IntOffset(miniDrag.x.toInt(), miniDrag.y.toInt()) }
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
@@ -1195,16 +1221,30 @@ fun TvPlayerScreen(
             } else if (phonePortrait) {
                 // Draws its own buffering ring and keeps its Play control up while paused.
                 PhonePortraitPlayer(ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering)
+            } else if (tabletPage) {
+                // The app theme (light or dark); the controls on the picture stay dark.
+                CompositionLocalProvider(LocalJtvColors provides appColors) {
+                    if (tabletTwoColumn) {
+                        TabletLandscapePlayer(ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering)
+                    } else {
+                        PhonePortraitPlayer(
+                            ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering,
+                            maxContentWidth = TabletPortraitContentWidth,
+                        )
+                    }
+                }
             } else {
                 if (!isTv) Box(Modifier.fillMaxSize().touchVideoGestures(ui, actionsState, tapToggles = true))
                 Box(Modifier.fillMaxSize()) { status() }
                 if (isTv) TvOverlays(ui, overlayData)
-                else TouchOverlays(ui, overlayData, compact = Jtv.form == FormFactor.Phone)
+                else TouchOverlays(ui, overlayData, compact = isPhone, exitFullScreen = isPhone || isTablet)
             }
 
             val err = playbackError
             if (err != null && !isBuffering && !mini) {
-                ErrorPanel(
+                // Tablet page: over the picture, not the middle of the page.
+                val errBox = if (tabletPage) Modifier.videoBox(videoMode) else Modifier.matchParentSize()
+                Box(errBox, contentAlignment = Alignment.Center) { ErrorPanel(
                     error = err,
                     channel = currentChannel,
                     firstFocus = errorFocus,
@@ -1216,8 +1256,8 @@ fun TvPlayerScreen(
                             ErrorAction.Settings -> onSettings()
                         }
                     },
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                )
+                    modifier = Modifier.padding(24.dp),
+                ) }
             }
         }
     }

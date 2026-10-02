@@ -51,6 +51,7 @@ import com.fenyx.jtv.ui.components.LocalNow
 import com.fenyx.jtv.ui.components.progress
 import com.fenyx.jtv.ui.components.rememberMinuteClock
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** Phone mini bar: 64dp row (video + text + two buttons) and a 2dp show-progress line. */
 val MiniBarHeight = 66.dp
@@ -60,7 +61,7 @@ private val MiniRowHeight = 64.dp
 private val MiniVideoHeight = 64.dp
 
 /** Where the one video surface sits inside the player's root box. Changing it only re-lays it out. */
-internal enum class VideoBox { Fill, TopWide, MiniBar }
+internal enum class VideoBox { Fill, TopWide, TwoColumn, MiniBar }
 
 /**
  * Sizes the video for [mode] in the layout phase. The surface stays the same node in the same tree
@@ -71,6 +72,8 @@ internal fun Modifier.videoBox(mode: VideoBox): Modifier = layout { m, c ->
     val (vw, vh) = when (mode) {
         VideoBox.Fill -> w to c.maxHeight
         VideoBox.TopWide -> w to (w * 9 / 16).coerceAtMost(c.maxHeight)
+        // Tablet landscape: the top of the left column (same rounding as fillMaxWidth(fraction)).
+        VideoBox.TwoColumn -> (w * TabletVideoFraction).roundToInt().let { it to (it * 9 / 16).coerceAtMost(c.maxHeight) }
         VideoBox.MiniBar -> {
             val h = MiniVideoHeight.roundToPx().coerceAtMost(c.maxHeight)
             (h * 16 / 9).coerceAtMost(w) to h

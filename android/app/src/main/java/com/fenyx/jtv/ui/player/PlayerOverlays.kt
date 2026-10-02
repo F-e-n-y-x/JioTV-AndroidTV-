@@ -341,7 +341,7 @@ internal fun Modifier.swipeDownToMinimize(actions: State<PlayerActions>): Modifi
  * Channel tiles + categories are one tap away behind "Channels" instead of always covering the video.
  */
 @Composable
-internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean) {
+internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitFullScreen: Boolean = compact) {
     val now = rememberMinuteClock()
     val act by rememberUpdatedState(d.actions)
     val c = Jtv.colors
@@ -390,8 +390,8 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean) {
                             showChannels = !showChannels; ui.bannerToken++
                         })
                         OverVideoIcon(Icons.Filled.MoreVert, "Options", { ui.openOptions() })
-                        if (compact) OverVideoIcon(PlayerIcons.FullscreenExit, "Exit full screen", { act.fullScreen(false) })
-                        else Plaque { JtvClock(now, size = 24.sp, dateColor = c.t2) }
+                        if (exitFullScreen) OverVideoIcon(PlayerIcons.FullscreenExit, "Exit full screen", { act.fullScreen(false) })
+                        if (!compact) Plaque { JtvClock(now, size = 24.sp, dateColor = c.t2) }
                     }
                     // ── Centre: previous · play/pause · next ──
                     if (!showChannels) Row(
