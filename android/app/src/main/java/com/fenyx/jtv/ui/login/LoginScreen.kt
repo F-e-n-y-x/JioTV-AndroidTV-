@@ -161,6 +161,7 @@ fun LoginScreen(
                     if (result.isSuccess) {
                         val authData = result.getOrNull()
                         if (authData != null) {
+                            settingsManager.setAuthMobile(mobileNumber)
                             settingsManager.saveAuthData(authData)
                         }
                     } else {

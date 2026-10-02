@@ -70,7 +70,7 @@ jobs:
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           VERSION_TAG="${{ github.ref_name }}"
           if [[ "${{ github.ref }}" != refs/tags/* ]]; then
-            VERSION_TAG="v1.5.6"
+            VERSION_TAG="v1.5.7"
           fi
           RELEASE_APK="JTV-${VERSION_TAG}.apk"
           cp "$APK_PATH" "../$RELEASE_APK"

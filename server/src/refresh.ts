@@ -1,4 +1,4 @@
-import { refreshTokens } from "./jio/tokens";
+import { recoverSession, refreshTokens } from "./jio/tokens";
 import { getStoredCredentials, updateTokens } from "./store/db";
 
 /**
@@ -63,8 +63,19 @@ export function refreshNow(opts: { force?: boolean } = {}): Promise<{ ok: boolea
     } catch (err) {
       const error = (err as Error).message;
       console.warn("[refresh] failed:", error);
-      // A definite "no" from Jio (vs. a network blip) — don't keep hammering it.
-      if (/refresh token|expired|not found|HTTP 4\d\d/i.test(error)) rejectedForAuthToken = stored.authToken;
+      // A definite "no" from Jio (vs. a network blip): the refresh token is gone. Try to rebuild the
+      // session from the SSO token once; if that fails too, stop asking Jio until the next sign-in.
+      if (/refresh token|expired|not found|HTTP 4\d\d/i.test(error)) {
+        try {
+          const recovered = await recoverSession(stored, stored.mobile);
+          updateTokens(recovered, Date.now());
+          console.log("[refresh] session recovered without a new sign-in");
+          return { ok: true };
+        } catch (e2) {
+          console.warn("[refresh] recovery failed:", (e2 as Error).message);
+          rejectedForAuthToken = stored.authToken;
+        }
+      }
       return { ok: false, error };
     }
   })().finally(() => {

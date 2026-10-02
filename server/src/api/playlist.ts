@@ -1,3 +1,4 @@
+import { getNativeXmltv } from "../jio/nativeXmltv";
 import zlib from "node:zlib";
 import { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -213,9 +214,22 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
         /* fall through to the channel-only guide */
       }
     }
-    // Native mode (or a failed XMLTV download): emit a channel-only guide so players still map
-    // names + logos. (Per-programme native EPG for every channel is too many requests to do here.)
-    return reply.send(await channelOnlyXmltv());
+    // Native mode (or a failed XMLTV download): the full guide built in the background from Jio's own
+    // EPG. Until the first build finishes, a channel-only guide so players still map names + logos.
+    const native = getNativeXmltv("xml");
+    return reply.send(native ?? (await channelOnlyXmltv()));
+  });
+
+  // Same guide, gzipped (~10x smaller) — many players accept `epg.xml.gz` directly.
+  app.get("/epg.xml.gz", { preHandler: requireCode }, async (_req, reply) => {
+    const cfg = getEpgConfig();
+    let body: Buffer | null = null;
+    if (cfg.mode === "xmltv" && cfg.url) {
+      try { body = zlib.gzipSync(await fetchXmltv(cfg.url)); } catch { /* fall back to native */ }
+    }
+    body ??= (getNativeXmltv("gz") as Buffer | null) ?? zlib.gzipSync(await channelOnlyXmltv());
+    reply.header("content-type", "application/gzip");
+    return reply.send(body);
   });
 }
 

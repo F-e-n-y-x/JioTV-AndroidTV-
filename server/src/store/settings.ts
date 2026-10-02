@@ -38,18 +38,40 @@ let cache: FileConfig | null = null;
 
 function load(): FileConfig {
   if (cache) return cache;
+  let text: string;
   try {
-    cache = JSON.parse(fs.readFileSync(file, "utf8")) as FileConfig;
+    text = fs.readFileSync(file, "utf8");
+  } catch (err) {
+    // No config yet (first run) is normal. Anything else (permissions, I/O) must not silently wipe the
+    // admin password and re-open first-run setup to whoever reaches the port first.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return (cache = {});
+    throw err;
+  }
+  try {
+    cache = JSON.parse(text) as FileConfig;
   } catch {
-    cache = {};
+    // Corrupted (e.g. a write from an older version was cut off): fall back to the last good copy.
+    try {
+      cache = JSON.parse(fs.readFileSync(`${file}.bak`, "utf8")) as FileConfig;
+      console.warn(`[settings] ${file} was unreadable; using ${file}.bak`);
+    } catch {
+      throw new Error(`${file} is not valid JSON and no usable .bak exists — fix or restore it, then restart.`);
+    }
   }
   return cache;
 }
 
 function save(c: FileConfig): void {
-  cache = c;
   fs.mkdirSync(config.dataDir, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(c, null, 2));
+  // Write a temp file and rename it over the real one: a crash or power cut mid-write can then never
+  // leave a half-written config.json behind. Keep the previous version as config.json.bak.
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(c, null, 2), { mode: 0o600 });
+  if (fs.existsSync(file)) {
+    try { fs.copyFileSync(file, `${file}.bak`); } catch {}
+  }
+  fs.renameSync(tmp, file);
+  cache = c;
 }
 
 function hashPassword(pw: string): string {

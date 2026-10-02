@@ -36,6 +36,8 @@ class SettingsManager(private val context: Context) {
         private val AUTH_SSO_TOKEN = stringPreferencesKey("auth_sso_token")
         private val AUTH_AUTH_TOKEN = stringPreferencesKey("auth_auth_token")
         private val AUTH_REFRESH_TOKEN = stringPreferencesKey("auth_refresh_token")
+        // Phone-mode sign-in number: lets JioApiClient rebuild a session Jio has ended without a new OTP.
+        private val AUTH_MOBILE = stringPreferencesKey("auth_mobile")
         private val AUTH_CRMID = stringPreferencesKey("auth_crmid")
         private val AUTH_UNIQUE_ID = stringPreferencesKey("auth_unique_id")
         private val AUTH_DEVICE_ID = stringPreferencesKey("auth_device_id")
@@ -291,8 +293,15 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    val authMobileFlow: Flow<String> = context.dataStore.data.map { it[AUTH_MOBILE] ?: "" }
+
+    suspend fun setAuthMobile(mobile: String) {
+        context.dataStore.edit { it[AUTH_MOBILE] = mobile }
+    }
+
     suspend fun clearAuthData() {
         context.dataStore.edit { preferences ->
+            preferences.remove(AUTH_MOBILE)
             preferences.remove(AUTH_SSO_TOKEN)
             preferences.remove(AUTH_AUTH_TOKEN)
             preferences.remove(AUTH_REFRESH_TOKEN)

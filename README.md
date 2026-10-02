@@ -192,6 +192,21 @@ Then build the signed, minified release (~3–4 MB):
 
 ## 📝 Changelog
 
+### v1.5.7
+- **Stays signed in even if Jio drops the session.** If Jio ever rejects the saved login, JTV now
+  rebuilds the session from your existing sign-in (the same token exchange the JioTV apps use)
+  instead of asking for a new OTP. Works for phone sign-in (after signing in once on v1.5.7) and the
+  JTV server.
+- **No more refresh spam from an error screen.** While the player shows an error, it stops
+  re-requesting the stream every minute.
+- **Server: full TV guide for IPTV players.** `/epg.xml` (and the new `/epg.xml.gz`) now include the
+  programme schedule (yesterday–tomorrow) for every channel, built in the background from Jio's own
+  guide. Before, TiviMate/Kodi showed an empty guide.
+- **Server: safer stream proxy.** It only fetches from Jio's own servers, so your Jio tokens can never be
+  sent anywhere else.
+- **Server: crash-safe settings.** `config.json` is written atomically with a `.bak` copy, so a power cut
+  can't wipe the admin password.
+
 ### v1.5.6
 - **Streams no longer stop after a while** (issue #3). Jio's login has a 12-hour access token and a
   refresh token that breaks if it's used several times at once. JTV used to refresh only *after* the

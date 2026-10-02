@@ -18,7 +18,7 @@ const FULL_CATCHUP_OFFSETS = [-7, -6, -5, -4, -3, -2, -1, 0, 1];
 const TTL_MS = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; programs: EpgProgram[] }>();
 
-async function fetchOffset(channelId: string, offset: number): Promise<EpgProgram[]> {
+export async function fetchOffset(channelId: string, offset: number): Promise<EpgProgram[]> {
   try {
     const url = `https://jiotvapi.cdn.jio.com/apis/v1.3/getepg/get?offset=${offset}&channel_id=${encodeURIComponent(channelId)}&langId=6`;
     const res = await fetch(url, {

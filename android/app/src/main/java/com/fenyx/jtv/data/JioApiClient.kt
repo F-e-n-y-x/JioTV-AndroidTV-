@@ -62,6 +62,12 @@ object JioApiClient {
      */
     private val refreshMutex = kotlinx.coroutines.sync.Mutex()
 
+    /**
+     * Access token Jio last REJECTED a refresh for. Until the user signs in again (new token) we don't
+     * ask Jio again: the session is gone and repeated attempts only spam the token service.
+     */
+    @Volatile private var rejectedAuthToken: String? = null
+
     /** Last ahead-of-time refresh attempt, so a failing refresh isn't retried on every stream request. */
     @Volatile private var lastProactiveRefreshMs = 0L
     private const val PROACTIVE_RETRY_GAP_MS = 10 * 60 * 1000L
@@ -331,7 +337,88 @@ object JioApiClient {
                 onFailure = { Result.failure(it) }
             )
         } else {
-            refreshToken(context)
+            val current = settingsManager.authDataFlow.first()
+            if (current != null && current.authToken == rejectedAuthToken) {
+                return@withLock Result.failure(RefreshRejectedException("Jio already rejected this sign-in"))
+            }
+            val refreshed = refreshToken(context)
+            if (refreshed.exceptionOrNull() is RefreshRejectedException && current != null) {
+                // The refresh token is gone. Rebuild the session from the SSO token instead of making
+                // the user sign in again; only if that fails too is the session really over.
+                val mobile = settingsManager.authMobileFlow.first()
+                val recovered = withContext(Dispatchers.IO) { recoverSession(current, mobile) }
+                if (recovered != null) {
+                    settingsManager.saveAuthData(recovered)
+                    Log.i(TAG, "Session recovered without a new sign-in")
+                    return@withLock Result.success(true)
+                }
+                rejectedAuthToken = current.authToken
+            }
+            refreshed
+        }
+    }
+
+    /**
+     * Rebuilds a session whose refresh token Jio rejected, without an OTP: refresh the SSO token (it
+     * has no expiry and still refreshes when the refresh token is dead), then trade it for a new access
+     * + refresh token pair via `loginotp/exchangetoken` (the call the JioTV apps make after sign-in).
+     * Needs the sign-in mobile number, saved since v1.5.7. Returns null when Jio says no.
+     */
+    private fun recoverSession(auth: AuthData, mobile: String): AuthData? {
+        if (mobile.isBlank() || auth.ssoToken.isBlank()) return null
+        return try {
+            var ssoToken = auth.ssoToken
+            (URL("https://tv.media.jio.com/apis/v2.0/loginotp/refresh?langId=6").openConnection() as HttpURLConnection).run {
+                connectTimeout = 10000; readTimeout = 10000
+                setRequestProperty("devicetype", DEVICE_TYPE)
+                setRequestProperty("versionCode", "422")
+                setRequestProperty("os", OS)
+                setRequestProperty("user-agent", USER_AGENT)
+                setRequestProperty("ssoToken", auth.ssoToken)
+                setRequestProperty("uniqueid", auth.uniqueId)
+                setRequestProperty("deviceid", auth.deviceId)
+                if (responseCode in 200..299) {
+                    JSONObject(readResponseBody(this)).optString("ssoToken").takeIf { it.isNotEmpty() }?.let { ssoToken = it }
+                }
+                disconnect()
+            }
+
+            val formatted = if (mobile.startsWith("+91")) mobile else "+91$mobile"
+            val conn = URL("https://jiotvapi.media.jio.com/userservice/apis/v1/loginotp/exchangetoken").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 10000; conn.readTimeout = 10000
+            conn.setRequestProperty("ssotoken", ssoToken)
+            conn.setRequestProperty("appname", APP_NAME)
+            conn.setRequestProperty("deviceid", auth.deviceId)
+            conn.setRequestProperty("devicetype", DEVICE_TYPE)
+            conn.setRequestProperty("os", OS)
+            conn.setRequestProperty("subscriberid", auth.crmid)
+            conn.setRequestProperty("persistentRefreshToken", "true")
+            conn.setRequestProperty("versionCode", "422")
+            conn.setRequestProperty("user-agent", USER_AGENT)
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = JSONObject().put("number", Base64.encodeToString(formatted.toByteArray(), Base64.NO_WRAP)).toString()
+            OutputStreamWriter(conn.outputStream).use { it.write(body) }
+            if (conn.responseCode !in 200..299) {
+                Log.w(TAG, "Session recovery rejected: ${conn.responseCode} ${readResponseBody(conn, isError = true).take(120)}")
+                conn.disconnect()
+                return null
+            }
+            val json = JSONObject(readResponseBody(conn))
+            conn.disconnect()
+            val newAuth = json.optString("authToken")
+            if (newAuth.isEmpty()) return null
+            auth.copy(
+                ssoToken = ssoToken,
+                authToken = newAuth,
+                refreshToken = json.optString("refreshToken").ifEmpty { auth.refreshToken },
+                userId = json.optString("userId").ifEmpty { auth.userId },
+                crmid = json.optString("subscriberId").ifEmpty { auth.crmid }
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Session recovery failed: ${e.message}")
+            null
         }
     }
 

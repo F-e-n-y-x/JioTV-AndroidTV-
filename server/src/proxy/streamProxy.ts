@@ -141,6 +141,8 @@ async function resolve(key: string): Promise<CachedStream> {
 
 /** Returns cached stream data, re-resolving a fresh __hdnea__ token ~15s before it expires. */
 export async function getStream(key: string): Promise<CachedStream> {
+  // Arbitrary keys would each trigger a Jio geturl call and a never-evicted cache entry.
+  if (!isValidStreamKey(key)) throw new Error("Invalid channel id");
   const c = cache.get(key);
   if (c && Date.now() < c.expiresAtMs - 15_000) return c;
   return resolve(key);
@@ -154,6 +156,35 @@ function withFreshToken(url: string, hdnea: string): string {
 }
 
 /**
+ * The proxy attaches the account's Jio credentials (ssoToken, Accesstoken…) to what it fetches, so it
+ * must only ever talk to Jio's own servers. Without this, `/seg?u=https://anything` would send those
+ * tokens to any host (or reach the LAN / cloud metadata) and stream the answer back.
+ */
+export function isJioUpstream(raw: string): boolean {
+  let u: URL;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  const h = u.hostname.toLowerCase();
+  return h === "jio.com" || h.endsWith(".jio.com") || h.endsWith(".jiocdn.com");
+}
+
+/** A live channel id ("154") or a catch-up key ("cu.<base64url>"); anything else is rejected. */
+export function isValidStreamKey(key: string): boolean {
+  return /^\d{1,7}$/.test(key) || /^cu\.[A-Za-z0-9_-]{1,2048}$/.test(key);
+}
+
+/** fetch() that follows redirects only while they stay on Jio hosts (credentials ride along). */
+async function fetchJio(url: string, init: RequestInit, hops = 3): Promise<Response> {
+  if (!isJioUpstream(url)) throw new Error("Refusing to fetch a non-Jio URL through the stream proxy");
+  const res = await fetch(url, { ...init, redirect: "manual" });
+  const loc = res.headers.get("location");
+  if (res.status >= 300 && res.status < 400 && loc && hops > 0) {
+    return fetchJio(new URL(loc, url).toString(), init, hops - 1);
+  }
+  return res;
+}
+
+/**
  * Proxies one upstream request (manifest or segment) with a fresh token + the stream headers, so the
  * browser never talks to the Jio CDN directly (defeats CORS) and never sees an expired token.
  */
@@ -162,6 +193,8 @@ export async function proxyUpstream(
   targetUrl: string,
   rangeHeader?: string
 ): Promise<Response> {
+  if (!isValidStreamKey(channelId)) throw new Error("Invalid channel id");
+  if (!isJioUpstream(targetUrl)) throw new Error("Refusing to fetch a non-Jio URL through the stream proxy");
   const c = await getStream(channelId);
   const url = withFreshToken(targetUrl, c.hdnea);
   // The AES-128 key for the non-DRM "Fallback" HLS lives on tv.media.jio.com and authenticates like
@@ -172,7 +205,7 @@ export async function proxyUpstream(
   const headers: Record<string, string> = { ...(isKey ? c.data.licenseHeaders : c.data.streamHeaders) };
   if (!isKey && c.hdnea) headers["Cookie"] = HDNEA_MARKER + c.hdnea;
   if (rangeHeader) headers["Range"] = rangeHeader;
-  return fetch(url, { headers });
+  return fetchJio(url, { headers });
 }
 
 /** Forwards a Widevine license challenge to Jio's license server with the correct headers. */

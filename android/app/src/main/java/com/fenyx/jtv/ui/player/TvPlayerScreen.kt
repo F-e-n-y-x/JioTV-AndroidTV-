@@ -565,6 +565,9 @@ fun TvPlayerScreen(
                          else 60_000L
             delay(waitMs)
 
+            // Nothing is playing while an error is on screen (e.g. "sign-in expired"); polling then
+            // only re-runs failing refreshes every minute. The user's OK press reloads the stream.
+            if (playbackError != null) continue
             val authData = settingsManager.authDataFlow.first() ?: continue
             val res = com.fenyx.jtv.data.JioApiClient.getStreamUrl(
                 context, ch.channelNumber.toString(), authData
