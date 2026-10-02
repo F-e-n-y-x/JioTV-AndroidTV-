@@ -3,7 +3,11 @@ package com.fenyx.jtv.ui.player
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.graphics.Color
@@ -82,19 +86,29 @@ private val fadeOutFast = fadeOut(tween(120))
 private val BannerHint = listOf(
     "Up / Down" to "change channel", "Left" to "channel list", "Right" to "options", "Hold OK" to "menu",
 )
+private val ControlsHint = listOf(
+    "Left / Right" to "move", "Up / Down" to "row", "OK" to "select", "Back" to "hide",
+)
+private val ControlsPausedHint = listOf(
+    "Left / Right" to "rewind / forward", "Hold" to "faster", "OK" to "play", "Back" to "hide",
+)
 private val BrowseHint = listOf(
     "Left / Right" to "browse", "OK" to "watch", "Up / Down" to "category", "0–9" to "channel number", "Back" to "hide",
 )
 
-/** Hides the banner (or touch controls) after [ms] unless something restarts the timer. */
+/**
+ * Hides the banner / touch controls (and the TV controls layer) after [ms] unless something restarts
+ * the timer. The controls stay up while [paused], and while a finger is still dragging the seek bar.
+ */
 @Composable
-internal fun BannerAutoHide(ui: PlayerUi, ms: Long) {
+internal fun BannerAutoHide(ui: PlayerUi, ms: Long, paused: Boolean = false, ts: Timeshift? = null) {
     val ov = ui.overlay
     val token = ui.bannerToken
-    LaunchedEffect(ov, token) {
-        if (ov == PlayerOverlay.Banner) {
+    LaunchedEffect(ov, token, paused) {
+        if (ov == PlayerOverlay.Banner || (ov == PlayerOverlay.Controls && !paused)) {
             delay(ms)
-            if (ui.overlay == PlayerOverlay.Banner) {
+            while (ts?.scrubMs != null) delay(500)
+            if (ui.overlay == ov) {
                 ui.overlay = PlayerOverlay.None
                 ui.pointerChrome = false
             }
@@ -112,6 +126,9 @@ internal class OverlayData(
     val epg: EpgSource,
     val model: OptionsModel,
     val actions: PlayerActions,
+    val timeshift: Timeshift,
+    /** A buffering spinner is up (drawn round Play/Pause in the controls). */
+    val buffering: Boolean = false,
 )
 
 private fun neighbours(groups: List<String>, g: String?): Pair<String?, String?> {
@@ -130,7 +147,7 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
     val act by rememberUpdatedState(d.actions)
     CompositionLocalProvider(LocalNow provides now) {
         Box(Modifier.fillMaxSize()) {
-            BannerAutoHide(ui, 4_000)
+            BannerAutoHide(ui, 4_000, paused = d.model.paused, ts = d.timeshift)
             val ov = ui.overlay
             val browsing = ov == PlayerOverlay.Browse
             val strapVisible = ov == PlayerOverlay.Banner || browsing
@@ -146,7 +163,7 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                     groupLabel(bGroup), browseList.size, prev, next,
                     Modifier.align(Alignment.TopStart).padding(start = 48.dp, top = 27.dp),
                 )
-            } else if (ui.pointerChrome && (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner)) {
+            } else if (ui.pointerChrome && ov == PlayerOverlay.Banner) {
                 PointerTopBar(d.playing, onBack = { act.leave() }, onOptions = { ui.openOptions() },
                     Modifier.align(Alignment.TopStart).padding(start = 48.dp, top = 27.dp))
             }
@@ -182,7 +199,10 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                         Spacer(Modifier.height(10.dp))
                     }
                     val strapCh = if (browsing) browseList.getOrNull(ui.browseIndex) ?: d.playing else d.playing
-                    if (strapCh != null) EpgStrap(strapCh, d.epg, TvStrap, playing = strapCh.id == d.playing?.id)
+                    if (strapCh != null) {
+                        val isPlaying = strapCh.id == d.playing?.id
+                        EpgStrap(strapCh, d.epg, TvStrap, playing = isPlaying, timeshift = if (isPlaying) d.timeshift else null)
+                    }
                     Spacer(Modifier.height(8.dp))
                     Plaque(Modifier.padding(0.dp)) {
                         KeyHint(if (browsing) BrowseHint else BannerHint, keyColor = c.t2, color = c.t3)
@@ -190,7 +210,80 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                 }
             }
 
+            AnimatedVisibility(visible = ov == PlayerOverlay.Controls, enter = fadeInFast, exit = fadeOutFast) {
+                TvControls(ui, d)
+            }
+
             OptionsAndMenu(ui, d, touch = false, panelWidth = 420.dp, edge = 48.dp)
+        }
+    }
+}
+
+/**
+ * TV controls layer (OK on the picture): top bar (Back with a mouse, channel, Channels, Settings,
+ * clock), Previous / Play-Pause / Next, then seek bar, time behind and Live, the slim show line and
+ * the key hint. Focus starts on Play/Pause (or the bar when opened by seeking). Up from the centre
+ * row goes to Settings, Down to the bar, Down again to Live.
+ */
+@Composable
+private fun TvControls(ui: PlayerUi, d: OverlayData) {
+    val c = Jtv.colors
+    val act by rememberUpdatedState(d.actions)
+    val ts = d.timeshift
+    val paused = d.model.paused
+    val playFr = remember { FocusRequester() }
+    val barFr = remember { FocusRequester() }
+    val liveFr = remember { FocusRequester() }
+    val settingsFr = remember { FocusRequester() }
+    val token = ui.controlsFocusToken
+    LaunchedEffect(token) {
+        withFrameNanos { }
+        runCatching {
+            if (ui.controlsFocusTarget == ControlFocus.Bar && ts.seekable) barFr.requestFocus() else playFr.requestFocus()
+        }
+    }
+    val bump = remember(ui) { { ui.bannerToken++; Unit } }
+    Box(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 48.dp, vertical = 27.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val toCentre = Modifier.focusProperties { down = playFr }
+            if (ui.pointerChrome) OverVideoButton("Back", { act.leave() }, icon = Icons.AutoMirrored.Filled.ArrowBack, modifier = toCentre)
+            ControlsTitle(d.playing, 18.sp, 520.dp)
+            Spacer(Modifier.weight(1f))
+            OverVideoButton("Channels", { act.openChannelList() }, icon = Icons.AutoMirrored.Filled.List, modifier = toCentre)
+            OverVideoButton(
+                "Settings", { ui.openOptions() }, icon = Icons.Filled.Settings,
+                modifier = toCentre.focusRequester(settingsFr),
+            )
+            Plaque { JtvClock(LocalNow.current, size = 28.sp, dateColor = c.t2) }
+        }
+        CentreControls(
+            paused = paused, buffering = d.buffering, actions = act,
+            modifier = Modifier.align(Alignment.Center),
+            side = 56.dp, main = 72.dp, gap = 48.dp,
+            playFocus = playFr, upFocus = settingsFr,
+            downFocus = if (ts.seekable) barFr else if (ts.live) liveFr else null,
+            onPlayFocus = { f ->
+                if (f) ui.focusedControl = ControlFocus.Play
+                else if (ui.focusedControl == ControlFocus.Play) ui.focusedControl = ControlFocus.None
+            },
+        )
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 48.dp, vertical = 27.dp)) {
+            SeekRow(
+                ts, act, onInteract = bump,
+                barFocus = barFr, liveFocus = liveFr, upFocus = playFr,
+                onBarFocus = { f ->
+                    if (f) ui.focusedControl = ControlFocus.Bar
+                    else if (ui.focusedControl == ControlFocus.Bar) ui.focusedControl = ControlFocus.None
+                },
+            )
+            Spacer(Modifier.height(10.dp))
+            d.playing?.let { MiniInfoLine(it, d.epg, null, Modifier.widthIn(max = 900.dp)) }
+            Spacer(Modifier.height(8.dp))
+            Plaque { KeyHint(if (paused && ts.seekable) ControlsPausedHint else ControlsHint, keyColor = c.t2, color = c.t3) }
         }
     }
 }
@@ -349,8 +442,9 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
     val tiles = if (compact) PhoneLandTiles else TabletTiles
     CompositionLocalProvider(LocalNow provides now) {
         Box(Modifier.fillMaxSize()) {
-            BannerAutoHide(ui, 5_000)
+            BannerAutoHide(ui, 4_000, ts = d.timeshift)
             val paused = d.model.paused
+            val bump = remember(ui) { { ui.bannerToken++; Unit } }
             val controls = ui.overlay == PlayerOverlay.Banner || paused
             var showChannels by remember { mutableStateOf(false) }
             LaunchedEffect(controls) { if (!controls) showChannels = false }
@@ -369,7 +463,7 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
 
             AnimatedVisibility(visible = controls, enter = fadeInFast, exit = fadeOutFast) {
                 Box(Modifier.fillMaxSize()) {
-                    // ── Top: back · channel · (channels, options, exit full screen) ──
+                    // ── Top: minimise · channel · (channels, settings, exit full screen, clock) ──
                     Row(
                         Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = pad, vertical = pad),
                         verticalAlignment = Alignment.CenterVertically,
@@ -377,36 +471,22 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
                     ) {
                         if (act.canMinimize) OverVideoIcon(PlayerIcons.ExpandMore, "Minimise player", { act.minimize() }, iconSize = 30.dp)
                         else OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() })
-                        d.playing?.let { ch ->
-                            JText(
-                                listOfNotNull(ch.channelNumber.takeIf { it > 0 }?.toString(), ch.name).joinToString("  "),
-                                16.sp, color = c.tx, weight = FontWeight.SemiBold,
-                                modifier = Modifier.widthIn(max = 360.dp).clip(RoundedCornerShape(6.dp))
-                                    .background(StrapBg.copy(alpha = 0.8f)).padding(horizontal = 10.dp, vertical = 6.dp),
-                            )
-                        }
+                        ControlsTitle(d.playing, 16.sp, 360.dp)
                         Spacer(Modifier.weight(1f))
                         OverVideoIcon(Icons.AutoMirrored.Filled.List, if (showChannels) "Hide channels" else "Channels", {
                             showChannels = !showChannels; ui.bannerToken++
                         })
-                        OverVideoIcon(Icons.Filled.MoreVert, "Options", { ui.openOptions() })
+                        OverVideoIcon(Icons.Filled.Settings, "Settings", { ui.openOptions() })
                         if (exitFullScreen) OverVideoIcon(PlayerIcons.FullscreenExit, "Exit full screen", { act.fullScreen(false) })
                         if (!compact) Plaque { JtvClock(now, size = 24.sp, dateColor = c.t2) }
                     }
                     // ── Centre: previous · play/pause · next ──
-                    if (!showChannels) Row(
-                        Modifier.align(Alignment.Center),
-                        horizontalArrangement = Arrangement.spacedBy(if (compact) 40.dp else 56.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OverVideoIcon(PlayerIcons.SkipPrevious, "Previous channel", { act.zap(-1) }, size = 52.dp, iconSize = 28.dp)
-                        OverVideoIcon(
-                            if (paused) Icons.Filled.PlayArrow else PlayerIcons.Pause, if (paused) "Play" else "Pause",
-                            { act.togglePause() }, size = 64.dp, iconSize = 34.dp,
-                        )
-                        OverVideoIcon(PlayerIcons.SkipNext, "Next channel", { act.zap(1) }, size = 52.dp, iconSize = 28.dp)
-                    }
-                    // ── Bottom: (channels) + slim info line ──
+                    if (!showChannels) CentreControls(
+                        paused = paused, buffering = d.buffering, actions = act,
+                        modifier = Modifier.align(Alignment.Center),
+                        gap = if (compact) 40.dp else 56.dp,
+                    )
+                    // ── Bottom: seek bar + Live, or the channel rail; then the slim info line ──
                     Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = pad, end = pad, bottom = pad)) {
                         if (showChannels) {
                             CategoryChips(
@@ -426,8 +506,11 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
                                 onFocused = noFocus, onClick = onRailClick,
                             )
                             Spacer(Modifier.height(8.dp))
+                        } else {
+                            SeekRow(d.timeshift, act, onInteract = bump)
+                            Spacer(Modifier.height(4.dp))
                         }
-                        d.playing?.let { MiniInfoLine(it, d.epg, Modifier.widthIn(max = 720.dp)) }
+                        d.playing?.let { MiniInfoLine(it, d.epg, d.timeshift, Modifier.widthIn(max = 720.dp)) }
                     }
                 }
             }
@@ -439,21 +522,23 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
 
 /** One slim line over the video: small number block · show title · time left · thin progress. */
 @Composable
-private fun MiniInfoLine(ch: Channel, epg: EpgSource, modifier: Modifier = Modifier) {
+private fun MiniInfoLine(ch: Channel, epg: EpgSource, ts: Timeshift?, modifier: Modifier = Modifier) {
     val c = Jtv.colors
+    val tv = Jtv.isTv
     val now = LocalNow.current
     val cur = rememberNowNext(epg, ch.id, always = true)?.now
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg.copy(alpha = 0.85f))) {
-        Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.height(if (tv) 56.dp else 48.dp), verticalAlignment = Alignment.CenterVertically) {
             NumberBlock(ch.channelNumber, Modifier.width(64.dp).fillMaxHeight(), 22.sp)
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                JText(cur?.title ?: ch.name, 16.sp, color = c.tx, weight = FontWeight.SemiBold)
+                JText(cur?.title ?: ch.name, if (tv) 18.sp else 16.sp, color = c.tx, weight = FontWeight.SemiBold)
                 JText(
                     if (cur != null) "${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)} · ${cur.minutesLeft(now)} min left"
                     else listOfNotNull(ch.group, ch.language).joinToString(" · "),
-                    13.sp, color = c.t2,
+                    14.sp, color = c.t2,
                 )
             }
+            if (ts != null) BehindLiveTag(ts, 14.sp, Modifier.padding(end = 12.dp))
         }
         if (cur != null) JtvProgress(cur.progress(now), height = 2.dp, track = Color(0x33FFFFFF))
     }

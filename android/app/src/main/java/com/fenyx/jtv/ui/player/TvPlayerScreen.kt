@@ -56,6 +56,7 @@ import com.fenyx.jtv.theme.JtvDarkOnly
 import com.fenyx.jtv.theme.LocalJtvColors
 import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -145,6 +146,8 @@ fun TvPlayerScreen(
 
     // Overlay state (banner / browse / options / menu / number entry) lives apart from playback state.
     val ui = remember { PlayerUi(PlayerOverlay.Banner) }
+    // Live timeshift (DVR window) state for the seek bar, the Live button and "Behind live".
+    val ts = remember { Timeshift() }
     
     val settingsManager = remember { SettingsManager(context) }
     val favoriteChannels by settingsManager.favoriteChannelsFlow.collectAsState(initial = emptySet())
@@ -383,6 +386,15 @@ fun TvPlayerScreen(
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
+                // Paused (or rewound) past the start of the DVR window: the stream itself is fine, so go
+                // back to live on the same source instead of re-fetching the URL.
+                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                    android.util.Log.d("TvPlayer", "Behind the live window: back to live")
+                    ts.reset()
+                    exoPlayer.seekToDefaultPosition()
+                    exoPlayer.prepare()
+                    return
+                }
                 // Token/cookie expiration (often 403 Forbidden) causes a black screen.
                 // We MUST re-fetch the stream URL entirely, not just retry the same expired URL.
                 if (retryCount.intValue < 5) {
@@ -480,6 +492,7 @@ fun TvPlayerScreen(
                 }
 
                 httpDataSourceFactory.setDefaultRequestProperties(streamData.headers)
+                ts.reset()
 
                 val mediaSource = mediaSourceFactory.createMediaSource(mediaItemBuilder.build())
 
@@ -626,7 +639,10 @@ fun TvPlayerScreen(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> exoPlayer.pause()
-                Lifecycle.Event.ON_START -> if (!userPausedState.value) exoPlayer.play()
+                Lifecycle.Event.ON_START -> if (!userPausedState.value) {
+                    exoPlayer.play()
+                    if (!mini) ui.showBanner()
+                }
                 else -> {}
             }
         }
@@ -724,6 +740,44 @@ fun TvPlayerScreen(
 
     fun setPaused(p: Boolean) {
         if (p) { exoPlayer.pause(); userPaused = true } else { exoPlayer.play(); userPaused = false }
+        ts.update(exoPlayer)
+    }
+
+    // Timeshift polling: at most every 500 ms, and only while the controls / strap are up or the user
+    // has paused (nothing reads the values otherwise; while playing behind live the offset is constant).
+    LaunchedEffect(exoPlayer, mini) {
+        if (mini) return@LaunchedEffect
+        snapshotFlow {
+            val ov = ui.overlay
+            ov == PlayerOverlay.Banner || ov == PlayerOverlay.Controls || userPaused
+        }.collectLatest { active ->
+            if (active) while (true) {
+                ts.update(exoPlayer)
+                delay(500)
+            }
+        }
+    }
+
+    /** Seek inside the live window; at (or past) the right end it means live. Keeps play/pause as is. */
+    fun commitSeek(ms: Long) {
+        if (!ts.seekable) return
+        if (ms >= ts.spanMs - LiveToleranceMs) {
+            exoPlayer.seekToDefaultPosition()
+            ts.positionMs = ts.spanMs
+        } else {
+            val t = ms.coerceAtLeast(0L)
+            exoPlayer.seekTo(t)
+            ts.positionMs = t
+        }
+        ui.bannerToken++
+    }
+
+    fun doGoLive() {
+        exoPlayer.seekToDefaultPosition()
+        ts.positionMs = ts.spanMs
+        setPaused(false)
+        ts.positionMs = ts.spanMs
+        ui.bannerToken++
     }
 
     fun doZap(delta: Int) {
@@ -842,6 +896,7 @@ fun TvPlayerScreen(
             ui.overlay == PlayerOverlay.Options ->
                 if (ui.optionsPage != OptionsPage.Main && ui.optionsEntry == OptionsPage.Main) ui.optionsPage = OptionsPage.Main
                 else ui.overlay = PlayerOverlay.None
+            ui.overlay == PlayerOverlay.Controls -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
             ui.overlay == PlayerOverlay.Banner && !pagePlayer -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
             // Tablet full screen: Back returns to the page first.
             isTablet && tabletFull -> setFullScreen(false)
@@ -930,6 +985,8 @@ fun TvPlayerScreen(
         override fun minimize() = doMinimize()
         override fun retry() = doRetry()
         override fun fullScreen(on: Boolean) = setFullScreen(on)
+        override fun seekTo(ms: Long) = commitSeek(ms)
+        override fun goLive() = doGoLive()
     }
     val actionsState = rememberUpdatedState<PlayerActions>(actions)
 
@@ -969,6 +1026,8 @@ fun TvPlayerScreen(
         epg = epg,
         model = model,
         actions = actions,
+        timeshift = ts,
+        buffering = isBuffering && playbackError == null,
     )
 
     // Keep focus somewhere sensible: on the error's first button (TV), else on the player itself, so
@@ -1043,7 +1102,9 @@ fun TvPlayerScreen(
                             when (e.type) {
                                 PointerEventType.Move -> if (mouse) {
                                     if (!ui.pointerChrome) ui.pointerChrome = true
-                                    if (ui.overlay == PlayerOverlay.None) ui.showBanner() else ui.bumpThrottled()
+                                    val ov = ui.overlay
+                                    if (isTv && (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner)) ui.openControls()
+                                    else if (ov == PlayerOverlay.None) ui.showBanner() else ui.bumpThrottled()
                                 } else if (ui.overlay == PlayerOverlay.Banner) ui.bumpThrottled()
                                 PointerEventType.Scroll -> {
                                     val ov = ui.overlay
@@ -1076,6 +1137,24 @@ fun TvPlayerScreen(
                     val clean = ov == PlayerOverlay.None || ov == PlayerOverlay.Banner
                     val errShown = playbackError != null && !isBuffering
                     val entering = ui.number.isNotEmpty()
+                    val controlsUp = ov == PlayerOverlay.Controls
+                    // Any key inside the TV controls layer keeps it up.
+                    if (controlsUp && down) ui.bannerToken++
+
+                    // TV timeshift: Left/Right seek (10 s, held: 30 s then 60 s; the seek happens on release)
+                    // on the seek bar, or anywhere while paused (except Prev/Next and the top bar).
+                    if (isTv && !entering && !errShown && (k == Key.DirectionLeft || k == Key.DirectionRight)) {
+                        val onBar = controlsUp && ui.focusedControl == ControlFocus.Bar
+                        val scrubHere = ts.scrubMs != null || onBar || when {
+                            controlsUp -> userPaused && ui.focusedControl == ControlFocus.Play
+                            clean -> userPaused
+                            else -> false
+                        }
+                        if (scrubHere && ts.seekable) {
+                            if (clean && down) ui.openControls(ControlFocus.Bar)
+                            if (ts.scrubKey(ev, yieldAtLive = onBar, commit = ::commitSeek)) return@onPreviewKeyEvent true
+                        }
+                    }
 
                     // The rest of a hold-OK that already opened the menu (repeats + key-up) is swallowed so
                     // it doesn't also press the menu's first item.
@@ -1106,6 +1185,10 @@ fun TvPlayerScreen(
                             press.job?.cancel()
                             if (press.downSeen && !press.longFired) {
                                 when {
+                                    isTv -> {
+                                        if (userPaused) setPaused(false)
+                                        ui.openControls(ControlFocus.Play)
+                                    }
                                     userPaused -> setPaused(false)
                                     ui.overlay == PlayerOverlay.Banner -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
                                     else -> ui.showBanner()
@@ -1154,7 +1237,7 @@ fun TvPlayerScreen(
                         }
                     }
 
-                    if (k == Key.DirectionUp || k == Key.DirectionDown || k == Key.DirectionLeft || k == Key.DirectionRight) {
+                    if (!controlsUp && (k == Key.DirectionUp || k == Key.DirectionDown || k == Key.DirectionLeft || k == Key.DirectionRight)) {
                         ui.pointerChrome = false
                     }
                     val panel = ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu
@@ -1162,9 +1245,21 @@ fun TvPlayerScreen(
                     when (k) {
                         Key.ChannelUp, Key.MediaNext, Key.PageUp -> { if (!panel) doZap(1); true }
                         Key.ChannelDown, Key.MediaPrevious, Key.PageDown -> { if (!panel) doZap(-1); true }
-                        Key.MediaPlayPause -> { setPaused(!userPaused); if (userPaused) ui.showBanner(); true }
+                        Key.MediaPlayPause -> {
+                            setPaused(!userPaused)
+                            if (isTv) ui.openControls() else if (userPaused) ui.showBanner()
+                            true
+                        }
                         Key.MediaPlay -> { setPaused(false); true }
-                        Key.MediaPause -> { setPaused(true); ui.showBanner(); true }
+                        Key.MediaPause -> { setPaused(true); if (isTv) ui.openControls() else ui.showBanner(); true }
+                        Key.MediaFastForward, Key.MediaRewind -> {
+                            if (ts.seekable && !panel) {
+                                val base = if (ts.atLive) ts.spanMs else ts.positionMs
+                                commitSeek(base + if (k == Key.MediaFastForward) 10_000 else -10_000)
+                                if (isTv) ui.openControls(ControlFocus.Bar) else ui.showBanner()
+                            }
+                            true
+                        }
                         Key.Menu -> { ui.overlay = if (ov == PlayerOverlay.Menu) PlayerOverlay.None else PlayerOverlay.Menu; true }
                         Key.Guide -> { if (ov != PlayerOverlay.Browse) openBrowse(); true }
                         Key.Info -> {
@@ -1174,21 +1269,21 @@ fun TvPlayerScreen(
                         }
                         Key.DirectionUp -> when (ov) {
                             PlayerOverlay.Browse -> { browseCategory(-1); true }
-                            PlayerOverlay.Options, PlayerOverlay.Menu -> false
+                            PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
                             else -> { doZap(-1); true }
                         }
                         Key.DirectionDown -> when (ov) {
                             PlayerOverlay.Browse -> { browseCategory(1); true }
-                            PlayerOverlay.Options, PlayerOverlay.Menu -> false
+                            PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
                             else -> { doZap(1); true }
                         }
                         Key.DirectionLeft -> when (ov) {
-                            PlayerOverlay.Browse, PlayerOverlay.Menu -> false
+                            PlayerOverlay.Browse, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
                             PlayerOverlay.Options -> { backLadder(); true }
                             else -> if (errShown) false else { openBrowse(); true }
                         }
                         Key.DirectionRight -> when (ov) {
-                            PlayerOverlay.Browse, PlayerOverlay.Options, PlayerOverlay.Menu -> false
+                            PlayerOverlay.Browse, PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
                             else -> if (errShown) false else { ui.openOptions(); true }
                         }
                         else -> false
@@ -1204,7 +1299,7 @@ fun TvPlayerScreen(
             val paused = userPaused && !isBuffering
             val status: @Composable BoxScope.() -> Unit = {
                 if (buffering) BufferingIndicator(name, Modifier.align(Alignment.Center))
-                if (paused) PausedBadge(touch = !isTv, onPlay = { setPaused(false) }, modifier = Modifier.align(Alignment.Center))
+                if (paused && isTv) TvPausedBadge(ui, Modifier.align(Alignment.Center))
             }
 
             if (mini) {
@@ -1332,3 +1427,10 @@ private val JIO_KEY_HOST = Regex("(^|//)tv\\.media\\.jio\\.com/", RegexOption.IG
 private fun isHlsKeyUri(uri: String): Boolean =
     uri.contains(".pkey", ignoreCase = true) || uri.contains("aes128.key", ignoreCase = true) ||
         JIO_KEY_HOST.containsMatchIn(uri)
+
+/** TV: "Paused / Press OK to continue" once the controls layer has been closed while paused. */
+@Composable
+private fun TvPausedBadge(ui: PlayerUi, modifier: Modifier) {
+    val ov = ui.overlay
+    if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) PausedBadge(touch = false, onPlay = {}, modifier = modifier)
+}

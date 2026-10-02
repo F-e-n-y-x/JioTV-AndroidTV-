@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -109,7 +110,7 @@ internal fun PhonePortraitPlayer(
         // No page background here: the player root paints it BEFORE the video surface, which sits
         // under this page at the top 16:9 (anything opaque drawn here would cover the picture).
         Box(Modifier.fillMaxSize()) {
-            BannerAutoHide(ui, 4_000)
+            BannerAutoHide(ui, 4_000, ts = d.timeshift)
             Column(Modifier.fillMaxSize()) {
                 PhoneVideo(ui, d, actionsState, buffering)
 
@@ -259,8 +260,9 @@ internal fun PhoneVideo(
         if (buffering && !controls) {
             CircularProgressIndicator(color = c.acc, strokeWidth = 3.dp, modifier = Modifier.align(Alignment.Center))
         }
-        if (playing != null) {
-            Row(Modifier.align(Alignment.BottomStart)) {
+        // The number tag (and "Behind live") while the controls are hidden; the controls carry the name.
+        if (playing != null && !controls) {
+            Row(Modifier.align(Alignment.BottomStart), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.background(c.acc).padding(horizontal = 10.dp, vertical = 4.dp)) {
                     Text(
                         if (playing.channelNumber > 0) playing.channelNumber.toString() else "–",
@@ -270,6 +272,11 @@ internal fun PhoneVideo(
                 Box(Modifier.background(StrapBg).padding(horizontal = 10.dp, vertical = 5.dp)) {
                     JText(playing.name, 15.sp, weight = FontWeight.SemiBold)
                 }
+                BehindLiveTag(
+                    d.timeshift, 14.sp,
+                    Modifier.padding(start = 6.dp).background(StrapBg.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                )
             }
         }
         AnimatedVisibility(
@@ -277,34 +284,30 @@ internal fun PhoneVideo(
             modifier = Modifier.fillMaxSize(),
         ) {
             Box(Modifier.fillMaxSize()) {
-                if (act.canMinimize) OverVideoIcon(
-                    PlayerIcons.ExpandMore, "Minimise player", { act.minimize() },
-                    Modifier.align(Alignment.TopStart).padding(8.dp), iconSize = 30.dp,
-                ) else OverVideoIcon(
-                    Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() },
-                    Modifier.align(Alignment.TopStart).padding(8.dp),
-                )
-                OverVideoIcon(
-                    PlayerIcons.Fullscreen, "Full screen", { act.fullScreen(true) },
-                    Modifier.align(Alignment.TopEnd).padding(8.dp),
-                )
+                // ── Top: minimise · channel · Settings ──
                 Row(
-                    Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OverVideoIcon(PlayerIcons.SkipPrevious, "Previous channel", { act.zap(-1) }, size = 56.dp, iconSize = 30.dp)
-                    Box(contentAlignment = Alignment.Center) {
-                        if (buffering) {
-                            CircularProgressIndicator(color = c.acc, strokeWidth = 3.dp, modifier = Modifier.size(64.dp))
-                        }
-                        OverVideoIcon(
-                            if (paused) Icons.Filled.PlayArrow else PlayerIcons.Pause,
-                            if (paused) "Play" else "Pause",
-                            { act.togglePause() }, size = 56.dp, iconSize = 32.dp,
-                        )
-                    }
-                    OverVideoIcon(PlayerIcons.SkipNext, "Next channel", { act.zap(1) }, size = 56.dp, iconSize = 30.dp)
+                    if (act.canMinimize) OverVideoIcon(PlayerIcons.ExpandMore, "Minimise player", { act.minimize() }, iconSize = 30.dp)
+                    else OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() })
+                    ControlsTitle(playing, 15.sp, 420.dp)
+                    Spacer(Modifier.weight(1f))
+                    OverVideoIcon(Icons.Filled.Settings, "Settings", { ui.openOptions() })
+                }
+                // ── Centre: previous · play/pause · next ──
+                CentreControls(
+                    paused = paused, buffering = buffering, actions = act,
+                    modifier = Modifier.align(Alignment.Center),
+                    side = 48.dp, main = 56.dp, gap = 28.dp,
+                )
+                // ── Bottom: seek bar · time behind · Live · full screen ──
+                SeekRow(
+                    d.timeshift, act, onInteract = { ui.bannerToken++ },
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 4.dp, bottom = 2.dp),
+                ) {
+                    OverVideoIcon(PlayerIcons.Fullscreen, "Full screen", { act.fullScreen(true) })
                 }
             }
         }

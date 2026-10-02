@@ -54,7 +54,7 @@ internal fun TabletLandscapePlayer(
     val playing = d.playing
     CompositionLocalProvider(LocalNow provides now) {
         Box(Modifier.fillMaxSize()) {
-            BannerAutoHide(ui, 4_000)
+            BannerAutoHide(ui, 4_000, ts = d.timeshift)
             LaunchedEffect(d.currentGroup) { ui.browseGroup = d.currentGroup ?: MainViewModel.GROUP_ALL }
             val bGroup = ui.browseGroup ?: d.currentGroup ?: MainViewModel.GROUP_ALL
 

@@ -84,6 +84,10 @@ internal interface PlayerActions {
     fun retry()
     /** Phone: go to landscape full screen, or back. */
     fun fullScreen(on: Boolean) {}
+    /** Timeshift: seek within the live window (window coordinates; at the right end = live). */
+    fun seekTo(ms: Long) {}
+    /** Back to the live point, and play. */
+    fun goLive() {}
 }
 
 /**

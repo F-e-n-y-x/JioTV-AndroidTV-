@@ -125,14 +125,21 @@ internal fun programMeta(p: EpgProgram, language: String?): String {
 // ───────────────────────── Info strap ─────────────────────────
 
 @Composable
-internal fun EpgStrap(channel: Channel, epg: EpgSource, s: StrapSizes, modifier: Modifier = Modifier, playing: Boolean = true) {
+internal fun EpgStrap(
+    channel: Channel, epg: EpgSource, s: StrapSizes, modifier: Modifier = Modifier, playing: Boolean = true,
+    timeshift: Timeshift? = null,
+) {
     val nn = rememberNowNext(epg, channel.id, always = playing)
-    InfoStrap(channel, nn, LocalNow.current, s, modifier)
+    InfoStrap(channel, nn, LocalNow.current, s, modifier, timeshift)
 }
 
 /** Amber number block · channel / show / meta / times + progress · NEXT column (D-tv-player-dark). */
 @Composable
-internal fun InfoStrap(channel: Channel, nn: NowNext?, now: Long, s: StrapSizes, modifier: Modifier = Modifier) {
+internal fun InfoStrap(
+    channel: Channel, nn: NowNext?, now: Long, s: StrapSizes, modifier: Modifier = Modifier,
+    /** The playing channel's timeshift: "Behind live −02:35" next to the name while behind. */
+    timeshift: Timeshift? = null,
+) {
     val c = Jtv.colors
     val meta = nn?.now?.let { programMeta(it, channel.language) }.orEmpty()
     // The meta line adds one line of height only when there is one, so straps without it are unchanged.
@@ -147,7 +154,10 @@ internal fun InfoStrap(channel: Channel, nn: NowNext?, now: Long, s: StrapSizes,
             verticalArrangement = Arrangement.Center,
         ) {
             if (cur != null) {
-                JText(channel.name, s.nameSize, color = c.t2, weight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    JText(channel.name, s.nameSize, color = c.t2, weight = FontWeight.SemiBold)
+                    if (timeshift != null) BehindLiveTag(timeshift, s.nameSize, Modifier.padding(start = 14.dp))
+                }
                 JText(cur.title, s.titleSize, weight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
                 if (meta.isNotEmpty()) JText(meta, s.metaSize, color = c.t2, modifier = Modifier.padding(top = 2.dp))
                 Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -161,7 +171,10 @@ internal fun InfoStrap(channel: Channel, nn: NowNext?, now: Long, s: StrapSizes,
                 }
             } else {
                 JText(channel.name, s.titleSize, weight = FontWeight.Bold)
-                JText(channelSubtitle(channel), s.metaSize, color = c.t2, modifier = Modifier.padding(top = 4.dp))
+                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    JText(channelSubtitle(channel), s.metaSize, color = c.t2)
+                    if (timeshift != null) BehindLiveTag(timeshift, s.metaSize, Modifier.padding(start = 14.dp))
+                }
             }
         }
         val later = nn?.later.orEmpty().take(3)

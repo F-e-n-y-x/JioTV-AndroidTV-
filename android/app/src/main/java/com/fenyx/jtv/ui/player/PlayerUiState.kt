@@ -10,7 +10,11 @@ import androidx.compose.ui.graphics.Color
 import com.fenyx.jtv.ui.main.MainViewModel
 
 /** What is drawn over the video. Exactly one at a time keeps the key model (and Back) simple. */
-enum class PlayerOverlay { None, Banner, Browse, Options, Menu }
+/**
+ * [Banner]: the info strap on TV, and the YouTube-style controls layer on touch. [Controls]: the TV
+ * controls layer (OK opens it): top bar, Previous / Play-Pause / Next, seek bar + Live.
+ */
+enum class PlayerOverlay { None, Banner, Browse, Options, Menu, Controls }
 
 /** Pages of the right-side options panel. Sub pages are inline lists, never a separate dialog window. */
 enum class OptionsPage { Main, Language, Quality, Aspect, Voice, Sleep }
@@ -48,7 +52,26 @@ class PlayerUi(initial: PlayerOverlay) {
     /** Bumped to move focus (and scroll) to [browseIndex]. */
     var browseFocusToken by mutableIntStateOf(0)
 
+    /** TV controls layer: bumped to move focus to [controlsFocusTarget] when the layer opens. */
+    var controlsFocusToken by mutableIntStateOf(0)
+    var controlsFocusTarget = ControlFocus.Play
+    /** Which control holds focus (set by the controls themselves; read by the key handler only). */
+    var focusedControl = ControlFocus.None
+
     private var lastBump = 0L
+
+    /** TV: open the controls layer (or keep it open) and put focus on [focus]. */
+    fun openControls(focus: ControlFocus = ControlFocus.Play) {
+        if (overlay == PlayerOverlay.None || overlay == PlayerOverlay.Banner || overlay == PlayerOverlay.Controls) {
+            val opening = overlay != PlayerOverlay.Controls
+            overlay = PlayerOverlay.Controls
+            bannerToken++
+            if (opening || focus != ControlFocus.Play) {
+                controlsFocusTarget = focus
+                controlsFocusToken++
+            }
+        }
+    }
 
     fun showBanner() {
         if (overlay == PlayerOverlay.None || overlay == PlayerOverlay.Banner) {
