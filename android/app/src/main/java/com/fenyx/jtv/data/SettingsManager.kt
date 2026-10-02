@@ -372,8 +372,9 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    // ── Remote buttons (INTERACTION.md §6) ──
+    // ── Remote buttons (INTERACTION.md §6) and picture-in-picture ──
     private val remoteKeysKey = stringPreferencesKey("remote_keys")
+    private val pipKey = booleanPreferencesKey("pip_on_leave")
 
     /** The custom remote-button map; absent (or unreadable) = the Standard profile = today's keys. */
     val remoteKeyMapFlow: Flow<RemoteKeyMap> = context.dataStore.data.map { p ->
@@ -387,5 +388,12 @@ class SettingsManager(private val context: Context) {
     /** Reset to default: the stored map is removed, so the built-in Standard profile applies. */
     suspend fun resetRemoteKeyMap() {
         context.dataStore.edit { it.remove(remoteKeysKey) }
+    }
+
+    /** Phone/tablet: go into picture-in-picture when leaving the app while a channel plays. On by default. */
+    val pipOnLeaveFlow: Flow<Boolean> = context.dataStore.data.map { it[pipKey] ?: true }
+
+    suspend fun setPipOnLeave(enabled: Boolean) {
+        context.dataStore.edit { it[pipKey] = enabled }
     }
 }

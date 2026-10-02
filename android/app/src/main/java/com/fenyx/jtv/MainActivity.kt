@@ -34,6 +34,36 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ── Picture-in-picture (phone/tablet; see ui/player/Pip.kt) ──
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        com.fenyx.jtv.ui.player.Pip.onUserLeaveHint(this)
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        com.fenyx.jtv.ui.player.Pip.onModeChanged(
+            isInPictureInPictureMode,
+            stopped = !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED),
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        com.fenyx.jtv.ui.player.Pip.onResume()
+    }
+
+    override fun onStop() {
+        // Stopped while in PiP = the PiP window was closed: the player session ends (Pip.closed).
+        com.fenyx.jtv.ui.player.Pip.onStop()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        com.fenyx.jtv.ui.player.Pip.unregister(this)
+        super.onDestroy()
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         handleBackupIntent(intent)
@@ -42,6 +72,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleBackupIntent(intent)
+        com.fenyx.jtv.ui.player.Pip.register(this)
 
         // Edge-to-edge + hidden system bars so the app's navy background fills the ENTIRE screen (incl.
         // any area the keyboard leaves) instead of the OS painting black at the edges. Removing this
@@ -62,7 +93,15 @@ class MainActivity : ComponentActivity() {
         val isLeanback = packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
         val settings = com.fenyx.jtv.data.SettingsManager(applicationContext)
         setContent {
-            val sw = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp
+            // In picture-in-picture the window is tiny: keep the layouts of the full window (the player
+            // draws only the video then), so nothing behind it switches to a phone layout and back.
+            val liveConfig = androidx.compose.ui.platform.LocalConfiguration.current
+            val fullConfig = androidx.compose.runtime.remember { arrayOfNulls<android.content.res.Configuration>(1) }
+            val pipFrozen = com.fenyx.jtv.ui.player.Pip.inPip.value || com.fenyx.jtv.ui.player.Pip.entering.value
+            val config = if (pipFrozen) fullConfig[0] ?: liveConfig
+                         else liveConfig.also { fullConfig[0] = android.content.res.Configuration(it) }
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalConfiguration provides config) {
+            val sw = config.smallestScreenWidthDp
             val form = when {
                 isLeanback -> com.fenyx.jtv.theme.FormFactor.Tv
                 sw < 600 -> com.fenyx.jtv.theme.FormFactor.Phone
@@ -79,6 +118,7 @@ class MainActivity : ComponentActivity() {
                     // LAN sync: "Pair with <device>? Code 1234" when another device asks, on any screen.
                     com.fenyx.jtv.ui.settings.PairRequestHost()
                 }
+            }
             }
         }
     }

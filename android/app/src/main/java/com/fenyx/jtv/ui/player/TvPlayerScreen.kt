@@ -1277,6 +1277,20 @@ fun TvPlayerScreen(
     }
     // ─────────── end remote buttons ───────────
 
+    // ─────────── Picture-in-picture (phone/tablet, ui/player/Pip.kt) ───────────
+    // In PiP only the video is drawn: no overlays, controls, mini-bar chrome or navigation.
+    val inPip = !isTv && Pip.inPip.value
+    PipBridge(
+        activity = activity,
+        enabled = !isTv,
+        playing = !userPaused && playbackError == null,
+        onPrevious = { doZap(-1) },
+        onToggle = { setPaused(!userPaused) },
+        onNext = { doZap(1) },
+        onClosed = onBack,
+    )
+    // ─────────── end picture-in-picture ───────────
+
     val langChoices = remember(audioTracks, currentVariants, playingChannel) {
         val pid = playingChannel?.id
         buildLanguageChoices(
@@ -1347,6 +1361,7 @@ fun TvPlayerScreen(
     LaunchedEffect(mini) { miniDrag.reset() }
     val card = Jtv.form == FormFactor.Tablet || Jtv.isPhoneLandscape
     val videoMode = when {
+        inPip -> VideoBox.Fill
         mini && !card -> VideoBox.MiniBar
         mini -> VideoBox.TopWide
         tabletTwoColumn -> VideoBox.TwoColumn
@@ -1354,6 +1369,7 @@ fun TvPlayerScreen(
         else -> VideoBox.Fill
     }
     val rootFrame = when {
+        inPip -> Modifier.fillMaxSize().background(Color.Black)
         !mini -> Modifier.fillMaxSize().background(
             when {
                 tabletPage -> appColors.bg // the tablet page follows the app theme
@@ -1376,10 +1392,10 @@ fun TvPlayerScreen(
       // Catch-up: overlays show "Replay · …" for the replayed show (see PlayerReplay.kt).
       CompositionLocalProvider(LocalReplay provides activeReplay) {
         Box(
-            modifier = modifier
+            modifier = (if (inPip) Modifier else modifier)
                 .then(rootFrame)
                 // The phone / tablet page sits below the status bar (and above the navigation bar).
-                .then(if (!mini && pagePlayer) Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing) else Modifier)
+                .then(if (!mini && pagePlayer && !inPip) Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing) else Modifier)
                 .focusRequester(focusRequester)
                 .focusable(enabled = !mini)
                 .then(if (mini) Modifier else Modifier.pointerInput(ui) {
@@ -1617,7 +1633,7 @@ fun TvPlayerScreen(
         ) {
             // The ONE video surface: always the first child, in every mode (full, portrait page, mini),
             // so it is never recreated; only its box changes (layout phase). Everything else draws over it.
-            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode))
+            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode).pipSourceRect(activity, enabled = !isTv && !inPip))
 
             val name = currentChannel?.name
             val buffering = isBuffering && playbackError == null
@@ -1627,7 +1643,9 @@ fun TvPlayerScreen(
                 if (paused && isTv) TvPausedBadge(ui, Modifier.align(Alignment.Center))
             }
 
-            if (mini) {
+            if (inPip) {
+                // Picture-in-picture: the video only.
+            } else if (mini) {
                 MiniPlayerContent(
                     appColors = appColors,
                     card = card,
@@ -1664,7 +1682,7 @@ fun TvPlayerScreen(
             }
 
             val err = playbackError
-            if (err != null && !isBuffering && !mini) {
+            if (err != null && !isBuffering && !mini && !inPip) {
                 // Tablet page: over the picture, not the middle of the page.
                 val errBox = if (tabletPage) Modifier.videoBox(videoMode) else Modifier.matchParentSize()
                 Box(errBox, contentAlignment = Alignment.Center) { ErrorPanel(

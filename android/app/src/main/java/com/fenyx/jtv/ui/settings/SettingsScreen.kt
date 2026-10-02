@@ -97,12 +97,14 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
 
     var sheet by remember { mutableStateOf(Sheet.None) }
 
-    // Remote buttons (TV, or a keyboard/D-pad attached).
+    // Remote buttons (TV, or a keyboard/D-pad attached) and picture-in-picture (phone/tablet).
     val showRemote = remoteButtonsAvailable()
     val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
     var remoteScreen by rememberSaveable { mutableStateOf(false) }
     val remoteRowFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
+    val showPip = !isTv && com.fenyx.jtv.ui.player.Pip.supported(context)
+    val pipOnLeave by settingsManager.pipOnLeaveFlow.collectAsState(initial = true)
 
     // LAN sync ("Devices")
     val syncDevices by com.fenyx.jtv.sync.LanSync.devices.collectAsState()
@@ -168,6 +170,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         add(SRow.Item("resize", "Picture size", value = resizeModes.find { it.first == playerResizeMode }?.second ?: "Fit the screen") { sheet = Sheet.PictureSize })
         add(SRow.Item("buffer", "Smooth playback", value = bufferOptions.find { it.first == playbackBufferSec }?.second ?: "$playbackBufferSec seconds",
             description = "More smoothness uses more memory") { sheet = Sheet.Buffer })
+        if (showPip) add(SRow.Item("pip", "Picture-in-picture when leaving the app", value = if (pipOnLeave) "On" else "Off",
+            description = "Keeps the channel playing in a small window") { scope.launch { settingsManager.setPipOnLeave(!pipOnLeave) } })
         if (showRemote) add(SRow.Item("remote", "Remote buttons", value = remoteProfileLabel(remoteMap),
             description = "Choose what each button on your remote does") { remoteScreen = true })
 
