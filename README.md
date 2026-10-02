@@ -28,16 +28,20 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 
 <div align="center">
   <img src="screenshot/v2/tv-home.png" width="49%" alt="TV home: categories, channels, and what's on now" />
-  <img src="screenshot/v2/tv-guide.png" width="49%" alt="TV guide with the now-line" />
-  <img src="screenshot/v2/tv-player.png" width="49%" alt="Player info strap with the amber channel number" />
-  <img src="screenshot/v2/tv-browse.png" width="49%" alt="Channel browser: tiles over the live picture" />
+  <img src="screenshot/v2/tv-guide.png" width="49%" alt="Guide with the Replay category: past shows you can watch again" />
+  <img src="screenshot/v2/tv-player.png" width="49%" alt="Player info strap with the big channel number" />
+  <img src="screenshot/v2/tv-browse.png" width="49%" alt="Channel browser: tiles over the picture" />
+  <img src="screenshot/v2/tv-paused-seek.png" width="49%" alt="Paused live TV with the seek bar and Live button" />
+  <img src="screenshot/v2/tv-options.png" width="49%" alt="Options panel: language, quality, voice boost, sleep" />
 </div>
 
-- **What's on now, at a glance.** Every channel shows its number, logo, current show and how long is left. Press **OK** to watch.
-- **A real programme guide.** A time grid with a gentle "now" line. Press **Up** for categories, and **Up** again for the Live TV · Guide · Search · Settings tabs.
-- **The amber channel strap.** Change channel and a broadcast-style strap shows the big channel number, the show, "Series · Drama · U · Hindi", time left and what's next.
-- **Browse without stopping the show.** Press **←** while watching to slide channel tiles over the picture. Use **← →** to look around, **↑ ↓** to change category, and **OK** to switch.
-- **One clear Options panel (→).** It holds **Language** (no more duplicate "Hindi, Hindi"), plain-word picture quality ("Best picture", "Data saver"), aspect, Voice Boost, sleep timer and favourite.
+- **What's on now, at a glance.** Every channel shows its number, logo, the show and time left. Press **OK** to watch.
+- **Guide with replays.** A time grid with a gentle "now" line. The **Replay** category lists channels Jio lets you watch again: press OK on a past show to watch it from the start, up to 7 days back.
+- **Pause and rewind live TV.** Pause keeps your place. Use ←/→ to rewind or skip, and **Live** to jump back.
+- **The channel strap.** Change channel and a broadcast-style strap shows the big number, the show, "Series · Drama · U · Hindi", time left and what's next.
+- **Browse without stopping the show.** Press ← to slide channel tiles over the picture; ↑ ↓ change category.
+- **One clear Options panel (→).** Language, picture quality in plain words, aspect, Voice Boost, sleep timer and favourite.
+- **Your remote, your buttons.** Settings → Remote buttons: put any action on any button (holding a button counts too). There are profiles for Standard, Fire TV, Basic and Air-mouse remotes.
 
 ### On your phone and tablet
 
@@ -57,6 +61,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
   - Phone: the video sits on top, with the show info, a compact action row and the channel list below it.
   - Tablet: the video and details are on the left, the channels on the right.
 - **Mini player.** Press Back, or the ⌄ button, to shrink the video into a bar (phone) or a floating card (tablet). It keeps playing while you browse.
+- **Picture-in-picture.** Press Home while watching and the video keeps playing in a small window, with previous / pause / next.
 - **Landscape that doesn't hide the picture.** Small round controls sit at the edges, with one slim info line. The channel tiles appear only when you tap the list icon.
 - **Light and near-black dark modes.** They follow your phone's setting, or you can choose one in Settings.
 
@@ -66,7 +71,9 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 - 📺 **Play on TV.** From your phone, open a channel's options and choose **Play on <TV name>**. The TV switches channel.
 - 🕘 **Recent.** Your last channels are one tap away, on the home screen and in Search.
 - 💾 **Favourites backup.** Save them to a file and restore them after a fresh install.
-- 🪶 **Still tiny.** The APK is about **4 MB** and runs smoothly on cheap TV boxes.
+- 🎨 **Your colour.** Pick the accent colour (amber, purple, blue, green, rose or teal) in Settings.
+- ⚡ **Fast.** Zapping up and down is near-instant, because the channels around you are fetched ahead of time.
+- 🪶 **Still tiny.** The APK is about **3 MB** and runs smoothly on cheap TV boxes.
 
 > **Beta notes:** v2 is released as a **pre-release**, so the stable app never updates to it by itself. Install the beta APK over 1.5.x and your login and favourites are kept. Once on the beta, you'll be offered newer betas and the final 2.0. Found something odd? [Open an issue](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/issues) and tell me your device. It really helps.
 
@@ -76,7 +83,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 
 1. Download the APK:
    - **Stable:** `JTV-v1.5.x.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
-   - **Beta:** `JTV-v2.0-beta.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
+   - **Beta:** `JTV-v2.0-beta.6.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
 2. **Install it on your TV.**
    - The easiest way is to copy it to a USB stick and open it with a file manager such as **X-plore** or **File Commander**.
    - Or use ADB:
