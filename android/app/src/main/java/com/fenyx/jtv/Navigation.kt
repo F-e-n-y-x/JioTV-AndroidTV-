@@ -171,7 +171,8 @@ fun MainNavigation() {
                 entry<Settings> {
                     SettingsScreen(
                         modifier = Modifier.safeDrawingPadding(),
-                        mainViewModel = mainViewModel
+                        mainViewModel = mainViewModel,
+                        onBack = { backStack.removeLastOrNull() }
                     )
                 }
                 entry<Player> { playerArgs ->

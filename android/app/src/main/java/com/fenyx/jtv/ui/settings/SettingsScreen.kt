@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,7 +56,7 @@ private enum class Sheet { None, Theme, StartWith, Quality, Language, PictureSiz
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) {
+fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, onBack: (() -> Unit)? = null) {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
     val scope = rememberCoroutineScope()
@@ -94,7 +95,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
 
     // Initial focus so the first D-pad press works on entry (previously nothing was focused).
     val firstItemFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { firstItemFocus.requestFocus() } }
+    // Touch screens get no initial focus highlight; TV lands on the first setting.
+    LaunchedEffect(Unit) { if (isTv) runCatching { firstItemFocus.requestFocus() } }
 
     val bufferOptions = listOf(
         30 to "Data saver (30 seconds)",
@@ -207,7 +209,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     }
 
     val now = rememberMinuteClock()
-    val gutter = if (isTv) 48.dp else 16.dp
+    val gutter = when (form) { FormFactor.Tv -> 48.dp; FormFactor.Tablet -> 32.dp; else -> 16.dp }
 
     Box(
         modifier = modifier
@@ -220,16 +222,25 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                 } else false
             }
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = gutter, vertical = if (isTv) 27.dp else 12.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = gutter, vertical = if (isTv) 27.dp else 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (!isTv && onBack != null) {
+                    com.fenyx.jtv.ui.components.JtvButton(
+                        "Back", onBack, icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, minHeight = 48.dp,
+                    )
+                    Spacer(Modifier.width(16.dp))
+                }
                 JText("Settings", 28.sp, Modifier.weight(1f), weight = FontWeight.Bold)
-                if (isTv) JtvClock(now, dateColor = c.t2)
+                if (form != FormFactor.Phone) JtvClock(now, dateColor = c.t2, size = if (isTv) 34.sp else 28.sp)
             }
             Spacer(Modifier.height(8.dp))
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .then(if (form == FormFactor.Phone) Modifier.fillMaxWidth() else Modifier.widthIn(max = 760.dp).fillMaxWidth())
+                    .then(if (form == FormFactor.Phone) Modifier.fillMaxWidth() else Modifier.widthIn(max = 900.dp).fillMaxWidth())
                     .focusRestorer(),
                 contentPadding = PaddingValues(bottom = 16.dp),
             ) {
