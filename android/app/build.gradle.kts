@@ -66,9 +66,14 @@ android {
       shaders = false
     }
 
+    // Only ship the UI languages JTV supports; drops ~80 locales of AndroidX/Material strings.
+    androidResources {
+      localeFilters += listOf("en", "hi")
+    }
+
     packaging {
       resources {
-        excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        excludes += listOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/*.version", "/META-INF/*.kotlin_module", "kotlin/**", "DebugProbesKt.bin")
       }
     }
 }

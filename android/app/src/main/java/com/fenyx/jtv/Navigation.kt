@@ -27,10 +27,10 @@ private const val SETUP_LOADING = "__loading__"
 @Composable
 private fun LoadingScreen() {
     androidx.compose.foundation.layout.Box(
-        modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black),
+        modifier = Modifier.fillMaxSize().background(com.fenyx.jtv.theme.Jtv.colors.bg),
         contentAlignment = Alignment.Center
     ) {
-        androidx.compose.material3.CircularProgressIndicator(color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+        androidx.compose.material3.CircularProgressIndicator(color = com.fenyx.jtv.theme.Jtv.colors.acc)
     }
 }
 
@@ -45,7 +45,7 @@ fun MainNavigation() {
     val isTvDevice = androidx.compose.runtime.remember {
         context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
     }
-    val backStack = rememberNavBackStack(if (DesignLabHook.content != null && !isTvDevice) Lab else Main)
+    val backStack = rememberNavBackStack(Main)
     val mainViewModel: MainViewModel = viewModel()
 
     val autoplayLastChannel by settingsManager.autoplayLastChannelFlow.collectAsState(initial = null)
@@ -136,7 +136,7 @@ fun MainNavigation() {
                         onSearchClick = {
                             backStack.add(Search)
                         },
-                        onDesignLabClick = if (DesignLabHook.content != null) ({ backStack.add(Lab) }) else null,
+                        onGuideClick = { backStack.add(Guide) },
                         viewModel = mainViewModel,
                         modifier = Modifier.safeDrawingPadding()
                     )
@@ -150,6 +150,10 @@ fun MainNavigation() {
                             { if (backStack.size > 1) backStack.removeLastOrNull() else backStack.add(Main) }
                         )
                     }
+                }
+                entry<Guide> {
+                    // GUIDE_ENTRY (replaced by GuideScreen on merge)
+                    androidx.tv.material3.Text("Guide", modifier = Modifier.safeDrawingPadding())
                 }
                 entry<Search> {
                     com.fenyx.jtv.ui.search.SearchScreen(

@@ -9,3 +9,4 @@ import kotlinx.serialization.Serializable
 @Serializable data object Search : NavKey
 @Serializable data class Player(val channelIndex: Int, val group: String? = null) : NavKey
 @Serializable data object Lab : NavKey
+@Serializable data object Guide : NavKey
