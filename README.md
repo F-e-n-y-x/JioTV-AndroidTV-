@@ -312,3 +312,11 @@ Built with reference to and inspiration from:
 ## ⚖️ Disclaimer
 
 This is an independent, third-party Android TV client made for **educational purposes**. It is **not** affiliated with, authorized, maintained, or endorsed by JioTV or Reliance Jio Infocomm Ltd. You are responsible for how you use it, and you need a valid Jio account to log in. Use at your own risk.
+
+---
+
+## 📄 License
+
+JTV is open source under the [Apache License 2.0](LICENSE). You're free to use, modify, fork or port it, including into your own projects, as long as you keep the copyright and licence notice ([NOTICE](NOTICE)).
+
+JTV is an unofficial client and is not affiliated with, endorsed by, or sponsored by Jio Platforms Ltd or Reliance.
