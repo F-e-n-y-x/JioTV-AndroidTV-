@@ -455,9 +455,18 @@ fun TvPlayerScreen(
         // right after it starts. NOTE: `quality` is deliberately NOT a key here — it does not change
         // the stream URL, only track selection, which the separate effect below applies live.
         if (ch != null && prefsLoaded) {
-            // Persist the representative (logical) channel for autoplay, not the language sibling.
-            currentChannel?.let { settingsManager.setLastChannelId(it.id) }
-            settingsManager.setLastChannelGroup(currentGroup)
+            // Persist the representative (logical) channel for autoplay, not the language sibling, and
+            // move it to the front of "Recent". These are DataStore disk writes, so they run in their
+            // own child coroutine AFTER prepare() (or once the load has failed) instead of being
+            // awaited before the stream request: they used to sit in front of every zap. A child of
+            // this effect, so a newer zap cancels a stale write and the last channel/group always
+            // come from the same tune.
+            val lastId = currentChannel?.id
+            val lastGroup = currentGroup
+            fun persistLastChannel() = launch {
+                lastId?.let { settingsManager.setLastChannelId(it) }
+                settingsManager.setLastChannelGroup(lastGroup)
+            }
             isBuffering = true
             exoPlayer.stop()
             
@@ -465,6 +474,7 @@ fun TvPlayerScreen(
             
             if (authData == null) {
                 android.util.Log.e("TvPlayer", "Missing auth data")
+                persistLastChannel()
                 isBuffering = false
                 playbackError = PlayerError("You aren't signed in to Jio.", ErrorAction.Settings)
                 return@LaunchedEffect
@@ -528,7 +538,9 @@ fun TvPlayerScreen(
                     exoPlayer.playWhenReady = true
                     userPaused = false // a new channel always starts playing
                 }
+                persistLastChannel()
             } else {
+                persistLastChannel()
                 val fetchEx = result.exceptionOrNull()
                 val fetchErr = fetchEx?.message ?: ""
                 android.util.Log.e("TvPlayer", "Failed to fetch stream: $fetchErr")
