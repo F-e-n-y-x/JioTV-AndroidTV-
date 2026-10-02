@@ -17,8 +17,16 @@ import { randomBytes } from "node:crypto";
 function startSession(reply: FastifyReply) {
   const sid = randomBytes(24).toString("hex");
   sessions.add(sid);
-  reply.setCookie("admin_session", sid, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 7 });
+  // `secure` only when the browser reached us over https (directly, or via a trusted proxy's
+  // X-Forwarded-Proto) — a plain-http LAN install must still be able to sign in.
+  const secure = reply.request.protocol === "https";
+  reply.setCookie("admin_session", sid, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 7, secure });
 }
+
+/** Per-IP limits for brute-forceable / Jio-touching endpoints (see server.ts for the plugin setup). */
+const LOGIN_LIMIT = { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } };
+const OTP_SEND_LIMIT = { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } };
+const REFRESH_LIMIT = { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } };
 
 /** Create a starter code so a TV can connect right after setup. */
 function ensureDefaultCode() {
@@ -41,7 +49,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   }));
 
   // First run only. Either set a password, or choose "no password" (disableAuth) for an open LAN box.
-  app.post("/api/setup", async (req, reply) => {
+  app.post("/api/setup", { ...LOGIN_LIMIT }, async (req, reply) => {
     if (isAdminConfigured()) return reply.code(403).send({ error: "Already set up" });
     const { password, disableAuth: noAuth } = (req.body ?? {}) as { password?: string; disableAuth?: boolean };
     if (noAuth) {
@@ -58,7 +66,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Toggle auth later from the dashboard.
-  app.post("/api/admin/set-password", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/api/admin/set-password", { ...LOGIN_LIMIT, preHandler: requireAdmin }, async (req, reply) => {
     const { password } = (req.body ?? {}) as { password?: string };
     if (!password || password.length < 4) {
       return reply.code(400).send({ error: "Choose a password of at least 4 characters" });
@@ -74,7 +82,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── Admin auth ──
-  app.post("/api/admin/login", async (req, reply) => {
+  app.post("/api/admin/login", { ...LOGIN_LIMIT }, async (req, reply) => {
     const { password } = (req.body ?? {}) as { password?: string };
     if (!isAdminConfigured()) return reply.code(409).send({ error: "Not set up yet" });
     if (!password || !verifyAdminPassword(password)) {
@@ -87,7 +95,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/admin/logout", async (req, reply) => {
     const sid = (req.cookies as Record<string, string | undefined>)?.admin_session;
     if (sid) sessions.delete(sid);
-    reply.clearCookie("admin_session", { path: "/" });
+    reply.clearCookie("admin_session", { path: "/", secure: req.protocol === "https" });
     return { ok: true };
   });
 
@@ -107,7 +115,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  // ── TV access codes (named, short 4–12; a TV connects with any one of these) ──
+  // ── TV access codes (named, 6–12 for new codes; a TV connects with any one of these) ──
   app.get("/api/admin/codes", { preHandler: requireAdmin }, async () => ({ codes: listCodes() }));
 
   app.post("/api/admin/codes", { preHandler: requireAdmin }, async (req, reply) => {
@@ -141,7 +149,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, note: "New certificate written. Restart the server to apply it." };
   });
 
-  app.post("/api/login/otp/send", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/api/login/otp/send", { ...OTP_SEND_LIMIT, preHandler: requireAdmin }, async (req, reply) => {
     const { mobile } = (req.body ?? {}) as { mobile?: string };
     if (!mobile || mobile.replace(/\D/g, "").length < 10) {
       return reply.code(400).send({ error: "Enter a valid 10-digit mobile number" });
@@ -154,7 +162,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post("/api/login/otp/verify", { preHandler: requireAdmin }, async (req, reply) => {
+  app.post("/api/login/otp/verify", { ...LOGIN_LIMIT, preHandler: requireAdmin }, async (req, reply) => {
     const { mobile, otp } = (req.body ?? {}) as { mobile?: string; otp?: string };
     if (!mobile || !otp) return reply.code(400).send({ error: "Mobile and OTP are required" });
     try {
@@ -166,7 +174,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post("/api/admin/refresh", { preHandler: requireAdmin }, async (_req, reply) => {
+  app.post("/api/admin/refresh", { ...REFRESH_LIMIT, preHandler: requireAdmin }, async (_req, reply) => {
     const r = await refreshNow({ force: true });
     if (!r.ok) return reply.code(400).send({ error: r.error ?? "Refresh failed" });
     return { ok: true };
@@ -178,7 +186,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── Machine endpoint: TVs pull the shared credentials here (bearer token) ──
-  app.get("/api/credentials", { preHandler: requireServerToken }, async (_req, reply) => {
+  app.get("/api/credentials", { ...LOGIN_LIMIT, preHandler: requireServerToken }, async (_req, reply) => {
     const c = getStoredCredentials();
     if (!c) return reply.code(404).send({ error: "No active login on the server yet" });
     return {
@@ -196,7 +204,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // from the app's "Refresh from Server" button or to self-heal when a stream 401s. This only calls Jio
   // when the stored token is actually close to expiry (see refresh.ts), so many TVs asking at once can't
   // wear out the refresh token. The stored credentials are returned either way.
-  app.post("/api/refresh", { preHandler: requireServerToken }, async (_req, reply) => {
+  app.post("/api/refresh", { ...REFRESH_LIMIT, preHandler: requireServerToken }, async (_req, reply) => {
     const r = await refreshNow();
     const c = getStoredCredentials();
     if (!c) return reply.code(404).send({ error: "No active login on the server yet" });

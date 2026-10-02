@@ -8,6 +8,7 @@ import { getNativeEpg } from "../jio/epg";
 import { getPlaybackInfo, proxyUpstream, rewriteManifest } from "../proxy/streamProxy";
 import { getFavorites, hasCode } from "../store/db";
 import { isAuthEnabled, envServerToken, getEpgConfig } from "../store/settings";
+import { baseUrl } from "../util/baseUrl";
 
 /**
  * Public (access-code authenticated) endpoints for external IPTV players — VLC, TiviMate, OTT
@@ -33,11 +34,6 @@ function requireCode(req: FastifyRequest, reply: FastifyReply, done: () => void)
   done();
 }
 
-/** Absolute base URL of this server as the client reached it (honours host + scheme). */
-function baseUrl(req: FastifyRequest): string {
-  const host = req.headers.host ?? `localhost`;
-  return `${req.protocol}://${host}`;
-}
 
 function splitCsv(v: unknown): Set<string> {
   const s = String(v ?? "").trim();
@@ -52,7 +48,7 @@ function attr(v: string): string {
 
 export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void> {
   // ── M3U playlist for external players ──
-  app.get("/playlist.m3u", { preHandler: requireCode }, async (req, reply) => {
+  app.get("/playlist.m3u", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } }, preHandler: requireCode }, async (req, reply) => {
     const q = req.query as Record<string, string | undefined>;
     const code = (q.code ?? "").trim();
     const langs = splitCsv(q.lang);
@@ -167,7 +163,7 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
   });
 
   // ── Segment / nested-manifest proxy for external players (code-authed twin of /api/proxy) ──
-  app.get<{ Querystring: { cid?: string; u?: string } }>("/seg", { preHandler: requireCode }, async (req, reply) => {
+  app.get<{ Querystring: { cid?: string; u?: string } }>("/seg", { logLevel: "warn", preHandler: requireCode }, async (req, reply) => {
     const { cid, u } = req.query;
     const code = String((req.query as Record<string, unknown>).code ?? "").trim();
     if (!cid || !u) return reply.code(400).send({ error: "cid and u are required" });

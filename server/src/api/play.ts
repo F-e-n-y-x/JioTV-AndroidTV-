@@ -86,7 +86,8 @@ export async function registerPlayRoutes(app: FastifyInstance): Promise<void> {
   // Generic upstream proxy (manifest + segments), token injected server-side.
   app.get<{ Querystring: { cid?: string; u?: string } }>(
     "/api/proxy",
-    { preHandler: requireAdmin },
+    // Hundreds of segment requests per minute: keep them out of the request log.
+    { logLevel: "warn", preHandler: requireAdmin },
     async (req, reply) => {
       const { cid, u } = req.query;
       if (!cid || !u) return reply.code(400).send({ error: "cid and u are required" });

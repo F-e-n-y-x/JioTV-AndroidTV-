@@ -31,6 +31,21 @@ function loadDotEnv(): void {
 }
 loadDotEnv();
 
+/**
+ * TRUST_PROXY → Fastify `trustProxy`. Default true: the server normally sits behind Cloudflare and/or
+ * Caddy, and must honour X-Forwarded-Proto/Host/For to build correct https:// URLs and to rate-limit
+ * the real client IP. Accepts true/false, a hop count ("1"), or a comma list of IPs/CIDRs. Set it to
+ * false when the port is exposed directly to the internet (forwarded headers would be spoofable).
+ */
+export function parseTrustProxy(raw: string | undefined): boolean | number | string | string[] {
+  const v = (raw ?? "").trim();
+  if (!v) return true;
+  if (/^(true|yes|on)$/i.test(v)) return true;
+  if (/^(false|no|off|0)$/i.test(v)) return false;
+  if (/^\d+$/.test(v)) return Number(v);
+  return v.includes(",") ? v.split(",").map((s) => s.trim()).filter(Boolean) : v;
+}
+
 /** Runtime configuration, read once from the environment. */
 export const config = {
   port: Number(process.env.PORT ?? 8080),
@@ -42,6 +57,7 @@ export const config = {
   // ALWAYS gated — even if "no password" was chosen — and this key unlocks it.
   masterKey: process.env.MASTER_KEY ?? "",
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data"),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
 };
 
 /** Shared Jio API constants (mirrors the Android app's JioApiClient). */

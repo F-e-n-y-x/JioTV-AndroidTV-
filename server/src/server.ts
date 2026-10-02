@@ -2,6 +2,7 @@ import path from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
+import rateLimit from "@fastify/rate-limit";
 import { config } from "./config";
 import { registerRoutes } from "./api/routes";
 import { registerPlayRoutes } from "./api/play";
@@ -9,12 +10,33 @@ import { registerPlaylistRoutes } from "./api/playlist";
 import { startRefreshScheduler } from "./refresh";
 import { isAdminConfigured } from "./store/settings";
 import { ensureCert } from "./https";
+import { redactUrl } from "./util/redact";
 
 /** Builds a fully-wired Fastify instance (used for both the HTTP and HTTPS listeners). */
 async function buildApp(extra?: Record<string, unknown>): Promise<FastifyInstance> {
   // `extra` may carry an `https` option; cast because that changes Fastify's inferred server type.
   // maxParamLength default is 100 — too short for the base64 catch-up key in `/api/play/:id`.
-  const app = Fastify({ logger: { level: "info" }, bodyLimit: 8_388_608, maxParamLength: 2000, ...(extra as any) }) as unknown as FastifyInstance;
+  const app = Fastify({
+    logger: {
+      level: "info",
+      // Same fields as Fastify's default request serializer, but with `?code=` masked: access codes
+      // ride in the query string of /playlist.m3u, /live, /epg.xml and must not end up in the logs.
+      serializers: {
+        req: (req) => ({
+          method: req.method,
+          url: redactUrl(req.url),
+          host: req.host,
+          remoteAddress: req.ip,
+          remotePort: req.socket?.remotePort,
+        }),
+      },
+    },
+    // Behind Cloudflare / Caddy: honour X-Forwarded-Proto/Host/For (see config.trustProxy).
+    trustProxy: config.trustProxy as any,
+    bodyLimit: 8_388_608,
+    maxParamLength: 2000,
+    ...(extra as any),
+  }) as unknown as FastifyInstance;
 
   // Widevine license challenges arrive as raw binary — Shaka may send them with an unexpected (or no)
   // content-type, so parse ANY non-JSON body as a Buffer.
@@ -36,6 +58,18 @@ async function buildApp(extra?: Record<string, unknown>): Promise<FastifyInstanc
   });
 
   await app.register(cookie);
+
+  // Rate limiting is opt-in per route (`config.rateLimit`): login / OTP / credentials / refresh /
+  // playlist. Streaming routes (/live, /seg, /api/proxy) are deliberately NOT limited — a player makes
+  // many requests a minute. Behind Cloudflare the client IP comes from CF-Connecting-IP (set by
+  // Cloudflare itself); otherwise from req.ip (which honours X-Forwarded-For when trustProxy is on).
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (req) => {
+      const cf = config.trustProxy ? req.headers["cf-connecting-ip"] : undefined;
+      return (typeof cf === "string" && cf) || req.ip;
+    },
+  });
   await registerRoutes(app);
   await registerPlayRoutes(app);
   await registerPlaylistRoutes(app);
