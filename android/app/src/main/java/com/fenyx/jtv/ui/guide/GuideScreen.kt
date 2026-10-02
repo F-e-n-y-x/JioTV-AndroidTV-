@@ -508,7 +508,13 @@ private fun GuideOff(onTurnOn: () -> Unit, onOpenSettings: () -> Unit) {
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(24.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (Jtv.form == com.fenyx.jtv.theme.FormFactor.Phone) {
+                // Narrow screen: stack full-width so neither label is cut off.
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    JtvButton("Turn on programme guide", onTurnOn, Modifier.fillMaxWidth().focusRequester(first), primary = true, fontSize = 18.sp)
+                    JtvButton("Open settings", onOpenSettings, Modifier.fillMaxWidth(), fontSize = 18.sp)
+                }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 JtvButton("Turn on programme guide", onTurnOn, Modifier.focusRequester(first), primary = true, fontSize = 18.sp)
                 JtvButton("Open settings", onOpenSettings, fontSize = 18.sp)
             }

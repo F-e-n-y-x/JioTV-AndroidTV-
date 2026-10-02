@@ -12,7 +12,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -220,5 +224,18 @@ fun BottomNavItem(
             Icon(icon, contentDescription = null, tint = if (selected) c.tx else c.t2, modifier = Modifier.size(24.dp))
             Text(label, style = textStyle(14.sp, if (selected) FontWeight.Bold else FontWeight.Normal), color = if (selected) c.tx else c.t2, maxLines = 1)
         }
+    }
+}
+
+/** Phone tabs. Shown under every top-level screen (Live TV, Guide, Search, Settings), never in the player. */
+enum class PhoneTab { Live, Guide, Search, Settings }
+
+@Composable
+fun PhoneBottomBar(selected: PhoneTab, onSelect: (PhoneTab) -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Jtv.colors.s1)) {
+        BottomNavItem("Live TV", Icons.Filled.Home, selected == PhoneTab.Live, { onSelect(PhoneTab.Live) }, Modifier.weight(1f))
+        BottomNavItem("Guide", Icons.Filled.DateRange, selected == PhoneTab.Guide, { onSelect(PhoneTab.Guide) }, Modifier.weight(1f))
+        BottomNavItem("Search", Icons.Filled.Search, selected == PhoneTab.Search, { onSelect(PhoneTab.Search) }, Modifier.weight(1f))
+        BottomNavItem("Settings", Icons.Filled.Settings, selected == PhoneTab.Settings, { onSelect(PhoneTab.Settings) }, Modifier.weight(1f))
     }
 }

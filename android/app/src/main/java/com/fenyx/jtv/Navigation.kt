@@ -34,6 +34,21 @@ private fun LoadingScreen() {
     }
 }
 
+/** Phone: wraps a top-level screen with the bottom tab bar. Other form factors: content as-is. */
+@Composable
+private fun TopLevel(
+    tab: com.fenyx.jtv.ui.main.PhoneTab,
+    onTab: (com.fenyx.jtv.ui.main.PhoneTab) -> Unit,
+    content: @Composable (Modifier) -> Unit,
+) {
+    if (com.fenyx.jtv.theme.Jtv.form == com.fenyx.jtv.theme.FormFactor.Phone) {
+        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { content(Modifier) }
+            com.fenyx.jtv.ui.main.PhoneBottomBar(tab, onTab)
+        }
+    } else content(Modifier.safeDrawingPadding())
+}
+
 @Composable
 fun MainNavigation() {
     val context = LocalContext.current
@@ -47,6 +62,16 @@ fun MainNavigation() {
     }
     val backStack = rememberNavBackStack(Main)
     val mainViewModel: MainViewModel = viewModel()
+    // Phone tabs replace each other on top of Live TV (Back from a tab returns to Live TV).
+    val onTab: (com.fenyx.jtv.ui.main.PhoneTab) -> Unit = { tab ->
+        while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+        when (tab) {
+            com.fenyx.jtv.ui.main.PhoneTab.Live -> {}
+            com.fenyx.jtv.ui.main.PhoneTab.Guide -> backStack.add(Guide)
+            com.fenyx.jtv.ui.main.PhoneTab.Search -> backStack.add(Search)
+            com.fenyx.jtv.ui.main.PhoneTab.Settings -> backStack.add(Settings)
+        }
+    }
 
     val autoplayLastChannel by settingsManager.autoplayLastChannelFlow.collectAsState(initial = null)
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
@@ -126,6 +151,7 @@ fun MainNavigation() {
             entryProvider =
                 entryProvider {
                 entry<Main> {
+                  TopLevel(com.fenyx.jtv.ui.main.PhoneTab.Live, onTab) { m ->
                     MainScreen(
                         onChannelClick = { index, group ->
                             backStack.add(Player(channelIndex = index, group = group))
@@ -138,8 +164,9 @@ fun MainNavigation() {
                         },
                         onGuideClick = { backStack.add(Guide) },
                         viewModel = mainViewModel,
-                        modifier = Modifier.safeDrawingPadding()
+                        modifier = m
                     )
+                  }
                 }
                 entry<Lab> {
                     val lab = DesignLabHook.content
@@ -152,28 +179,34 @@ fun MainNavigation() {
                     }
                 }
                 entry<Guide> {
+                  TopLevel(com.fenyx.jtv.ui.main.PhoneTab.Guide, onTab) { m ->
                     com.fenyx.jtv.ui.guide.GuideScreen(
                         viewModel = mainViewModel,
                         onPlay = { index, group -> backStack.add(Player(channelIndex = index, group = group)) },
-                        onOpenSettings = { backStack.add(Settings) },
-                        modifier = Modifier.safeDrawingPadding()
+                        onOpenSettings = { onTab(com.fenyx.jtv.ui.main.PhoneTab.Settings) },
+                        modifier = m
                     )
+                  }
                 }
                 entry<Search> {
+                  TopLevel(com.fenyx.jtv.ui.main.PhoneTab.Search, onTab) { m ->
                     com.fenyx.jtv.ui.search.SearchScreen(
                         viewModel = mainViewModel,
                         onChannelClick = { index, group ->
                             backStack.add(Player(channelIndex = index, group = group))
                         },
-                        modifier = Modifier.safeDrawingPadding()
+                        modifier = m
                     )
+                  }
                 }
                 entry<Settings> {
+                  TopLevel(com.fenyx.jtv.ui.main.PhoneTab.Settings, onTab) { m ->
                     SettingsScreen(
-                        modifier = Modifier.safeDrawingPadding(),
+                        modifier = m,
                         mainViewModel = mainViewModel,
                         onBack = { backStack.removeLastOrNull() }
                     )
+                  }
                 }
                 entry<Player> { playerArgs ->
                     val groups by mainViewModel.groups.collectAsState()

@@ -449,12 +449,6 @@ private fun PhoneHome(
             }
         }
         Box(Modifier.weight(1f).padding(horizontal = 6.dp)) { list() }
-        Row(Modifier.fillMaxWidth().background(c.s1)) {
-            BottomNavItem("Live TV", Icons.Filled.Home, true, {}, Modifier.weight(1f))
-            BottomNavItem("Guide", Icons.Filled.DateRange, false, onGuide, Modifier.weight(1f))
-            BottomNavItem("Search", Icons.Filled.Search, false, onSearch, Modifier.weight(1f))
-            BottomNavItem("Settings", Icons.Filled.Settings, false, onSettings, Modifier.weight(1f))
-        }
     }
 }
 

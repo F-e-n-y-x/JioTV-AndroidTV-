@@ -227,7 +227,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (!isTv && onBack != null) {
+                // Phone has the bottom tab bar; tablet gets a labelled Back.
+                if (form == FormFactor.Tablet && onBack != null) {
                     com.fenyx.jtv.ui.components.JtvButton(
                         "Back", onBack, icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, minHeight = 48.dp,
                     )
