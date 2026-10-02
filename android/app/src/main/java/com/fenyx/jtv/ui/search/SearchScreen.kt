@@ -57,6 +57,14 @@ fun SearchScreen(
     val allChannels by viewModel.displayChannels.collectAsState()
     val indexMap = remember(allChannels) { allChannels.withIndex().associate { (i, c) -> c.id to i } }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val settings = remember { com.fenyx.jtv.data.SettingsManager(context) }
+    val recentIds by settings.recentChannelsFlow.collectAsState(initial = emptyList())
+    val favoriteOrder by viewModel.favoriteOrder.collectAsState()
+    val byId = remember(allChannels) { allChannels.associateBy { it.id } }
+    val recents = remember(recentIds, byId) { recentIds.mapNotNull { byId[it] } }
+    val favourites = remember(favoriteOrder, byId) { favoriteOrder.mapNotNull { byId[it] } }
+
     var query by remember { mutableStateOf("") }
     val results = remember(query, allChannels) {
         val q = query.trim()
@@ -97,13 +105,15 @@ fun SearchScreen(
         Spacer(Modifier.height(if (isTv) 12.dp else 8.dp))
 
         // ─── Search field (visible label above it) ───
-        Text("Channel name", style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
-        Spacer(Modifier.height(6.dp))
+        if (!isPhone) {
+            Text("Channel name", style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
+            Spacer(Modifier.height(6.dp))
+        }
         Row(
             modifier = Modifier
                 .then(if (isTv) Modifier.widthIn(max = 720.dp) else Modifier)
                 .fillMaxWidth()
-                .heightIn(min = if (isTv) 60.dp else 64.dp)
+                .heightIn(min = if (isTv) 60.dp else 52.dp)
                 .background(c.s1, RoundedCornerShape(8.dp))
                 .border(if (fieldFocused) 2.dp else 1.dp, if (fieldFocused) c.acc else c.line, RoundedCornerShape(8.dp))
                 .padding(horizontal = 16.dp),
@@ -113,7 +123,7 @@ fun SearchScreen(
             Spacer(modifier = Modifier.width(12.dp))
             Box(modifier = Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Text("For example: Sony, Colors, news", style = textStyle(20.sp), color = c.t2, maxLines = 1)
+                    Text("Search channels", style = textStyle(if (isPhone) 17.sp else 20.sp), color = c.t2, maxLines = 1)
                 }
                 BasicTextField(
                     value = query,
@@ -123,7 +133,7 @@ fun SearchScreen(
                         .onFocusChanged { fieldFocused = it.hasFocus }
                         .focusRequester(fieldFocus)
                         .focusable(),
-                    textStyle = textStyle(22.sp).copy(color = c.tx),
+                    textStyle = textStyle(if (isPhone) 18.sp else 22.sp).copy(color = c.tx),
                     cursorBrush = SolidColor(c.acc),
                     singleLine = true,
                     // "Search" on the keyboard closes it and moves to the first result.
@@ -138,30 +148,46 @@ fun SearchScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        when {
-            query.isBlank() -> CenterNote("Type a channel name. Results appear as you type.", Modifier.weight(1f))
-            results.isEmpty() -> CenterNote("No channels match “${query.trim()}”.", Modifier.weight(1f))
-            else -> {
-                Text(
-                    if (results.size == 1) "1 channel" else "${results.size} channels",
-                    style = textStyle(14.sp), color = c.t2
-                )
-                Spacer(Modifier.height(6.dp))
-                LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                    contentPadding = PaddingValues(bottom = 8.dp)
-                ) {
-                    items(items = results, key = { it.id }, contentType = { "search-row" }) { channel ->
-                        val isFirst = channel.id == results.first().id
+        // One list, in the owner's order: search results, then Recently watched, then Favourites.
+        val q = query.trim()
+        if (q.isNotEmpty() && results.isEmpty() && recents.isEmpty() && favourites.isEmpty()) {
+            CenterNote("No channels match “$q”.", Modifier.weight(1f))
+        } else if (q.isEmpty() && recents.isEmpty() && favourites.isEmpty()) {
+            CenterNote("Type a channel name. Results appear as you type.", Modifier.weight(1f))
+        } else {
+            val firstId = (if (q.isNotEmpty()) results else emptyList()).firstOrNull()?.id
+                ?: recents.firstOrNull()?.id ?: favourites.firstOrNull()?.id
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer(),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                contentPadding = PaddingValues(bottom = 8.dp)
+            ) {
+                fun section(tag: String, title: String, list: List<Channel>, firstSection: Boolean) {
+                    if (list.isEmpty()) return
+                    item(key = "h:$tag", contentType = "header") {
+                        Text(title, style = textStyle(14.sp, FontWeight.SemiBold), color = c.t2,
+                            modifier = Modifier.padding(start = 12.dp, top = if (firstSection) 4.dp else 14.dp, bottom = 4.dp))
+                    }
+                    items(items = list, key = { "$tag:${it.id}" }, contentType = { "search-row" }) { channel ->
                         SearchRow(
                             channel = channel,
                             compact = isPhone,
-                            modifier = if (isFirst) Modifier.focusRequester(firstResultFocus) else Modifier,
+                            modifier = if (firstSection && channel.id == firstId) Modifier.focusRequester(firstResultFocus) else Modifier,
                             onClick = { onChannelClick(indexMap[channel.id] ?: 0, null) }
                         )
                     }
                 }
+                var first = true
+                if (q.isNotEmpty()) {
+                    if (results.isEmpty()) item(key = "none", contentType = "note") {
+                        Text("No channels match “$q”.", style = textStyle(16.sp), color = c.t2, modifier = Modifier.padding(12.dp))
+                    }
+                    section("r", if (results.size == 1) "1 result" else "${results.size} results", results, first)
+                    first = results.isEmpty()
+                }
+                section("w", "Recently watched", recents, first && recents.isNotEmpty())
+                if (recents.isNotEmpty()) first = false
+                section("f", "Favourites", favourites, first)
             }
         }
 

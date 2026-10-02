@@ -177,7 +177,7 @@ internal fun InfoStrap(channel: Channel, nn: NowNext?, now: Long, s: StrapSizes,
                         Text(
                             formatTime(p.startMs),
                             style = textStyle(s.metaSize).copy(fontFeatureSettings = "tnum"),
-                            color = c.t2, maxLines = 1, modifier = Modifier.width(52.dp),
+                            color = c.t2, maxLines = 1, modifier = Modifier.width(76.dp),
                         )
                         JText(p.title, s.metaSize, modifier = Modifier.weight(1f))
                     }

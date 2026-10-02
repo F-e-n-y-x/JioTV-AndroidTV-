@@ -34,6 +34,9 @@ import com.fenyx.jtv.ui.components.ChannelPlate
 import com.fenyx.jtv.ui.components.JtvButton
 import com.fenyx.jtv.ui.components.JtvClickable
 import com.fenyx.jtv.ui.components.textStyle
+import com.fenyx.jtv.ui.components.closeOnOutsideTap
+import com.fenyx.jtv.ui.components.keepTapsInside
+import androidx.compose.foundation.layout.fillMaxSize
 
 /** One row in the channel options menu. [confirm] = ask this question before running it. */
 data class ChannelAction(val label: String, val hint: String? = null, val confirm: String? = null, val run: () -> Unit)
@@ -50,8 +53,13 @@ fun ChannelActionsDialog(channel: Channel, actions: List<ChannelAction>, startWi
     LaunchedEffect(confirming) { runCatching { firstFocus.requestFocus() } }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+      androidx.compose.foundation.layout.Box(
+          Modifier.fillMaxSize().then(if (Jtv.isTv) Modifier else Modifier.closeOnOutsideTap(onDismiss)),
+          contentAlignment = Alignment.Center,
+      ) {
         Column(
-            Modifier.width(if (Jtv.isTv) 440.dp else 360.dp).background(c.s1, RoundedCornerShape(10.dp)).padding(20.dp),
+            Modifier.then(if (Jtv.isTv) Modifier else Modifier.keepTapsInside())
+                .width(if (Jtv.isTv) 440.dp else 360.dp).background(c.s1, RoundedCornerShape(10.dp)).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -91,5 +99,6 @@ fun ChannelActionsDialog(channel: Channel, actions: List<ChannelAction>, startWi
                 }
             }
         }
+      }
     }
 }

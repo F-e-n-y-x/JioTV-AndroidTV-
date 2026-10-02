@@ -1,5 +1,17 @@
 package com.fenyx.jtv.ui.player
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.graphics.Color
+import com.fenyx.jtv.ui.components.NumberBlock
+import com.fenyx.jtv.ui.components.formatTime
+import com.fenyx.jtv.ui.components.minutesLeft
+import com.fenyx.jtv.ui.components.JtvProgress
+import com.fenyx.jtv.ui.components.progress
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -310,76 +322,126 @@ internal fun Modifier.touchVideoGestures(ui: PlayerUi, actions: State<PlayerActi
         )
     }
 
+/**
+ * Touch, full-screen (phone landscape + tablet), YouTube-style: the picture stays visible. Small round
+ * icons at the edges, Previous / Play-Pause / Next in the centre, one slim info line at the bottom.
+ * Channel tiles + categories are one tap away behind "Channels" instead of always covering the video.
+ */
 @Composable
 internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean) {
     val now = rememberMinuteClock()
     val act by rememberUpdatedState(d.actions)
-    val pad = if (compact) 16.dp else 32.dp
+    val c = Jtv.colors
+    val pad = if (compact) 12.dp else 24.dp
     val tiles = if (compact) PhoneLandTiles else TabletTiles
-    val strap = if (compact) PhoneLandStrap else TabletStrap
     CompositionLocalProvider(LocalNow provides now) {
         Box(Modifier.fillMaxSize()) {
-            BannerAutoHide(ui, 6_000)
-            val controls = ui.overlay == PlayerOverlay.Banner
+            BannerAutoHide(ui, 5_000)
+            val paused = d.model.paused
+            val controls = ui.overlay == PlayerOverlay.Banner || paused
+            var showChannels by remember { mutableStateOf(false) }
+            LaunchedEffect(controls) { if (!controls) showChannels = false }
             val playingId = d.playing?.id
-            LaunchedEffect(controls) {
-                if (controls) {
+            LaunchedEffect(showChannels) {
+                if (showChannels) {
                     ui.browseGroup = d.currentGroup ?: MainViewModel.GROUP_ALL
                     ui.browseIndex = d.resolveGroup(ui.browseGroup).indexOfFirst { it.id == playingId }.coerceAtLeast(0)
                     ui.browseFocusToken++
                 }
             }
             val bGroup = ui.browseGroup
-            val list = remember(bGroup, controls) { if (controls) d.resolveGroup(bGroup) else emptyList() }
+            val list = remember(bGroup, showChannels) { if (showChannels) d.resolveGroup(bGroup) else emptyList() }
             val onRailClick = remember(bGroup) { { i: Int -> act.tune(bGroup, i) } }
             val noFocus = remember { { _: Int -> } }
 
             AnimatedVisibility(visible = controls, enter = fadeInFast, exit = fadeOutFast) {
                 Box(Modifier.fillMaxSize()) {
+                    // ── Top: back · channel · (channels, options, exit full screen) ──
                     Row(
-                        Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = pad, vertical = 12.dp),
-                        verticalAlignment = Alignment.Top,
+                        Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = pad, vertical = pad),
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OverVideoButton("Back", { act.leave() }, icon = Icons.AutoMirrored.Filled.ArrowBack)
-                        CategoryChips(
-                            d.browseGroups, bGroup,
-                            onPick = { g ->
-                                ui.browseGroup = g
-                                ui.browseIndex = d.resolveGroup(g).indexOfFirst { it.id == playingId }.coerceAtLeast(0)
-                                ui.browseFocusToken++
-                                ui.bannerToken++
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                        OverVideoButton("Options", { ui.openOptions() })
-                        // Phone landscape: the way back to the portrait page (Back leaves the player).
-                        if (compact) OverVideoIcon(PlayerIcons.FullscreenExit, "Exit full screen", { act.fullScreen(false) }, size = 56.dp)
-                        if (!compact) Plaque { JtvClock(now, size = 32.sp, dateColor = Jtv.colors.t2) }
-                    }
-                    Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = pad, end = pad, bottom = pad)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (list.isNotEmpty()) {
-                                ChannelRail(
-                                    channels = list, playingId = playingId,
-                                    focusIndex = ui.browseIndex.coerceIn(0, list.size - 1),
-                                    focusToken = ui.browseFocusToken, takeFocus = false, sizes = tiles,
-                                    onFocused = noFocus, onClick = onRailClick, modifier = Modifier.weight(1f),
-                                )
-                            } else Spacer(Modifier.weight(1f))
-                            Spacer(Modifier.width(8.dp))
-                            OverVideoButton("Previous", { act.zap(-1) }, icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft, minHeight = tiles.h)
-                            Spacer(Modifier.width(8.dp))
-                            OverVideoButton("Next", { act.zap(1) }, icon = Icons.AutoMirrored.Filled.KeyboardArrowRight, minHeight = tiles.h)
+                        OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() })
+                        d.playing?.let { ch ->
+                            JText(
+                                listOfNotNull(ch.channelNumber.takeIf { it > 0 }?.toString(), ch.name).joinToString("  "),
+                                16.sp, color = c.tx, weight = FontWeight.SemiBold,
+                                modifier = Modifier.widthIn(max = 360.dp).clip(RoundedCornerShape(6.dp))
+                                    .background(StrapBg.copy(alpha = 0.8f)).padding(horizontal = 10.dp, vertical = 6.dp),
+                            )
                         }
-                        Spacer(Modifier.height(10.dp))
-                        d.playing?.let { EpgStrap(it, d.epg, strap) }
+                        Spacer(Modifier.weight(1f))
+                        OverVideoIcon(Icons.AutoMirrored.Filled.List, if (showChannels) "Hide channels" else "Channels", {
+                            showChannels = !showChannels; ui.bannerToken++
+                        })
+                        OverVideoIcon(Icons.Filled.MoreVert, "Options", { ui.openOptions() })
+                        if (compact) OverVideoIcon(PlayerIcons.FullscreenExit, "Exit full screen", { act.fullScreen(false) })
+                        else Plaque { JtvClock(now, size = 24.sp, dateColor = c.t2) }
+                    }
+                    // ── Centre: previous · play/pause · next ──
+                    if (!showChannels) Row(
+                        Modifier.align(Alignment.Center),
+                        horizontalArrangement = Arrangement.spacedBy(if (compact) 40.dp else 56.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OverVideoIcon(PlayerIcons.SkipPrevious, "Previous channel", { act.zap(-1) }, size = 52.dp, iconSize = 28.dp)
+                        OverVideoIcon(
+                            if (paused) Icons.Filled.PlayArrow else PlayerIcons.Pause, if (paused) "Play" else "Pause",
+                            { act.togglePause() }, size = 64.dp, iconSize = 34.dp,
+                        )
+                        OverVideoIcon(PlayerIcons.SkipNext, "Next channel", { act.zap(1) }, size = 52.dp, iconSize = 28.dp)
+                    }
+                    // ── Bottom: (channels) + slim info line ──
+                    Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = pad, end = pad, bottom = pad)) {
+                        if (showChannels) {
+                            CategoryChips(
+                                d.browseGroups, bGroup,
+                                onPick = { g ->
+                                    ui.browseGroup = g
+                                    ui.browseIndex = d.resolveGroup(g).indexOfFirst { it.id == playingId }.coerceAtLeast(0)
+                                    ui.browseFocusToken++
+                                    ui.bannerToken++
+                                },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            if (list.isNotEmpty()) ChannelRail(
+                                channels = list, playingId = playingId,
+                                focusIndex = ui.browseIndex.coerceIn(0, list.size - 1),
+                                focusToken = ui.browseFocusToken, takeFocus = false, sizes = tiles,
+                                onFocused = noFocus, onClick = onRailClick,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        d.playing?.let { MiniInfoLine(it, d.epg, Modifier.widthIn(max = 720.dp)) }
                     }
                 }
             }
 
-            OptionsAndMenu(ui, d, touch = true, panelWidth = if (compact) 360.dp else 420.dp, edge = pad)
+            OptionsAndMenu(ui, d, touch = true, panelWidth = if (compact) 340.dp else 400.dp, edge = pad)
         }
+    }
+}
+
+/** One slim line over the video: small number block · show title · time left · thin progress. */
+@Composable
+private fun MiniInfoLine(ch: Channel, epg: EpgSource, modifier: Modifier = Modifier) {
+    val c = Jtv.colors
+    val now = LocalNow.current
+    val cur = rememberNowNext(epg, ch.id, always = true)?.now
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg.copy(alpha = 0.85f))) {
+        Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+            NumberBlock(ch.channelNumber, Modifier.width(64.dp).fillMaxHeight(), 22.sp)
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                JText(cur?.title ?: ch.name, 16.sp, color = c.tx, weight = FontWeight.SemiBold)
+                JText(
+                    if (cur != null) "${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)} · ${cur.minutesLeft(now)} min left"
+                    else listOfNotNull(ch.group, ch.language).joinToString(" · "),
+                    13.sp, color = c.t2,
+                )
+            }
+        }
+        if (cur != null) JtvProgress(cur.progress(now), height = 2.dp, track = Color(0x33FFFFFF))
     }
 }
 

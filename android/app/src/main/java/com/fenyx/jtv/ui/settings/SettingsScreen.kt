@@ -42,6 +42,8 @@ import com.fenyx.jtv.ui.components.JtvClickable
 import com.fenyx.jtv.ui.components.JtvClock
 import com.fenyx.jtv.ui.components.JtvProgress
 import com.fenyx.jtv.ui.components.KeyHint
+import com.fenyx.jtv.ui.components.closeOnOutsideTap
+import com.fenyx.jtv.ui.components.keepTapsInside
 import com.fenyx.jtv.ui.components.rememberMinuteClock
 import com.fenyx.jtv.ui.components.textStyle
 import com.fenyx.jtv.ui.main.MainViewModel
@@ -462,11 +464,13 @@ private fun DialogPanel(onDismiss: () -> Unit, width: androidx.compose.ui.unit.D
     val isPhone = Jtv.form == FormFactor.Phone
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
-            Modifier.fillMaxSize().background(c.bg.copy(alpha = 0.8f)).padding(16.dp),
+            Modifier.fillMaxSize().background(c.bg.copy(alpha = 0.8f))
+                .then(if (Jtv.isTv) Modifier else Modifier.closeOnOutsideTap(onDismiss)).padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 Modifier
+                    .then(if (Jtv.isTv) Modifier else Modifier.keepTapsInside())
                     .then(if (isPhone) Modifier.fillMaxWidth() else Modifier.width(width))
                     .clip(RoundedCornerShape(10.dp))
                     .background(c.s1)

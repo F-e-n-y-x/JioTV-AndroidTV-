@@ -75,6 +75,8 @@ import com.fenyx.jtv.data.EpgProgram
 import com.fenyx.jtv.data.SettingsManager
 import com.fenyx.jtv.theme.Jtv
 import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.ui.components.closeOnOutsideTap
+import com.fenyx.jtv.ui.components.keepTapsInside
 import com.fenyx.jtv.ui.components.ChannelPlate
 import com.fenyx.jtv.ui.components.JText
 import com.fenyx.jtv.ui.components.JtvButton
@@ -247,20 +249,15 @@ fun GuideScreen(
             }
 
             Column(Modifier.fillMaxSize()) {
-                // ── Focused programme line ──
-                FocusLine(
-                    channel = focusedChannel,
-                    prog = focusedProg,
-                    showButtons = !isTv && focusedChannel != null,
-                    onWatch = { activate(focusRow, focusedProg?.takeIf { it.startMs <= now }) },
-                    onDetails = { details = DetailsRequest(focusRow, focusedProg) },
-                )
-
-                if (!isTv) {
-                    TimeButtons(
-                        onEarlier = { viewStart = clampStart(viewStart - HALF_HOUR); anchor -= HALF_HOUR },
-                        onNow = { viewStart = initialWindowStart(now); anchor = now },
-                        onLater = { viewStart = clampStart(viewStart + HALF_HOUR); anchor += HALF_HOUR },
+                // ── Focused programme line ── TV/tablet only. On touch the grid is the UI: drag the
+                // timeline to move in time, tap a show for its details (owner: no extra header/buttons).
+                if (Jtv.form != com.fenyx.jtv.theme.FormFactor.Phone) {
+                    FocusLine(
+                        channel = focusedChannel,
+                        prog = focusedProg,
+                        showButtons = false,
+                        onWatch = { activate(focusRow, focusedProg?.takeIf { it.startMs <= now }) },
+                        onDetails = { details = DetailsRequest(focusRow, focusedProg) },
                     )
                 }
 
@@ -827,11 +824,13 @@ private fun GuideDetails(
                     } else false
                 }
                 .background(c.bg.copy(alpha = 0.8f))
+                .then(if (Jtv.isTv) Modifier else Modifier.closeOnOutsideTap(onClose))
                 .padding(16.dp),
             contentAlignment = Alignment.Center,
         ) {
             Column(
                 Modifier
+                    .then(if (Jtv.isTv) Modifier else Modifier.keepTapsInside())
                     .then(if (isPhone) Modifier.fillMaxWidth() else Modifier.width(600.dp))
                     .clip(RoundedCornerShape(10.dp))
                     .background(c.s1)

@@ -501,7 +501,7 @@ private fun PreviewPane(
             Spacer(Modifier.height(8.dp))
             nn.later.take(if (tv) 4 else 3).forEach { n ->
                 Row(Modifier.padding(vertical = 4.dp)) {
-                    Text(formatTime(n.startMs), style = numberStyle(15.sp).copy(fontWeight = FontWeight.Bold), color = c.t2, modifier = Modifier.width(58.dp))
+                    Text(formatTime(n.startMs), style = numberStyle(15.sp).copy(fontWeight = FontWeight.Bold), color = c.t2, modifier = Modifier.width(88.dp))
                     Text(n.title, style = textStyle(15.sp), color = c.tx, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }

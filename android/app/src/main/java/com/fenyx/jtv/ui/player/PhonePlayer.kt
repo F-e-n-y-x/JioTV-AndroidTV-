@@ -394,7 +394,7 @@ private fun NextRow(p: EpgProgram) {
         Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(formatTime(p.startMs), style = numberStyle(16.sp), color = c.tx, maxLines = 1, modifier = Modifier.width(64.dp))
+        Text(formatTime(p.startMs), style = numberStyle(16.sp), color = c.tx, maxLines = 1, modifier = Modifier.width(92.dp))
         Column(Modifier.weight(1f)) {
             JText(p.title, 16.sp)
             val sub = listOfNotNull(p.category, p.genre?.takeUnless { it.equals(p.category, true) }).joinToString(" · ")

@@ -70,7 +70,7 @@ jobs:
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           VERSION_TAG="${{ github.ref_name }}"
           if [[ "${{ github.ref }}" != refs/tags/* ]]; then
-            VERSION_TAG="v1.5.7"
+            VERSION_TAG="dev-${GITHUB_SHA::7}"
           fi
           RELEASE_APK="JTV-${VERSION_TAG}.apk"
           cp "$APK_PATH" "../$RELEASE_APK"
@@ -90,5 +90,8 @@ jobs:
           name: ${{ steps.apk.outputs.release_name }}
           files: ${{ steps.apk.outputs.apk_path }}
           draft: false
-          prerelease: false
+          # Tags with a suffix (v2.0-beta, v2.0-beta.2) are pre-releases: GitHub keeps them out of
+          # /releases/latest, so stable installs never auto-update to them.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
           generate_release_notes: true

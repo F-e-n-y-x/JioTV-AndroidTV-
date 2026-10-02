@@ -1,6 +1,9 @@
 package com.fenyx.jtv.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.composed
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -80,10 +83,16 @@ fun rememberMinuteClock(): Long {
 
 val LocalNow = staticCompositionLocalOf { 0L }
 
-private val hhmm = ThreadLocal.withInitial { SimpleDateFormat("HH:mm", Locale.US) }
+// 12-hour clock everywhere (owner's choice): "2:45 PM".
+private val hhmm = ThreadLocal.withInitial { SimpleDateFormat("h:mm a", Locale.US) }
+private val hm12 = ThreadLocal.withInitial { SimpleDateFormat("h:mm", Locale.US) }
+private val ampm = ThreadLocal.withInitial { SimpleDateFormat("a", Locale.US) }
 private val dayFmt = ThreadLocal.withInitial { SimpleDateFormat("EEE, d MMM", Locale.UK) }
 
 fun formatTime(ms: Long): String = hhmm.get()!!.format(Date(ms))
+/** "2:45" without the AM/PM, for tight columns where the day part is shown once nearby. */
+fun formatTimeShort(ms: Long): String = hm12.get()!!.format(Date(ms))
+fun formatAmPm(ms: Long): String = ampm.get()!!.format(Date(ms))
 fun formatDay(ms: Long): String = dayFmt.get()!!.format(Date(ms))
 
 /** Now / next / later for one channel's guide at [now]. */
@@ -228,7 +237,11 @@ fun EndsSoonPill(stopMs: Long, modifier: Modifier = Modifier, fontSize: TextUnit
 @Composable
 fun JtvClock(now: Long, modifier: Modifier = Modifier, size: TextUnit = 34.sp, color: Color = Jtv.colors.tx, dateColor: Color = Jtv.colors.t3) {
     Column(modifier, horizontalAlignment = Alignment.End) {
-        Text(formatTime(now), style = numberStyle(size), color = color, maxLines = 1)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(formatTimeShort(now), style = numberStyle(size), color = color, maxLines = 1)
+            Text(" " + formatAmPm(now), style = numberStyle(size * 0.45f), color = color, maxLines = 1,
+                modifier = Modifier.padding(bottom = (size.value * 0.12f).dp))
+        }
         Text(formatDay(now), style = textStyle(size * 0.38f), color = dateColor, maxLines = 1)
     }
 }
@@ -302,3 +315,16 @@ fun VSpace(h: Dp) = Spacer(Modifier.height(h))
 
 @Composable
 fun HSpace(w: Dp) = Spacer(Modifier.width(w))
+
+// ───────────────────────── Popups ─────────────────────────
+
+/** Full-screen popup backdrop: a tap anywhere outside the panel closes it (touch + mouse). */
+fun Modifier.closeOnOutsideTap(onClose: () -> Unit): Modifier = composed {
+    clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose)
+}
+
+/** Put on the panel itself so taps inside it never reach [closeOnOutsideTap]. */
+fun Modifier.keepTapsInside(): Modifier = composed {
+    clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
+        .focusProperties { canFocus = false }
+}

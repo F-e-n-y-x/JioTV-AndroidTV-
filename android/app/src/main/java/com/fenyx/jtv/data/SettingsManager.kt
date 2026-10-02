@@ -55,6 +55,13 @@ class SettingsManager(private val context: Context) {
 
         // v2 appearance: "system" | "dark" | "light". Absent = system on phone/tablet, dark on TV.
         private val THEME_MODE = stringPreferencesKey("theme_mode")
+        // Recently watched channel ids, newest first (comma-joined, capped).
+        private val RECENT_CHANNELS = stringPreferencesKey("recent_channels")
+        private const val RECENT_MAX = 12
+    }
+
+    val recentChannelsFlow: Flow<List<String>> = context.dataStore.data.map { p ->
+        p[RECENT_CHANNELS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
     }
 
     val themeModeFlow: Flow<String?> = context.dataStore.data.map { it[THEME_MODE] }
@@ -257,6 +264,9 @@ class SettingsManager(private val context: Context) {
     suspend fun setLastChannelId(id: String) {
         context.dataStore.edit { preferences ->
             preferences[LAST_CHANNEL_ID] = id
+            // Same write also maintains "Recently watched" (move to front, de-duplicated, capped).
+            val old = preferences[RECENT_CHANNELS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
+            preferences[RECENT_CHANNELS] = (listOf(id) + old.filter { it != id }).take(RECENT_MAX).joinToString(",")
         }
     }
 
