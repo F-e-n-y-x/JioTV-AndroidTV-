@@ -290,7 +290,8 @@ fun MainNavigation() {
                         viewModel = mainViewModel,
                         onPlay = { index, group -> openPlayer(index, group) },
                         onOpenSettings = { onTab(PhoneTab.Settings) },
-                        modifier = m
+                        modifier = m,
+                        onTab = onTab
                     )
                   }
                 }

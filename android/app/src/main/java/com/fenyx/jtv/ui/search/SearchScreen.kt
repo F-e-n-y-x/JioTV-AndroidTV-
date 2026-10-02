@@ -159,7 +159,11 @@ fun SearchScreen(
         } else {
             val firstId = (if (q.isNotEmpty()) results else emptyList()).firstOrNull()?.id
                 ?: recents.firstOrNull()?.id ?: favourites.firstOrNull()?.id
+            // Start every new query (and the empty state) at the top so section titles are visible.
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            LaunchedEffect(q, recents.size, favourites.size) { listState.scrollToItem(0) }
             LazyColumn(
+                state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer(),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
                 contentPadding = PaddingValues(bottom = 8.dp)

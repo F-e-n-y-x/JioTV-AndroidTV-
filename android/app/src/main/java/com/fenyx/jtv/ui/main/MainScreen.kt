@@ -438,6 +438,9 @@ private fun PhoneHome(
     val c = Jtv.colors
     val now = LocalNow.current
     val chipState = rememberLazyListState()
+    // Chips that appear later (Favourites, Recent) must not leave the row scrolled mid-chip.
+    val selChip = categories.indexOfFirst { it.key == selected }
+    LaunchedEffect(categories.size, selChip) { if (selChip >= 0) chipState.scrollToItem((selChip - 1).coerceAtLeast(0)) }
     Column(Modifier.fillMaxSize()) {
         // Compact header: the status bar already shows the time on phones.
         Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {

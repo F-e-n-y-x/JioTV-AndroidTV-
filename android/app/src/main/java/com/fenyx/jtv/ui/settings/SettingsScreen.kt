@@ -246,7 +246,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     ) {
         Column(
             Modifier.fillMaxSize().padding(horizontal = gutter, vertical = if (isTv) 27.dp else 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            // Tablet: left-aligned under the title (the nav rail sits on the left); TV/phone fill anyway.
+            horizontalAlignment = Alignment.Start,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 // No Back button: phone has the bottom tab bar, tablet the navigation rail, TV the tabs.
