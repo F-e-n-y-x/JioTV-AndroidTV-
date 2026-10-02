@@ -32,17 +32,8 @@
 -keep class com.fenyx.jtv.data.JioApiClient$StreamData { *; }
 -keep class com.fenyx.jtv.data.EpgProgram { *; }
 
-# ── Media3 / ExoPlayer ─────────────────────────────────────────────────────────
--keep class androidx.media3.** { *; }
--dontwarn androidx.media3.**
-
-# ── Coil ───────────────────────────────────────────────────────────────────────
--keep class coil.** { *; }
--dontwarn coil.**
-
-# ── AndroidX DataStore ─────────────────────────────────────────────────────────
--keep class androidx.datastore.** { *; }
-
-# ── Navigation3 (uses reflection/serialization for back-stack restore) ──────────
--keep class androidx.navigation3.** { *; }
--dontwarn androidx.navigation3.**
+# ── Libraries (Media3, Coil, DataStore, Navigation3) ──────────────────────────
+# No package-wide -keep rules: each of these ships its own consumer ProGuard rules inside the AAR
+# (Media3 keeps its reflectively-loaded extension renderers / DefaultDataSource lookups, DataStore
+# keeps its protobuf-lite fields, Navigation3 needs nothing beyond our @Serializable NavKeys above).
+# Blanket keeps here cost ~1.1 MB of APK for nothing.
