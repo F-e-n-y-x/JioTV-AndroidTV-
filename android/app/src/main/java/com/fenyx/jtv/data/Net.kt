@@ -41,4 +41,19 @@ object Net {
             }
             .build()
     }
+
+    /**
+     * Opens (and pools) connections to Jio's video CDNs in the background at app start, so the first
+     * channel doesn't also pay for DNS + TCP + TLS (often 300–800 ms on a cold box). Fire-and-forget.
+     */
+    fun warmUp() {
+        val hosts = listOf("https://jiotvbpkmob.cdn.jio.com/", "https://jiotvmblive.cdn.jio.com/", "https://jiotvimages.cdn.jio.com/")
+        Thread {
+            hosts.forEach { url ->
+                runCatching {
+                    client.newCall(okhttp3.Request.Builder().url(url).head().build()).execute().close()
+                }
+            }
+        }.apply { isDaemon = true; name = "jtv-net-warmup" }.start()
+    }
 }

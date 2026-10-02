@@ -116,6 +116,8 @@ fun MainScreen(
     val playTargets by com.fenyx.jtv.sync.LanSync.playTargets.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.fetchChannels() }
+    // Once channels are there, quietly resolve the likely first picks (last channel, favourites).
+    LaunchedEffect(displayChannels.isNotEmpty()) { if (displayChannels.isNotEmpty()) viewModel.warmLikelyChannels() }
     val now = rememberMinuteClock()
 
     val group = selectedGroup ?: MainViewModel.GROUP_ALL
@@ -291,7 +293,7 @@ fun MainScreen(
                         
                         modifier = Modifier
                             .then(if (ch.id == focusTargetId) Modifier.focusRequester(targetFocus) else Modifier)
-                            .onFocusChanged { if (it.isFocused) focusedId = ch.id }
+                            .onFocusChanged { if (it.isFocused) { focusedId = ch.id; viewModel.prefetchSoon(ch.id) } }
                             .then(if (movingId != null) Modifier.animateItem() else Modifier),
                     )
                 }

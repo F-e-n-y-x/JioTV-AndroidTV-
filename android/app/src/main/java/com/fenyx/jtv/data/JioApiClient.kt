@@ -4,6 +4,8 @@ import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.OutputStreamWriter
@@ -625,7 +627,7 @@ object JioApiClient {
 
             val finalChannelsMap = mutableMapOf<Int, Channel>()
 
-            fun parseChannels(urlStr: String) {
+            fun parseChannels(urlStr: String, into: MutableMap<Int, Channel>) {
                 try {
                     val conn = URL(urlStr).openConnection() as HttpURLConnection
                     conn.requestMethod = "GET"
@@ -658,8 +660,8 @@ object JioApiClient {
                                         }
                                     }
                                     reader.endObject()
-                                    if (channelId > 0 && !finalChannelsMap.containsKey(channelId)) {
-                                        finalChannelsMap[channelId] = Channel(
+                                    if (channelId > 0 && !into.containsKey(channelId)) {
+                                        into[channelId] = Channel(
                                             id = channelId.toString(),
                                             name = channelName.ifEmpty { "Unknown" },
                                             logoUrl = "https://jiotvimages.cdn.jio.com/dare_images/images/$logoUrl",
@@ -686,8 +688,16 @@ object JioApiClient {
             }
 
             // Fetch v1.4 (Sony/Zee) and v3.1 (Star/Disney)
-            parseChannels("https://jiotvapi.cdn.jio.com/apis/v1.4/getMobileChannelList/get/?langId=6&devicetype=phone&os=android&usertype=JIO&version=422")
-            parseChannels("https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=422")
+            // Both lists download + parse IN PARALLEL (about half the first-launch wait), then merge in the
+            // original order (v1.4 first, first entry for an id wins), so the result is unchanged.
+            val v14 = mutableMapOf<Int, Channel>()
+            val v31 = mutableMapOf<Int, Channel>()
+            kotlinx.coroutines.coroutineScope {
+                launch(Dispatchers.IO) { parseChannels("https://jiotvapi.cdn.jio.com/apis/v1.4/getMobileChannelList/get/?langId=6&devicetype=phone&os=android&usertype=JIO&version=422", v14) }
+                launch(Dispatchers.IO) { parseChannels("https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=422", v31) }
+            }
+            v14.forEach { (id, c) -> finalChannelsMap.putIfAbsent(id, c) }
+            v31.forEach { (id, c) -> finalChannelsMap.putIfAbsent(id, c) }
 
             if (finalChannelsMap.isEmpty()) {
                 // Network produced nothing — fall back to whatever we have on disk (even if stale)
@@ -870,9 +880,16 @@ object JioApiClient {
                     if (mode == "hls" && hlsUsable) {
                         useMpd = false
                     } else if (mode == null) {
-                        if (manifestAlive(mpdUrl, probeHeaders(mpdUrl))) {
+                        // Check DASH and HLS at the SAME time (was one after the other): the first open
+                        // of a channel waits for one round trip instead of two.
+                        val (mpdAlive, hlsAlive) = kotlinx.coroutines.coroutineScope {
+                            val m = async(Dispatchers.IO) { manifestAlive(mpdUrl, probeHeaders(mpdUrl)) }
+                            val h = async(Dispatchers.IO) { hlsUsable && manifestAlive(hlsUrl, probeHeaders(hlsUrl)) }
+                            m.await() to h.await()
+                        }
+                        if (mpdAlive) {
                             rememberStreamMode(context, channelId, "mpd")
-                        } else if (hlsUsable && manifestAlive(hlsUrl, probeHeaders(hlsUrl))) {
+                        } else if (hlsAlive) {
                             Log.i(TAG, "DASH is dead for $channelId, using HLS")
                             rememberStreamMode(context, channelId, "hls")
                             useMpd = false

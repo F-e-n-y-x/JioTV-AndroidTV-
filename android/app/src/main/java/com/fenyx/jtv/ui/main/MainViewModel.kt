@@ -302,8 +302,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val app = getApplication<Application>()
 
             // 1) Instant load from disk so the UI appears immediately (no network wait on boot).
-            val cached = JioApiClient.readChannelCache(app)
-            val cacheFresh = JioApiClient.isChannelCacheFresh(app)
+            // Parse the ~1300-channel cache OFF the main thread (it blocked the first frame on TVs).
+            val cached = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { JioApiClient.readChannelCache(app) }
+            val cacheFresh = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { JioApiClient.isChannelCacheFresh(app) }
             if (cached != null) {
                 publishChannels(cached)
                 _isLoading.value = false
@@ -350,7 +351,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val fetchingEpgChannels = mutableSetOf<String>()
     // Cap concurrent native-EPG requests: scrolling the EPG list fast used to fire one network call
     // per newly-visible row, flooding a weak TV with dozens of parallel connections.
-    private val epgFetchSemaphore = kotlinx.coroutines.sync.Semaphore(4)
+    private val epgFetchSemaphore = kotlinx.coroutines.sync.Semaphore(6) // Jio CDN caches guide data
+
+    // Guide data for the visible rows arrives one channel at a time. Publishing each one separately
+    // re-laid-out the whole list ~15 times in a row on weak TVs; collect them and publish at most every
+    // 250 ms instead (one update per batch).
+    private val pendingEpg = java.util.concurrent.ConcurrentHashMap<String, List<com.fenyx.jtv.data.EpgProgram>>()
+    private var epgFlushJob: kotlinx.coroutines.Job? = null
+    private fun queueEpg(channelId: String, programs: List<com.fenyx.jtv.data.EpgProgram>) {
+        pendingEpg[channelId] = programs
+        if (epgFlushJob?.isActive == true) return
+        epgFlushJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(250)
+            val batch = HashMap(pendingEpg); batch.keys.forEach { pendingEpg.remove(it) }
+            if (batch.isNotEmpty()) _epgData.value = _epgData.value + batch
+            if (pendingEpg.isNotEmpty()) { epgFlushJob = null; pendingEpg.entries.firstOrNull()?.let { (k, v) -> queueEpg(k, v) } }
+        }
+    }
 
     fun fetchNativeEpgIfMissing(channelId: String) {
         val currentData = _epgData.value[channelId]
@@ -360,13 +377,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     epgFetchSemaphore.withPermit {
                         val programs = epgRepository.getNativeEpgForChannel(channelId)
-                        if (programs.isNotEmpty()) {
-                            val now = System.currentTimeMillis()
-                            val cur = programs.find { it.startMs <= now && it.stopMs > now }
-                            Log.d("EpgDiag", "ch=$channelId n=${programs.size} now=$now " +
-                                "range=${programs.first().startMs}..${programs.last().stopMs} current='${cur?.title}'")
-                            _epgData.value = _epgData.value + (channelId to programs)
-                        }
+                        if (programs.isNotEmpty()) queueEpg(channelId, programs)
                     }
                 } finally {
                     fetchingEpgChannels.remove(channelId)
@@ -444,6 +455,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _updateError.value = err.message ?: "Download failed"
                 _updateStatusMessage.value = "Download failed"
             }
+        }
+    }
+
+    // ── Faster first play ──
+    // Resolve a channel's stream link before it's opened: the channel the user rests on in the list
+    // (TV focus, after a short pause) and, at launch, the last-watched channel + first favourites.
+    // Network only (no player); uses the same short-lived cache the zap prefetch uses.
+    private var focusPrefetchJob: kotlinx.coroutines.Job? = null
+    fun prefetchSoon(channelId: String, delayMs: Long = 500) {
+        focusPrefetchJob?.cancel()
+        focusPrefetchJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            kotlinx.coroutines.delay(delayMs)
+            prefetchNow(channelId)
+        }
+    }
+    private suspend fun prefetchNow(channelId: String) {
+        val auth = settingsManager.authDataFlow.first() ?: return
+        val id = variantsFor(channelId).firstOrNull { it.channel.id == channelId }?.channel?.id ?: channelId
+        runCatching { JioApiClient.prefetchStreamUrl(getApplication(), id, auth) }
+    }
+    private var launchWarmDone = false
+    fun warmLikelyChannels() {
+        if (launchWarmDone) return
+        launchWarmDone = true
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val ids = buildList {
+                settingsManager.lastChannelIdFlow.first()?.let { add(it) }
+                addAll(_favoriteOrder.value.take(2))
+            }.distinct().take(3)
+            ids.forEach { prefetchNow(it) }
         }
     }
 }
