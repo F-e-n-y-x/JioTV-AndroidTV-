@@ -564,7 +564,10 @@ object JioApiClient {
                     channelNumber = obj.optInt("channelNumber", 0),
                     licenseUrl = if (obj.has("licenseUrl")) obj.getString("licenseUrl") else null,
                     language = obj.optString("language", "English"),
-                    isCatchup = obj.optBoolean("isCatchup", false)
+                    isCatchup = obj.optBoolean("isCatchup", false),
+                    stbNumber = obj.optInt("stbNumber", 0),
+                    isPremium = obj.optBoolean("isPremium", false),
+                    planType = obj.optString("planType", "")
                 ))
             }
             channels.ifEmpty { null }
@@ -647,6 +650,9 @@ object JioApiClient {
                                     var langId = ""
                                     var isDrm = false
                                     var isCatchup = false
+                                    var stb = 0
+                                    var isPremium = false
+                                    var planType = ""
                                     while (reader.hasNext()) {
                                         when (reader.nextName()) {
                                             "channel_id" -> channelId = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
@@ -656,6 +662,9 @@ object JioApiClient {
                                             "channelLanguageId" -> langId = try { reader.nextString() } catch(e: Exception) { reader.nextInt().toString() }
                                             "isDrm" -> isDrm = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
                                             "isCatchupAvailable" -> isCatchup = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
+                                            "stbChannelNumber" -> stb = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
+                                            "is_premium" -> isPremium = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
+                                            "plan_type" -> planType = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
                                             else -> reader.skipValue()
                                         }
                                     }
@@ -670,7 +679,10 @@ object JioApiClient {
                                             channelNumber = channelId,
                                             streamUrl = "",
                                             language = JIO_LANG_MAP[langId] ?: "Other",
-                                            isCatchup = isCatchup
+                                            isCatchup = isCatchup,
+                                            stbNumber = stb.coerceAtLeast(0),
+                                            isPremium = isPremium,
+                                            planType = planType
                                         )
                                     }
                                 }
@@ -687,17 +699,15 @@ object JioApiClient {
                 }
             }
 
-            // Fetch v1.4 (Sony/Zee) and v3.1 (Star/Disney)
-            // Both lists download + parse IN PARALLEL (about half the first-launch wait), then merge in the
-            // original order (v1.4 first, first entry for an id wins), so the result is unchanged.
+            // Jio's current list is v3.1; v1.4 only contributes the few allow-listed ids that still play
+            // (see ChannelSources). Both lists download + parse IN PARALLEL, then merge with v3.1 winning.
             val v14 = mutableMapOf<Int, Channel>()
             val v31 = mutableMapOf<Int, Channel>()
             kotlinx.coroutines.coroutineScope {
-                launch(Dispatchers.IO) { parseChannels("https://jiotvapi.cdn.jio.com/apis/v1.4/getMobileChannelList/get/?langId=6&devicetype=phone&os=android&usertype=JIO&version=422", v14) }
-                launch(Dispatchers.IO) { parseChannels("https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=422", v31) }
+                launch(Dispatchers.IO) { parseChannels(ChannelSources.V31_URL, v31) }
+                launch(Dispatchers.IO) { parseChannels(ChannelSources.V14_URL, v14) }
             }
-            v14.forEach { (id, c) -> finalChannelsMap.putIfAbsent(id, c) }
-            v31.forEach { (id, c) -> finalChannelsMap.putIfAbsent(id, c) }
+            finalChannelsMap.putAll(ChannelSources.merge(v31, v14))
 
             if (finalChannelsMap.isEmpty()) {
                 // Network produced nothing — fall back to whatever we have on disk (even if stale)
@@ -725,6 +735,9 @@ object JioApiClient {
                     obj.put("channelNumber", ch.channelNumber)
                     obj.put("language", ch.language)
                     obj.put("isCatchup", ch.isCatchup)
+                    if (ch.stbNumber > 0) obj.put("stbNumber", ch.stbNumber)
+                    if (ch.isPremium) obj.put("isPremium", true)
+                    if (ch.planType.isNotEmpty()) obj.put("planType", ch.planType)
                     ch.licenseUrl?.let { obj.put("licenseUrl", it) }
                     jsonArray.put(obj)
                 }
