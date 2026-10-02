@@ -133,6 +133,9 @@ dependencies {
   implementation(libs.androidx.media3.exoplayer.hls)
   implementation(libs.androidx.media3.exoplayer.dash)
   implementation(libs.androidx.media3.datasource)
+  // Streams go over one shared OkHttp client (HTTP/2, pooled; data/Net.kt), the same one Coil uses.
+  implementation(libs.androidx.media3.datasource.okhttp)
+  implementation(libs.okhttp)
   implementation(libs.androidx.media3.ui)
 
   // DataStore

@@ -47,7 +47,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
@@ -271,12 +271,13 @@ fun TvPlayerScreen(
     // so sending the CDN stream headers there gets a 403 and the stream never decrypts.
     val keyHeadersHolder = remember { java.util.concurrent.atomic.AtomicReference<Map<String, String>>(emptyMap()) }
 
-    // Reuse data source factories to avoid GC pressure on every channel switch
+    // Reuse data source factories to avoid GC pressure on every channel switch. Manifests, segments
+    // and AES keys go over the app's ONE OkHttp client (data/Net.kt): HTTP/2 to the CDN, pooled
+    // connections shared with the zap prefetch's manifest probe and with Coil. Redirects (incl.
+    // http<->https) are followed by the client; timeouts are set there (connect 8 s, read 15 s).
+    // The Widevine license request is not routed here: it keeps Media3's default DRM HTTP stack.
     val httpDataSourceFactory = remember {
-        DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
+        OkHttpDataSource.Factory(com.fenyx.jtv.data.Net.client)
     }
     // Applies the latest Akamai token to EVERY request (manifest + segments) two ways, because Jio
     // authorizes segments via BOTH the URL query token AND a `Cookie: __hdnea__=...` header:

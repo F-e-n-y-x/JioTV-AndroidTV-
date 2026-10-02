@@ -182,23 +182,28 @@ object JioApiClient {
      * counts as alive (let the player try and report it) so a flaky probe never blocks a good channel.
      */
     private fun manifestAlive(url: String, headers: Map<String, String>): Boolean {
-        // No disconnect(): that tears down the socket. Closing the body stream instead lets the
-        // connection go back to the pool for the player's own manifest request to the same CDN.
+        // On the shared OkHttp client: the connection this opens to the CDN (HTTP/2 where offered)
+        // goes back to the pool and is reused by the player's own manifest request right after.
+        // Only the first bytes are read; closing the response releases the connection.
         return try {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 5000
-                readTimeout = 5000
-                headers.forEach { (k, v) -> setRequestProperty(k, v) }
-            }
-            if (conn.responseCode !in 200..299) {
-                runCatching { conn.errorStream?.close() }
-                return false
-            }
-            val head = ByteArray(256)
-            val n = conn.inputStream.use { it.read(head) }
-            if (n <= 0) return false
-            val text = String(head, 0, n, Charsets.UTF_8).trimStart('\uFEFF', ' ', '\n', '\r', '\t')
-            text.startsWith("#EXTM3U") || text.startsWith("<?xml") || text.startsWith("<MPD")
+            val req = okhttp3.Request.Builder().url(url).apply {
+                headers.forEach { (k, v) -> header(k, v) }
+            }.build()
+            Net.client.newBuilder()
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+                .newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return false
+                    val head = resp.body?.source()?.let { src ->
+                        src.request(256)
+                        val buf = src.buffer
+                        buf.readByteArray(minOf(256L, buf.size))
+                    } ?: return false
+                    if (head.isEmpty()) return false
+                    val text = String(head, Charsets.UTF_8).trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+                    text.startsWith("#EXTM3U") || text.startsWith("<?xml") || text.startsWith("<MPD")
+                }
         } catch (e: java.io.IOException) {
             Log.w(TAG, "Manifest probe failed (treating as alive): ${e.message}")
             true

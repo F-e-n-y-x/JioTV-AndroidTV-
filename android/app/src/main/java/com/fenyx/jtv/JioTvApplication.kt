@@ -33,6 +33,8 @@ class JioTvApplication : Application(), ImageLoaderFactory {
             .allowRgb565(true)         // 16-bit bitmaps for opaque logos → ~half the memory + faster decode
             .allowHardware(true)       // GPU-backed bitmaps (skips a CPU copy)
             .respectCacheHeaders(false) // trust the cache; never re-validate logos over the network
+            // Same pooled HTTP/2 client as the player, so logo and stream connections are shared.
+            .okHttpClient { com.fenyx.jtv.data.Net.client }
             .build()
     }
 }
