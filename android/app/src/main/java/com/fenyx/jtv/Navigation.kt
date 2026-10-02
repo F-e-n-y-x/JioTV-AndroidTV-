@@ -152,8 +152,12 @@ fun MainNavigation() {
                     }
                 }
                 entry<Guide> {
-                    // GUIDE_ENTRY (replaced by GuideScreen on merge)
-                    androidx.tv.material3.Text("Guide", modifier = Modifier.safeDrawingPadding())
+                    com.fenyx.jtv.ui.guide.GuideScreen(
+                        viewModel = mainViewModel,
+                        onPlay = { index, group -> backStack.add(Player(channelIndex = index, group = group)) },
+                        onOpenSettings = { backStack.add(Settings) },
+                        modifier = Modifier.safeDrawingPadding()
+                    )
                 }
                 entry<Search> {
                     com.fenyx.jtv.ui.search.SearchScreen(
