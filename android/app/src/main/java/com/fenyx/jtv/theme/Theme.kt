@@ -39,6 +39,17 @@ fun JioTVGoTVTheme(
     }
     val colors = if (dark) JtvDark else JtvLight
     val scheme = remember(colors) { tvScheme(colors) }
+    // Status/navigation bar icons follow the theme (dark icons on the light background).
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) {
+        androidx.compose.runtime.SideEffect {
+            val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+            androidx.core.view.WindowInsetsControllerCompat(window, view).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+        }
+    }
     CompositionLocalProvider(LocalJtvColors provides colors, LocalFormFactor provides form) {
         MaterialTheme(colorScheme = scheme, typography = Typography, content = content)
     }

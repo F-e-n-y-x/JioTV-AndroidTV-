@@ -209,6 +209,19 @@ fun MainNavigation() {
                   }
                 }
                 entry<Player> { playerArgs ->
+                    // Phone/tablet: full-screen video while the player is open; bars come back on exit.
+                    val view = androidx.compose.ui.platform.LocalView.current
+                    androidx.compose.runtime.DisposableEffect(Unit) {
+                        val window = (view.context as? android.app.Activity)?.window
+                        val ctl = window?.let { androidx.core.view.WindowInsetsControllerCompat(it, view) }
+                        ctl?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        ctl?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                        onDispose {
+                            if (!context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)) {
+                                ctl?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                            }
+                        }
+                    }
                     val groups by mainViewModel.groups.collectAsState()
                     // Reactive (not a one-shot snapshot) so if the player is opened while the collapsed
                     // list is still being built, it recomposes and fills in — no more Settings-and-back

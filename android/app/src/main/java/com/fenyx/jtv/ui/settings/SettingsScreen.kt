@@ -223,7 +223,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             }
     ) {
         Column(
-            Modifier.fillMaxSize().padding(horizontal = gutter, vertical = if (isTv) 27.dp else 16.dp),
+            Modifier.fillMaxSize().padding(horizontal = gutter, vertical = if (isTv) 27.dp else 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -234,7 +234,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                     )
                     Spacer(Modifier.width(16.dp))
                 }
-                JText("Settings", 28.sp, Modifier.weight(1f), weight = FontWeight.Bold)
+                JText("Settings", if (isTv) 28.sp else 24.sp, Modifier.weight(1f), weight = FontWeight.Bold)
                 if (form != FormFactor.Phone) JtvClock(now, dateColor = c.t2, size = if (isTv) 34.sp else 28.sp)
             }
             Spacer(Modifier.height(8.dp))
@@ -352,7 +352,7 @@ private fun SettingsSection(title: String) {
         title,
         style = textStyle(14.sp, FontWeight.SemiBold),
         color = Jtv.colors.t3,
-        modifier = Modifier.padding(top = 20.dp, bottom = 6.dp, start = 12.dp)
+        modifier = Modifier.padding(top = if (Jtv.isTv) 20.dp else 14.dp, bottom = 4.dp, start = 12.dp)
     )
 }
 
@@ -370,7 +370,7 @@ private fun SettingsRow(
     val isTv = Jtv.isTv
     JtvClickable(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth().heightIn(min = if (isTv) 56.dp else 64.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = if (isTv) 56.dp else 52.dp),
         focusedScale = 1.02f,
     ) { focused ->
         androidx.compose.foundation.layout.Row(
@@ -381,7 +381,7 @@ private fun SettingsRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     label,
-                    style = textStyle(18.sp, FontWeight.SemiBold),
+                    style = textStyle(if (isTv) 18.sp else 16.sp, FontWeight.SemiBold),
                     color = when {
                         focused -> c.invTx
                         destructive -> c.error
@@ -392,16 +392,16 @@ private fun SettingsRow(
                 if (!description.isNullOrBlank()) {
                     Text(
                         description,
-                        style = textStyle(14.sp),
+                        style = textStyle(if (isTv) 14.sp else 13.sp),
                         color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                 }
             }
             if (value.isNotEmpty()) {
                 Text(
                     value,
-                    style = textStyle(16.sp),
+                    style = textStyle(if (isTv) 16.sp else 15.sp),
                     color = if (focused) c.invTx else c.t2,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.widthIn(max = 300.dp)

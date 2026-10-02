@@ -21,10 +21,14 @@ class MainActivity : ComponentActivity() {
         // any area the keyboard leaves) instead of the OS painting black at the edges. Removing this
         // made the black area at the bottom larger, so it's kept on.
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior =
-                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        // TV: no system bars at all. Phone/tablet: normal status + navigation bars (the app draws
+        // edge-to-edge behind them and pads with safeDrawingPadding); the player hides them itself.
+        if (packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)) {
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+                hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
         }
 
         // No runtime storage-permission request: the app uses only app-scoped storage, so the prompt

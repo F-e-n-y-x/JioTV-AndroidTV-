@@ -56,7 +56,7 @@ data class RowMetrics(
 )
 
 val TvRow = RowMetrics(56.dp, 46.dp, 16.sp, 52.dp, 30.dp, 16.sp, 14.sp)
-val TouchRow = RowMetrics(72.dp, 44.dp, 17.sp, 56.dp, 32.dp, 17.sp, 15.sp)
+val TouchRow = RowMetrics(64.dp, 42.dp, 16.sp, 52.dp, 30.dp, 16.sp, 14.sp)
 
 /**
  * One channel in the list: number · logo · name / what's on · progress. Focus = inverted fill.
@@ -182,15 +182,15 @@ fun CategoryChip(label: String, count: Int, selected: Boolean, onClick: () -> Un
     val c = Jtv.colors
     JtvClickable(
         onClick = onClick,
-        modifier = Modifier.height(44.dp),
-        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.height(36.dp),
+        shape = RoundedCornerShape(18.dp),
         container = if (selected) c.inv else c.s1,
         focusedContainer = c.inv,
     ) { focused ->
         val fg = if (selected || focused) c.invTx else c.t2
-        Row(Modifier.align(Alignment.Center).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = textStyle(15.sp, if (selected) FontWeight.SemiBold else FontWeight.Normal), color = fg, maxLines = 1)
-            Text("  $count", style = textStyle(14.sp), color = fg.copy(alpha = 0.7f), maxLines = 1)
+        Row(Modifier.align(Alignment.Center).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = textStyle(14.sp, if (selected) FontWeight.SemiBold else FontWeight.Normal), color = fg, maxLines = 1)
+            Text("  $count", style = textStyle(13.sp), color = fg.copy(alpha = 0.7f), maxLines = 1)
         }
     }
 }
@@ -218,11 +218,11 @@ fun BottomNavItem(
     modifier: Modifier = Modifier,
 ) {
     val c = Jtv.colors
-    JtvClickable(onClick = onClick, modifier = modifier.height(68.dp), shape = RoundedCornerShape(0.dp), focusedContainer = c.s2) {
+    JtvClickable(onClick = onClick, modifier = modifier.height(60.dp), shape = RoundedCornerShape(0.dp), focusedContainer = c.s2) {
         if (selected) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth(0.6f).height(3.dp).background(c.acc))
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = null, tint = if (selected) c.tx else c.t2, modifier = Modifier.size(24.dp))
-            Text(label, style = textStyle(14.sp, if (selected) FontWeight.Bold else FontWeight.Normal), color = if (selected) c.tx else c.t2, maxLines = 1)
+            Icon(icon, contentDescription = null, tint = if (selected) c.acc else c.t2, modifier = Modifier.size(24.dp))
+            Text(label, style = textStyle(12.sp, if (selected) FontWeight.Bold else FontWeight.Normal), color = if (selected) c.tx else c.t2, maxLines = 1)
         }
     }
 }

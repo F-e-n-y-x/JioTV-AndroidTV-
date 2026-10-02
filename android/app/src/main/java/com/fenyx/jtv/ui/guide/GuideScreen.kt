@@ -180,13 +180,14 @@ fun GuideScreen(
         // ── Header: title · day · category · clock ──
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                JText("Guide", 28.sp, weight = FontWeight.Bold)
+                JText("Guide", if (isTv) 28.sp else 24.sp, weight = FontWeight.Bold)
                 JText(
                     "${dayLabel(viewStart + HALF_HOUR, now)} · ${categoryLabel(category)}",
-                    16.sp, color = c.t2,
+                    if (isTv) 16.sp else 14.sp, color = c.t2,
                 )
             }
-            JtvClock(now, size = if (isTv) 34.sp else 26.sp, dateColor = c.t2)
+            // Phones show the time in the status bar.
+            if (Jtv.form != com.fenyx.jtv.theme.FormFactor.Phone) JtvClock(now, size = if (isTv) 34.sp else 26.sp, dateColor = c.t2)
         }
 
         if (epgMode == null) return@Column // setting still loading; draw nothing rather than flash

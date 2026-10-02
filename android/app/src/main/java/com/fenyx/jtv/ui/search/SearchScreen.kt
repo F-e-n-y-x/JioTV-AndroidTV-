@@ -86,12 +86,12 @@ fun SearchScreen(
             .background(c.bg)
             .padding(
                 horizontal = if (isTv) 48.dp else 16.dp,
-                vertical = if (isTv) 27.dp else 12.dp
+                vertical = if (isTv) 27.dp else 8.dp
             )
     ) {
         // ─── Title ───
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            JText("Search", 28.sp, modifier = Modifier.weight(1f), weight = FontWeight.Bold)
+            JText("Search", if (isTv) 28.sp else 24.sp, modifier = Modifier.weight(1f), weight = FontWeight.Bold)
             if (isTv) JtvClock(now, dateColor = c.t2)
         }
         Spacer(Modifier.height(if (isTv) 12.dp else 8.dp))

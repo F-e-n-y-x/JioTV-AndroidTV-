@@ -280,7 +280,7 @@ fun MainScreen(
                         isMoving = ch.id == movingId,
                         onClick = { play(ch) },
                         onLongClick = { if (movingId == null) menuChannel = ch },
-                        onMore = if (touch) ({ menuChannel = ch }) else null,
+                        
                         modifier = Modifier
                             .then(if (ch.id == focusTargetId) Modifier.focusRequester(targetFocus) else Modifier)
                             .onFocusChanged { if (it.isFocused) focusedId = ch.id }
@@ -432,16 +432,15 @@ private fun PhoneHome(
     val now = LocalNow.current
     val chipState = rememberLazyListState()
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 6.dp), verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Text("Live TV", style = textStyle(28.sp, FontWeight.Bold), color = c.tx)
-                Text("$count channels", style = textStyle(15.sp), color = c.t2)
-            }
-            JtvClock(now, size = 26.sp)
+        // Compact header: the status bar already shows the time on phones.
+        Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Live TV", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+            Spacer(Modifier.width(10.dp))
+            Text("$count channels", style = textStyle(14.sp), color = c.t3)
         }
         LazyRow(
             state = chipState,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(categories, key = { it.key }) { cat ->
@@ -495,12 +494,12 @@ private fun PreviewPane(
             Text(p.title, style = textStyle(if (tv) 20.sp else 22.sp, FontWeight.Bold), color = c.tx, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             if (p.description.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
-                Text(p.description, style = textStyle(14.sp), color = c.t2, maxLines = if (tv) 2 else 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(p.description, style = textStyle(14.sp), color = c.t2, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             Spacer(Modifier.height(10.dp))
             JtvProgress(p.progress(now))
             Spacer(Modifier.height(8.dp))
-            nn.later.take(if (tv) 2 else 3).forEach { n ->
+            nn.later.take(if (tv) 4 else 3).forEach { n ->
                 Row(Modifier.padding(vertical = 4.dp)) {
                     Text(formatTime(n.startMs), style = numberStyle(15.sp).copy(fontWeight = FontWeight.Bold), color = c.t2, modifier = Modifier.width(58.dp))
                     Text(n.title, style = textStyle(15.sp), color = c.tx, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -515,12 +514,16 @@ private fun PreviewPane(
             }
         }
         Spacer(Modifier.weight(1f))
-        Column(Modifier.focusGroup().fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            JtvButton("Watch", onWatch, Modifier.fillMaxWidth(), icon = Icons.Filled.PlayArrow, primary = true, fontSize = 16.sp)
-            JtvButton(
-                if (isFavorite) "Remove from favourites" else "Add to favourites", onFavorite, Modifier.fillMaxWidth(),
-                icon = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star, fontSize = 16.sp,
-            )
+        // TV: OK on the row already plays and hold-OK opens options (shown in the key hint), so no
+        // duplicate buttons. Touch: one compact row — Watch + a favourite toggle.
+        if (!tv) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                JtvButton("Watch", onWatch, Modifier.weight(1f), icon = Icons.Filled.PlayArrow, primary = true, fontSize = 15.sp, minHeight = 44.dp)
+                JtvButton(
+                    if (isFavorite) "Saved" else "Favourite", onFavorite, Modifier.weight(1f),
+                    icon = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star, fontSize = 15.sp, minHeight = 44.dp,
+                )
+            }
         }
     }
 }
