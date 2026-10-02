@@ -26,7 +26,11 @@ import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.flow.first
 
 /** The three directions being compared. Each owns its tokens, layout and focus language. */
-enum class Direction(val label: String) { A("A · Signal"), B("B · Broadcast"), C("C · Listings") }
+enum class Direction(val label: String, val inChrome: Boolean) {
+    A("A · Signal", false), B("B · Broadcast", false),   // round 1, rejected by the owner (kept for reference)
+    C("C · Listings (round 1)", true),
+    D("C2 · Dial", true)                                  // round 2, from docs/v2/critique-C-round1.md
+}
 enum class LabScreen(val label: String) { Live("Live"), Guide("Guide") }
 
 /**
@@ -37,7 +41,9 @@ enum class LabScreen(val label: String) { Live("Live"), Guide("Guide") }
 fun DesignLab(vm: MainViewModel, onPlay: (Int, String?) -> Unit, onExit: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { SettingsManager(context) }
-    var direction by rememberSaveable { mutableStateOf(Direction.C) }
+    var direction by rememberSaveable { mutableStateOf(Direction.D) }
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    var dark by rememberSaveable { mutableStateOf(systemDark) }
     var screen by rememberSaveable { mutableStateOf(LabScreen.Live) }
     // Guide data follows the real "EPG mode" setting at start: no EPG work unless the guide is on.
     var guideOn by rememberSaveable { mutableStateOf<Boolean?>(null) }
@@ -66,6 +72,7 @@ fun DesignLab(vm: MainViewModel, onPlay: (Int, String?) -> Unit, onExit: () -> U
             direction = direction, onDirection = { direction = it },
             screen = screen, onScreen = { screen = it },
             guideOn = guideOn == true, onGuide = { guideOn = it },
+            dark = dark, onDark = { dark = it },
             onExit = onExit
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -73,6 +80,7 @@ fun DesignLab(vm: MainViewModel, onPlay: (Int, String?) -> Unit, onExit: () -> U
                 Direction.A -> if (screen == LabScreen.Live) SignalLive(state) else SignalGuide(state) { guideOn = true }
                 Direction.B -> if (screen == LabScreen.Live) BroadcastLive(state) else BroadcastGuide(state) { guideOn = true }
                 Direction.C -> if (screen == LabScreen.Live) ListingsLive(state) else ListingsGuide(state) { guideOn = true }
+                Direction.D -> if (screen == LabScreen.Live) DialLive(state, dark) else DialGuide(state, dark) { guideOn = true }
             }
         }
     }
@@ -89,6 +97,7 @@ private fun LabChrome(
     direction: Direction, onDirection: (Direction) -> Unit,
     screen: LabScreen, onScreen: (LabScreen) -> Unit,
     guideOn: Boolean, onGuide: (Boolean) -> Unit,
+    dark: Boolean, onDark: (Boolean) -> Unit,
     onExit: () -> Unit
 ) {
     Row(
@@ -99,11 +108,13 @@ private fun LabChrome(
     ) {
         Text("DESIGN LAB", style = chromeText.copy(fontWeight = FontWeight.Bold, color = Color(0xFF8A8A8A)))
         Spacer(Modifier.width(6.dp))
-        Direction.entries.forEach { d -> ChromeChip(d.label, d == direction) { onDirection(d) } }
+        Direction.entries.filter { it.inChrome }.forEach { d -> ChromeChip(d.label, d == direction) { onDirection(d) } }
         Spacer(Modifier.width(10.dp))
         LabScreen.entries.forEach { s -> ChromeChip(s.label, s == screen) { onScreen(s) } }
         Spacer(Modifier.width(10.dp))
         ChromeChip(if (guideOn) "Guide data: on" else "Guide data: off", guideOn) { onGuide(!guideOn) }
+        Spacer(Modifier.width(10.dp))
+        ChromeChip(if (dark) "Theme: dark" else "Theme: light", true) { onDark(!dark) }
         Spacer(Modifier.width(10.dp))
         ChromeChip("Exit lab", false, onExit)
     }
@@ -131,6 +142,7 @@ private fun menuStyle(d: Direction) = when (d) {
     Direction.A -> MenuStyle(SignalTokens.surface1, SignalTokens.text, SignalTokens.text2, SignalTokens.surface2, SignalTokens.accent, 12, FontFamily.Default)
     Direction.B -> MenuStyle(BroadcastTokens.surface1, BroadcastTokens.text, BroadcastTokens.text2, BroadcastTokens.focus, BroadcastTokens.onFocus, 4, BroadcastTokens.sans)
     Direction.C -> MenuStyle(ListingsTokens.surface, ListingsTokens.paper, ListingsTokens.text2, ListingsTokens.paper, ListingsTokens.ink, 6, ListingsTokens.sans)
+    Direction.D -> DialTokens.dark.let { MenuStyle(it.surface, it.ink, it.text2, it.invBg, it.invInk, 4, DialTokens.sans) }
 }
 
 @Composable
