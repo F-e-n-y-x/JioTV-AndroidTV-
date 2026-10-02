@@ -333,7 +333,6 @@ fun MainNavigation() {
                         group = playerArgs.group,
                         mainViewModel = mainViewModel,
                         onBack = { backStack.removeLastOrNull() },
-                        onTab = onTab,
                         onSettings = { backStack.add(Settings) },
                     )
                 }
