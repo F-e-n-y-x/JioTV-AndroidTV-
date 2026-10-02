@@ -17,7 +17,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -25,13 +24,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.MaterialTheme
-import com.fenyx.jtv.theme.Surface
 import androidx.tv.material3.Text
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.JtvButton
+import com.fenyx.jtv.ui.components.textStyle
 import com.fenyx.jtv.data.ServerClient
 import com.fenyx.jtv.data.SettingsManager
-import com.fenyx.jtv.theme.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -100,43 +99,46 @@ fun ServerSetupScreen(
     // Hardware BACK returns to the setup chooser instead of exiting the app.
     androidx.activity.compose.BackHandler { onBack() }
 
-    // Full-bleed dark background across the WHOLE window (behind any keyboard/inset area) so the IME
+    val c = Jtv.colors
+    val isTv = Jtv.isTv
+    val isPhone = Jtv.form == FormFactor.Phone
+
+    // Full-bleed background across the WHOLE window (behind any keyboard/inset area) so the IME
     // opening doesn't reveal a black bar where safeDrawingPadding pushes the content up.
-    Box(modifier = Modifier.fillMaxSize().background(TvDarkBackground)) {
+    Box(modifier = Modifier.fillMaxSize().background(c.bg)) {
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .tvOverscan(),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(horizontal = if (isTv) 48.dp else 16.dp, vertical = if (isTv) 27.dp else 16.dp),
+            horizontalAlignment = if (isPhone) Alignment.Start else Alignment.CenterHorizontally,
             // Top-anchored (not centered) so the fields stay in the upper area — the keyboard overlays
             // the empty lower area and NOTHING shifts when it opens.
             verticalArrangement = Arrangement.Top
         ) {
-            Spacer(Modifier.height(TvDimens.SpaceXl))
+            Spacer(Modifier.height(if (isPhone) 8.dp else 24.dp))
             Text(
-                if (jtvMode) "Connect to JTV Server" else "Connect to JTV Proxy Server",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = TvOnBackground
+                if (jtvMode) "Connect with a code" else "Connect to your own server",
+                style = textStyle(if (isPhone) 28.sp else 32.sp, FontWeight.Bold),
+                color = c.tx
             )
-            Spacer(Modifier.height(TvDimens.SpaceSm))
+            Spacer(Modifier.height(8.dp))
             Text(
-                if (jtvMode) "Just enter your access code — the server address is built in."
-                else "Pull shared credentials from your self-hosted server.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = TvOnSurfaceVariant
+                if (jtvMode) "Type your access code. The server address is built in."
+                else "Type your server's address and access code.",
+                style = textStyle(18.sp),
+                color = c.t2
             )
-            Spacer(Modifier.height(TvDimens.SpaceXl))
+            Spacer(Modifier.height(24.dp))
 
             error?.let {
-                Text(it, color = TvError, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(TvDimens.SpaceMd))
+                Text(it, color = c.error, style = textStyle(18.sp, FontWeight.SemiBold))
+                Spacer(Modifier.height(12.dp))
             }
 
             // Self-hosted mode shows the URL field; JTV mode hides it (URL is hardcoded).
             if (!jtvMode) {
                 TvField(
-                    label = "Server URL",
+                    label = "Server address",
                     value = serverUrl,
                     onValueChange = { serverUrl = it },
                     placeholder = "http://192.168.1.10:8080",
@@ -145,10 +147,10 @@ fun ServerSetupScreen(
                     keyboardActions = KeyboardActions(onNext = { runCatching { tokenFocus.requestFocus() } }),
                     modifier = Modifier.focusRequester(urlFocus)
                 )
-                Spacer(Modifier.height(TvDimens.SpaceMd))
+                Spacer(Modifier.height(16.dp))
             }
             TvField(
-                label = "Access Code",
+                label = "Access code",
                 value = token,
                 onValueChange = { token = it },
                 // Purely illustrative placeholder — must NOT resemble any real/active code.
@@ -158,38 +160,18 @@ fun ServerSetupScreen(
                 keyboardActions = KeyboardActions(onDone = { runCatching { connectFocus.requestFocus() } }),
                 modifier = Modifier.focusRequester(tokenFocus)
             )
-            Spacer(Modifier.height(TvDimens.SpaceXl))
+            Spacer(Modifier.height(28.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.SpaceMd)) {
-                Surface(
-                    onClick = { onBack() },
-                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-                    // No focus-scale — the border/colour marks focus (per user preference).
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = TvDarkSurfaceVariant,
-                        focusedContainerColor = TvDarkSurface
-                    )
-                ) {
-                    Text("Back", modifier = Modifier.padding(horizontal = 28.dp, vertical = 14.dp), color = TvOnSurface)
-                }
-                Surface(
-                    onClick = { if (!isConnecting) connect() },
-                    modifier = Modifier.focusRequester(connectFocus),
-                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = TvPrimaryContainer,
-                        focusedContainerColor = TvPrimary
-                    )
-                ) {
-                    Text(
-                        if (isConnecting) "Connecting…" else "Connect",
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
-                        color = TvOnBackground,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                JtvButton("Back", { onBack() }, fontSize = 18.sp, minHeight = if (isTv) 48.dp else 56.dp)
+                JtvButton(
+                    if (isConnecting) "Connecting…" else "Connect",
+                    { if (!isConnecting) connect() },
+                    Modifier.focusRequester(connectFocus),
+                    primary = true,
+                    fontSize = 18.sp,
+                    minHeight = if (isTv) 48.dp else 56.dp
+                )
             }
         }
     }
@@ -211,18 +193,19 @@ private fun TvField(
     val keyboard = LocalSoftwareKeyboardController.current
     val view = LocalView.current
     var focused by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.width(520.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = TvOnSurfaceVariant)
+    val c = Jtv.colors
+    Column(modifier = if (Jtv.form == FormFactor.Phone) Modifier.fillMaxWidth() else Modifier.width(560.dp)) {
+        Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(TvDarkSurfaceVariant)
+                .height(60.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(c.s1)
                 .border(
-                    BorderStroke(if (focused) 2.dp else 1.dp, if (focused) TvPrimary else TvPrimary.copy(alpha = 0.4f)),
-                    RoundedCornerShape(10.dp)
+                    BorderStroke(if (focused) 2.dp else 1.dp, if (focused) c.acc else c.line),
+                    RoundedCornerShape(8.dp)
                 )
                 .padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart
@@ -231,8 +214,8 @@ private fun TvField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = TextStyle(color = TvOnSurface, fontSize = 16.sp),
-                cursorBrush = SolidColor(TvPrimary),
+                textStyle = textStyle(20.sp).copy(color = c.tx),
+                cursorBrush = SolidColor(c.acc),
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
                 keyboardActions = keyboardActions,
                 // The caller's focusRequester (initial focus / Next-Done chaining) rides on the field.
@@ -254,7 +237,7 @@ private fun TvField(
                         }
                     },
                 decorationBox = { inner ->
-                    if (value.isEmpty()) Text(placeholder, color = TvOnSurfaceVariant, fontSize = 16.sp)
+                    if (value.isEmpty()) Text(placeholder, color = c.t2, style = textStyle(20.sp))
                     inner()
                 }
             )

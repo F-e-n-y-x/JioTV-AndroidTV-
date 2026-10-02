@@ -1,63 +1,67 @@
 package com.fenyx.jtv.ui.settings
 
 import android.annotation.SuppressLint
-import android.os.Build
-import android.webkit.CookieManager
-import android.webkit.PermissionRequest
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.tv.material3.Text
-import androidx.tv.material3.MaterialTheme
-import com.fenyx.jtv.theme.Surface
-import androidx.tv.material3.ClickableSurfaceDefaults
-import com.fenyx.jtv.data.SettingsManager
-import com.fenyx.jtv.theme.*
-import kotlinx.coroutines.launch
-
-import com.fenyx.jtv.data.EpgSyncStatus
-import com.fenyx.jtv.ui.main.MainViewModel
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.tv.material3.Text
 import com.fenyx.jtv.data.AppUpdateManager
+import com.fenyx.jtv.data.EpgSyncStatus
+import com.fenyx.jtv.data.SettingsManager
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.JText
+import com.fenyx.jtv.ui.components.JtvButton
+import com.fenyx.jtv.ui.components.JtvClickable
+import com.fenyx.jtv.ui.components.JtvClock
+import com.fenyx.jtv.ui.components.JtvProgress
+import com.fenyx.jtv.ui.components.KeyHint
+import com.fenyx.jtv.ui.components.rememberMinuteClock
+import com.fenyx.jtv.ui.components.textStyle
+import com.fenyx.jtv.ui.main.MainViewModel
+import kotlinx.coroutines.launch
 
+/** Which second-level picker / dialog is open. */
+private enum class Sheet { None, Theme, StartWith, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
+
+/**
+ * Settings, v2 "Everyday": a plain two-level list. Section labels, then rows of *label + current
+ * value*; choosing a row opens a short list of choices (second level). Destructive actions ask first.
+ */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
     val scope = rememberCoroutineScope()
+    val c = Jtv.colors
+    val isTv = Jtv.isTv
+    val form = Jtv.form
 
     val language by settingsManager.defaultLanguageFlow.collectAsState(initial = "hi")
     val quality by settingsManager.defaultQualityFlow.collectAsState(initial = "auto")
@@ -72,6 +76,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     val groupLanguageVariants by settingsManager.groupLanguageVariantsFlow.collectAsState(initial = true)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
     val serverUrl by settingsManager.serverUrlFlow.collectAsState(initial = "")
+    val themeMode by settingsManager.themeModeFlow.collectAsState(initial = null)
     val serverRefreshing by mainViewModel.serverRefreshing.collectAsState()
     val serverRefreshMsg by mainViewModel.serverRefreshMsg.collectAsState()
 
@@ -85,574 +90,377 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     val updateStatusMessage by mainViewModel.updateStatusMessage.collectAsState()
     val updateError by mainViewModel.updateError.collectAsState()
 
-    var showLanguagePicker by remember { mutableStateOf(false) }
-    var showQualityPicker by remember { mutableStateOf(false) }
-    var showPlayerResizeModePicker by remember { mutableStateOf(false) }
-    var showBufferPicker by remember { mutableStateOf(false) }
-    var showEpgUrlDialog by remember { mutableStateOf(false) }
-    var showUpdateDialog by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf(Sheet.None) }
 
     // Initial focus so the first D-pad press works on entry (previously nothing was focused).
     val firstItemFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstItemFocus.requestFocus() } }
 
     val bufferOptions = listOf(
-        30 to "Data Saver (30s)",
-        60 to "Balanced (60s)",
-        90 to "Smooth (90s)",
-        120 to "Max (120s)"
+        30 to "Data saver (30 seconds)",
+        60 to "Balanced (60 seconds)",
+        90 to "Smooth (90 seconds)",
+        120 to "Smoothest (120 seconds)"
     )
-
     val languages = listOf(
         "hi" to "Hindi", "en" to "English", "ta" to "Tamil", "te" to "Telugu",
         "kn" to "Kannada", "ml" to "Malayalam", "bn" to "Bengali", "mr" to "Marathi",
         "gu" to "Gujarati", "pa" to "Punjabi", "or" to "Odia", "as" to "Assamese"
     )
-
     val qualities = listOf(
-        "auto" to "Auto", "high" to "High (1080p)", "medium" to "Medium (720p)", "low" to "Low (480p)"
+        "auto" to "Automatic", "high" to "High (1080p)", "medium" to "Medium (720p)", "low" to "Low (480p)"
     )
-
     val resizeModes = listOf(
-        0 to "Fit (Default)", 
-        3 to "Fill (Crop)", 
-        4 to "Zoom", 
-        1 to "Stretch Width", 
-        2 to "Stretch Height"
+        0 to "Fit the screen (default)",
+        3 to "Fill the screen (crops edges)",
+        4 to "Zoom",
+        1 to "Stretch to width",
+        2 to "Stretch to height"
     )
+    val themes = listOf("system" to "Same as device", "dark" to "Dark", "light" to "Light")
+    // No stored choice = dark on TV, device setting on phone/tablet (see JioTVGoTVTheme).
+    val themeValue = themeMode ?: if (isTv) "dark" else "system"
+    val startOptions = listOf("list" to "Channel list", "last" to "Last channel")
 
-    // ─── Root Box ───
+    val versionName = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
+    }
+    val updateAvailable = updateInfo?.isUpdateAvailable == true
+
+    // ─── Rows (built as data so the list stays a flat, keyed LazyColumn) ───
+    val rows: List<SRow> = buildList {
+        add(SRow.Section("General"))
+        add(SRow.Item("theme", "Appearance", value = themes.first { it.first == themeValue }.second) { sheet = Sheet.Theme })
+        add(SRow.Item("start", "Start with", value = if (autoplayLastChannel) "Last channel" else "Channel list",
+            description = "What you see when the app opens") { sheet = Sheet.StartWith })
+
+        add(SRow.Section("Picture and sound"))
+        add(SRow.Item("quality", "Picture quality", value = qualities.find { it.first == quality }?.second ?: "Automatic") { sheet = Sheet.Quality })
+        add(SRow.Item("language", "Sound language", value = languages.find { it.first == language }?.second ?: language,
+            description = "Preferred language when a channel has more than one") { sheet = Sheet.Language })
+        add(SRow.Item("resize", "Picture size", value = resizeModes.find { it.first == playerResizeMode }?.second ?: "Fit the screen") { sheet = Sheet.PictureSize })
+        add(SRow.Item("buffer", "Smooth playback", value = bufferOptions.find { it.first == playbackBufferSec }?.second ?: "$playbackBufferSec seconds",
+            description = "More smoothness uses more memory") { sheet = Sheet.Buffer })
+
+        add(SRow.Section("Programme guide"))
+        add(SRow.Item("epg", "Programme guide", value = if (epgMode) "On" else "Off",
+            description = "Show what's on now and later") { scope.launch { settingsManager.setEpgMode(!epgMode) } })
+        add(SRow.Item("epgUrl", "Guide source", value = "Change", description = epgUrl) { sheet = Sheet.EpgUrl })
+        add(SRow.Item("epgRefresh", "Update the guide now", value = when (epgSyncStatus) {
+            EpgSyncStatus.IDLE -> "Update"
+            EpgSyncStatus.DOWNLOADING -> "Downloading…"
+            EpgSyncStatus.EXTRACTING -> "Unpacking…"
+            EpgSyncStatus.PARSING -> "Reading…"
+            EpgSyncStatus.COMPLETED -> "Done"
+            EpgSyncStatus.ERROR -> "Failed, try again"
+        }) {
+            if (epgSyncStatus == EpgSyncStatus.IDLE || epgSyncStatus == EpgSyncStatus.COMPLETED || epgSyncStatus == EpgSyncStatus.ERROR) {
+                mainViewModel.fetchEpg(forceRefresh = true)
+            }
+        })
+
+        add(SRow.Section("Channels"))
+        add(SRow.Item("variants", "Group languages together", value = if (groupLanguageVariants) "On" else "Off",
+            description = "One entry per channel; pick the language while watching") {
+            scope.launch { settingsManager.setGroupLanguageVariants(!groupLanguageVariants) }
+        })
+
+        add(SRow.Section("If the picture has problems"))
+        add(SRow.Item("hw", "Hardware decoder", value = if (hwDecoder) "On" else "Off",
+            description = "Keep on for most TVs. Applies to the next channel.") {
+            scope.launch { settingsManager.setHardwareDecoder(!hwDecoder) }
+        })
+        add(SRow.Item("tunnel", "Tunnelling", value = if (tunneling) "On" else "Off",
+            description = "Keep off if the picture freezes or goes black. Applies to the next channel.") {
+            scope.launch { settingsManager.setTunneling(!tunneling) }
+        })
+
+        add(SRow.Section("Account"))
+        add(SRow.Item("method", "Sign-in method", value = when (setupMode) {
+            "server" -> "Own server"
+            "jtv" -> "Access code"
+            else -> "Jio number"
+        }, description = if (setupMode == "server") serverUrl.ifEmpty { "Server address not set" } else "Change how this device signs in") {
+            sheet = Sheet.ConfirmChangeMethod
+        })
+        if (setupMode == "server" || setupMode == "jtv") {
+            add(SRow.Item("refresh", "Refresh from server", value = if (serverRefreshing) "Refreshing…" else (serverRefreshMsg ?: "Refresh"),
+                description = "Get the latest sign-in and channel list") { mainViewModel.refreshFromServer() })
+        }
+        add(SRow.Item("signout", "Sign out", value = "", description = "Removes your sign-in from this device") { sheet = Sheet.ConfirmSignOut })
+
+        add(SRow.Section("About"))
+        add(SRow.Item("version", "App version", value = if (versionName.isNotEmpty()) versionName else "") { })
+        add(SRow.Item("update", "Check for updates", value = when {
+            isDownloadingUpdate -> "${(updateDownloadProgress * 100).toInt()}%"
+            isCheckingUpdate -> "Checking…"
+            updateAvailable -> "Version ${updateInfo?.versionName} ready"
+            else -> "Check now"
+        }, description = when {
+            isDownloadingUpdate -> "Downloading the update"
+            updateAvailable -> "Choose to see what's new and install"
+            updateStatusMessage != null -> updateStatusMessage
+            else -> null
+        }) {
+            if (updateAvailable) sheet = Sheet.Update else mainViewModel.checkForUpdates(manual = true)
+        })
+    }
+
+    val now = rememberMinuteClock()
+    val gutter = if (isTv) 48.dp else 16.dp
+
     Box(
         modifier = modifier
             .fillMaxSize()
+            .background(c.bg)
             .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Back) {
-                    when {
-                        showUpdateDialog -> {
-                            if (!isDownloadingUpdate) showUpdateDialog = false
-                            true
-                        }
-                        showLanguagePicker -> { showLanguagePicker = false; true }
-                        showQualityPicker -> { showQualityPicker = false; true }
-                        showPlayerResizeModePicker -> { showPlayerResizeModePicker = false; true }
-                        showBufferPicker -> { showBufferPicker = false; true }
-                        showEpgUrlDialog -> { showEpgUrlDialog = false; true }
-                        else -> false
-                    }
+                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Back && sheet != Sheet.None) {
+                    if (!(sheet == Sheet.Update && isDownloadingUpdate)) sheet = Sheet.None
+                    true
                 } else false
             }
     ) {
-        // ─── Main Settings Layout ───
-        Row(modifier = Modifier.fillMaxSize().background(TvDarkBackground)) {
-            // Left: Title panel
-            Column(
-                modifier = Modifier
-                    .width(280.dp)
-                    .fillMaxHeight()
-                    .background(TvDarkSurface)
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    "Settings",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = TvOnBackground
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Configure your JTV experience",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TvOnSurfaceVariant
-                )
+        Column(Modifier.fillMaxSize().padding(horizontal = gutter, vertical = if (isTv) 27.dp else 12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                JText("Settings", 28.sp, Modifier.weight(1f), weight = FontWeight.Bold)
+                if (isTv) JtvClock(now, dateColor = c.t2)
             }
-
-            // Right: Settings items
+            Spacer(Modifier.height(8.dp))
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
-                    .focusRestorer()
-                    // Overscan-safe margins so settings rows never sit under the panel bezel.
-                    .padding(
-                        start = TvDimens.SpaceLg, end = TvDimens.OverscanHorizontal,
-                        top = TvDimens.OverscanVertical, bottom = TvDimens.OverscanVertical
-                    ),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .then(if (form == FormFactor.Phone) Modifier.fillMaxWidth() else Modifier.widthIn(max = 760.dp).fillMaxWidth())
+                    .focusRestorer(),
+                contentPadding = PaddingValues(bottom = 16.dp),
             ) {
-                item { SectionHeader("Account") }
-
-                item {
-                    SettingsItem(
-                        modifier = Modifier.focusRequester(firstItemFocus),
-                        title = "Sign-in Method",
-                        subtitle = when (setupMode) {
-                            "server" -> "Self-hosted server: ${serverUrl.ifEmpty { "(not set)" }}"
-                            "jtv" -> "JTV Server (access code)"
-                            else -> "Phone (OTP) on this device"
-                        },
-                        value = "Change",
-                        valueColor = TvPrimary,
-                        // Returning to the chooser = clear credentials + reset the chosen mode.
-                        onClick = {
-                            scope.launch {
-                                settingsManager.setSetupMode(null)
-                                settingsManager.clearAuthData()
-                            }
-                        }
-                    )
-                }
-
-                if (setupMode == "server" || setupMode == "jtv") {
-                    item {
-                        SettingsItem(
-                            title = "Refresh from Server",
-                            subtitle = "Pull the latest login + channel list from the server now",
-                            value = if (serverRefreshing) "Refreshing…" else (serverRefreshMsg ?: "Refresh"),
-                            valueColor = TvPrimary,
-                            onClick = { mainViewModel.refreshFromServer() }
+                itemsIndexed(rows, key = { _, r -> r.key }, contentType = { _, r -> r::class }) { _, r ->
+                    when (r) {
+                        is SRow.Section -> SettingsSection(r.title)
+                        is SRow.Item -> SettingsRow(
+                            label = r.label,
+                            value = r.value,
+                            description = r.description,
+                            destructive = r.key == "signout",
+                            modifier = if (r.key == "theme") Modifier.focusRequester(firstItemFocus) else Modifier,
+                            onClick = r.onClick,
                         )
                     }
                 }
+            }
+            if (isTv) {
+                Spacer(Modifier.height(6.dp))
+                KeyHint(listOf("OK" to "change", "Back" to "close settings"))
+            }
+        }
 
-                item {
-                    SettingsItem(
-                        title = "Logout from JTV",
-                        subtitle = "Clear your credentials and exit",
-                        icon = Icons.AutoMirrored.Filled.ExitToApp,
-                        valueColor = Color(0xFFFF5252),
-                        onClick = { scope.launch { settingsManager.clearAuthData() } }
-                    )
-                }
-
-                item { SectionHeader("EPG (Electronic Program Guide)") }
-
-                item {
-                    SettingsToggle(
-                        title = "EPG Mode",
-                        subtitle = "Use a timeline view for channels instead of grid",
-                        isEnabled = epgMode,
-                        onClick = { scope.launch { settingsManager.setEpgMode(!epgMode) } }
-                    )
-                }
-
-                item {
-                    SettingsItem(
-                        title = "EPG Source URL",
-                        subtitle = epgUrl,
-                        value = "Edit",
-                        valueColor = TvPrimary,
-                        onClick = { showEpgUrlDialog = true }
-                    )
-                }
-
-                item {
-                    SettingsItem(
-                        title = "Refresh EPG Data",
-                        subtitle = "Force download and parse the latest EPG",
-                        value = when (epgSyncStatus) {
-                            EpgSyncStatus.IDLE -> "Sync Now"
-                            EpgSyncStatus.DOWNLOADING -> "Downloading..."
-                            EpgSyncStatus.EXTRACTING -> "Extracting..."
-                            EpgSyncStatus.PARSING -> "Parsing..."
-                            EpgSyncStatus.COMPLETED -> "Done"
-                            EpgSyncStatus.ERROR -> "Error"
-                        },
-                        valueColor = when (epgSyncStatus) {
-                            EpgSyncStatus.ERROR -> Color(0xFFFF5252)
-                            EpgSyncStatus.COMPLETED -> Color(0xFF4CAF50)
-                            EpgSyncStatus.IDLE -> TvPrimary
-                            else -> TvOnSurfaceVariant
-                        },
-                        onClick = { 
-                            if (epgSyncStatus == EpgSyncStatus.IDLE || epgSyncStatus == EpgSyncStatus.COMPLETED || epgSyncStatus == EpgSyncStatus.ERROR) {
-                                mainViewModel.fetchEpg(forceRefresh = true) 
-                            }
-                        }
-                    )
-                }
-
-                item { SectionHeader("Channels") }
-
-                item {
-                    SettingsToggle(
-                        title = "Group Language Variants",
-                        subtitle = "Show one tile per channel and pick the language in the player (e.g. Star Sports Hindi/Tamil/Telugu). Turn off to see every language as its own channel.",
-                        isEnabled = groupLanguageVariants,
-                        onClick = { scope.launch { settingsManager.setGroupLanguageVariants(!groupLanguageVariants) } }
-                    )
-                }
-
-                item { SectionHeader("Playback") }
-
-                item {
-                    SettingsToggle(
-                        title = "Autoplay Last Channel",
-                        subtitle = "Automatically resume your last watched channel when app opens",
-                        isEnabled = autoplayLastChannel,
-                        onClick = { scope.launch { settingsManager.setAutoplayLastChannel(!autoplayLastChannel) } }
-                    )
-                }
-
-                item {
-                    SettingsItem(
-                        title = "Default Quality",
-                        subtitle = "Video quality for all channels",
-                        value = qualities.find { it.first == quality }?.second ?: "Auto",
-                        valueColor = TvPrimary,
-                        onClick = { showQualityPicker = true }
-                    )
-                }
-
-                item {
-                    SettingsItem(
-                        title = "Playback Buffer",
-                        subtitle = "Higher = fewer interruptions, smoother on weak networks (uses more memory)",
-                        value = bufferOptions.find { it.first == playbackBufferSec }?.second ?: "${playbackBufferSec}s",
-                        valueColor = TvPrimary,
-                        onClick = { showBufferPicker = true }
-                    )
-                }
-
-                item {
-                    SettingsItem(
-                        title = "Player View Mode",
-                        subtitle = "Default video scaling (Fit, Fill, Zoom...)",
-                        value = resizeModes.find { it.first == playerResizeMode }?.second ?: "Fit",
-                        valueColor = TvPrimary,
-                        onClick = { showPlayerResizeModePicker = true }
-                    )
-                }
-
-                item {
-                    SettingsItem(
-                        title = "Default Audio Language",
-                        subtitle = "Primary audio track language",
-                        value = languages.find { it.first == language }?.second ?: language,
-                        valueColor = TvPrimary,
-                        onClick = { showLanguagePicker = true }
-                    )
-                }
-
-                item {
-                    SettingsToggle(
-                        title = "Hardware Decoder",
-                        subtitle = "Recommended ON for low-end TVs. Off allows software fallback. Applies on next channel open.",
-                        isEnabled = hwDecoder,
-                        onClick = { scope.launch { settingsManager.setHardwareDecoder(!hwDecoder) } }
-                    )
-                }
-
-                item {
-                    SettingsToggle(
-                        title = "Tunneling (A/V sync)",
-                        subtitle = "Keep OFF if video randomly freezes/black-screens. Only enable for Amlogic audio-sync issues. Applies on next channel open.",
-                        isEnabled = tunneling,
-                        onClick = { scope.launch { settingsManager.setTunneling(!tunneling) } }
-                    )
-                }
-
-
-
-                item { SectionHeader("About & Updates") }
-
-                item {
-                    // Read the real version from the package so it never drifts from build.gradle
-                    val versionName = remember {
-                        runCatching {
-                            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-                        }.getOrNull() ?: ""
+        // ─── Second level ───
+        when (sheet) {
+            Sheet.Theme -> PickerDialog("Appearance", themes, themeValue,
+                onSelect = { v -> scope.launch { settingsManager.setThemeMode(v) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.StartWith -> PickerDialog("Start with", startOptions, if (autoplayLastChannel) "last" else "list",
+                onSelect = { v -> scope.launch { settingsManager.setAutoplayLastChannel(v == "last") }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.Quality -> PickerDialog("Picture quality", qualities, quality,
+                onSelect = { v -> scope.launch { settingsManager.setDefaultQuality(v) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.Language -> PickerDialog("Sound language", languages, language,
+                onSelect = { v -> scope.launch { settingsManager.setDefaultLanguage(v) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.PictureSize -> PickerDialog("Picture size", resizeModes.map { it.first.toString() to it.second }, playerResizeMode.toString(),
+                onSelect = { v -> scope.launch { settingsManager.setPlayerResizeMode(v.toInt()) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.Buffer -> PickerDialog("Smooth playback", bufferOptions.map { it.first.toString() to it.second }, playbackBufferSec.toString(),
+                onSelect = { v -> scope.launch { settingsManager.setPlaybackBufferSec(v.toInt()) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.EpgUrl -> EpgUrlDialog(
+                initial = epgUrl,
+                onSave = { url -> scope.launch { settingsManager.setEpgUrl(url) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.ConfirmSignOut -> ConfirmDialog(
+                title = "Sign out?",
+                message = "You will need to sign in again to watch.",
+                confirm = "Sign out",
+                onConfirm = { sheet = Sheet.None; scope.launch { settingsManager.clearAuthData() } },
+                onDismiss = { sheet = Sheet.None })
+            // Returning to the chooser = clear credentials + reset the chosen mode.
+            Sheet.ConfirmChangeMethod -> ConfirmDialog(
+                title = "Change sign-in method?",
+                message = "This signs you out. You will choose how to sign in again.",
+                confirm = "Sign out and change",
+                onConfirm = {
+                    sheet = Sheet.None
+                    scope.launch {
+                        settingsManager.setSetupMode(null)
+                        settingsManager.clearAuthData()
                     }
-                    SettingsItem(
-                        title = "App Version",
-                        subtitle = "JTV for Android TV",
-                        value = if (versionName.isNotEmpty()) "v$versionName" else "",
-                        valueColor = TvOnSurfaceVariant,
-                        onClick = { }
-                    )
-                }
-
-                item {
-                    val isAvailable = updateInfo?.isUpdateAvailable == true
-                    SettingsItem(
-                        title = "Check for Updates",
-                        subtitle = when {
-                            isDownloadingUpdate -> "Downloading update (${(updateDownloadProgress * 100).toInt()}%)..."
-                            isCheckingUpdate -> "Checking GitHub for updates..."
-                            isAvailable -> "New version v${updateInfo?.versionName} is available! Click to view details & install."
-                            updateStatusMessage != null -> updateStatusMessage!!
-                            else -> "Check GitHub releases for updates"
-                        },
-                        value = when {
-                            isDownloadingUpdate -> "${(updateDownloadProgress * 100).toInt()}%"
-                            isCheckingUpdate -> "Checking..."
-                            isAvailable -> "Update Available"
-                            else -> "Check Now"
-                        },
-                        valueColor = when {
-                            isAvailable -> Color(0xFF4CAF50)
-                            isCheckingUpdate || isDownloadingUpdate -> TvPrimary
-                            else -> TvPrimary
-                        },
-                        onClick = {
-                            if (isAvailable) {
-                                showUpdateDialog = true
-                            } else {
-                                mainViewModel.checkForUpdates(manual = true)
-                            }
-                        }
-                    )
-                }
-
-
-            }
-        }
-
-
-
-        // ─── Dialogs ───
-        if (showLanguagePicker) {
-            Dialog(onDismissRequest = { showLanguagePicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                PickerDialog(
-                    title = "Select Language",
-                    options = languages,
-                    currentValue = language,
-                    onSelect = { value ->
-                        scope.launch { settingsManager.setDefaultLanguage(value) }
-                        showLanguagePicker = false
-                    },
-                    onDismiss = { showLanguagePicker = false }
-                )
-            }
-        }
-
-        if (showQualityPicker) {
-            Dialog(onDismissRequest = { showQualityPicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                PickerDialog(
-                    title = "Select Quality",
-                    options = qualities,
-                    currentValue = quality,
-                    onSelect = { value ->
-                        scope.launch { settingsManager.setDefaultQuality(value) }
-                        showQualityPicker = false
-                    },
-                    onDismiss = { showQualityPicker = false }
-                )
-            }
-        }
-
-        if (showPlayerResizeModePicker) {
-            Dialog(onDismissRequest = { showPlayerResizeModePicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                PickerDialog(
-                    title = "Player View Mode",
-                    options = resizeModes.map { it.first.toString() to it.second },
-                    currentValue = playerResizeMode.toString(),
-                    onSelect = { value ->
-                        scope.launch { settingsManager.setPlayerResizeMode(value.toInt()) }
-                        showPlayerResizeModePicker = false
-                    },
-                    onDismiss = { showPlayerResizeModePicker = false }
-                )
-            }
-        }
-
-        if (showBufferPicker) {
-            Dialog(onDismissRequest = { showBufferPicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                PickerDialog(
-                    title = "Playback Buffer",
-                    options = bufferOptions.map { it.first.toString() to it.second },
-                    currentValue = playbackBufferSec.toString(),
-                    onSelect = { value ->
-                        scope.launch { settingsManager.setPlaybackBufferSec(value.toInt()) }
-                        showBufferPicker = false
-                    },
-                    onDismiss = { showBufferPicker = false }
-                )
-            }
-        }
-
-        if (showEpgUrlDialog) {
-            Dialog(onDismissRequest = { showEpgUrlDialog = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                var tempUrl by remember { mutableStateOf(epgUrl) }
-                val urlFieldFocus = remember { FocusRequester() }
-                val epgKeyboard = LocalSoftwareKeyboardController.current
-                LaunchedEffect(Unit) {
-                    runCatching { urlFieldFocus.requestFocus() }
-                    kotlinx.coroutines.delay(50)
-                    epgKeyboard?.show() // TV: focus alone doesn't open the on-screen keyboard
-                }
-                Box(
-                    modifier = Modifier.fillMaxSize().background(TvDarkBackground.copy(alpha = 0.85f)),
-                    contentAlignment = Alignment.Center
+                },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.Update -> updateInfo?.let { info ->
+                Dialog(
+                    onDismissRequest = { if (!isDownloadingUpdate) sheet = Sheet.None },
+                    properties = DialogProperties(usePlatformDefaultWidth = false)
                 ) {
-                    Column(
-                        modifier = Modifier.width(500.dp).background(TvDarkSurface, RoundedCornerShape(16.dp)).padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("Edit EPG URL", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = TvOnBackground)
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(56.dp).background(TvDarkSurfaceVariant, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            BasicTextField(
-                                value = tempUrl,
-                                onValueChange = { tempUrl = it },
-                                modifier = Modifier.fillMaxWidth().focusRequester(urlFieldFocus),
-                                textStyle = androidx.compose.ui.text.TextStyle(color = TvOnSurface, fontSize = 16.sp),
-                                cursorBrush = SolidColor(TvPrimary),
-                                singleLine = true
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            Surface(
-                                onClick = { showEpgUrlDialog = false },
-                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                                colors = ClickableSurfaceDefaults.colors(containerColor = TvDarkSurfaceVariant, focusedContainerColor = TvDarkSurface)
-                            ) { Text("Cancel", modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp), color = TvOnSurface) }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Surface(
-                                onClick = {
-                                    scope.launch { settingsManager.setEpgUrl(tempUrl) }
-                                    showEpgUrlDialog = false
-                                },
-                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                                colors = ClickableSurfaceDefaults.colors(containerColor = TvPrimaryContainer, focusedContainerColor = TvPrimary)
-                            ) { Text("Save", modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp), color = Color.White) }
-                        }
-                    }
+                    UpdateDialog(
+                        updateInfo = info,
+                        isDownloading = isDownloadingUpdate,
+                        downloadProgress = updateDownloadProgress,
+                        downloadedBytes = updateDownloadedBytes,
+                        totalBytes = updateTotalBytes,
+                        errorMessage = updateError,
+                        onDownloadAndInstall = { mainViewModel.downloadAndInstallUpdate(context) },
+                        onDismiss = { sheet = Sheet.None }
+                    )
                 }
             }
+            Sheet.None -> Unit
         }
+    }
+}
 
-        if (showUpdateDialog && updateInfo != null) {
-            Dialog(
-                onDismissRequest = { if (!isDownloadingUpdate) showUpdateDialog = false },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                UpdateDialog(
-                    updateInfo = updateInfo!!,
-                    isDownloading = isDownloadingUpdate,
-                    downloadProgress = updateDownloadProgress,
-                    downloadedBytes = updateDownloadedBytes,
-                    totalBytes = updateTotalBytes,
-                    errorMessage = updateError,
-                    onDownloadAndInstall = {
-                        mainViewModel.downloadAndInstallUpdate(context)
+private sealed interface SRow {
+    val key: String
+
+    data class Section(val title: String) : SRow {
+        override val key get() = "section:$title"
+    }
+
+    class Item(
+        override val key: String,
+        val label: String,
+        val value: String,
+        val description: String? = null,
+        val onClick: () -> Unit,
+    ) : SRow
+}
+
+@Composable
+private fun SettingsSection(title: String) {
+    Text(
+        title,
+        style = textStyle(14.sp, FontWeight.SemiBold),
+        color = Jtv.colors.t3,
+        modifier = Modifier.padding(top = 20.dp, bottom = 6.dp, start = 12.dp)
+    )
+}
+
+/** One first-level row: label (+ optional short explanation) on the left, current value on the right. */
+@Composable
+private fun SettingsRow(
+    label: String,
+    value: String,
+    description: String?,
+    destructive: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    val c = Jtv.colors
+    val isTv = Jtv.isTv
+    JtvClickable(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth().heightIn(min = if (isTv) 56.dp else 64.dp),
+        focusedScale = 1.02f,
+    ) { focused ->
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).align(Alignment.CenterStart),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    label,
+                    style = textStyle(18.sp, FontWeight.SemiBold),
+                    color = when {
+                        focused -> c.invTx
+                        destructive -> c.error
+                        else -> c.tx
                     },
-                    onDismiss = { showUpdateDialog = false }
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                if (!description.isNullOrBlank()) {
+                    Text(
+                        description,
+                        style = textStyle(14.sp),
+                        color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            if (value.isNotEmpty()) {
+                Text(
+                    value,
+                    style = textStyle(16.sp),
+                    color = if (focused) c.invTx else c.t2,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 300.dp)
                 )
             }
         }
     }
 }
 
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        title.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        color = TvPrimary,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.5.sp,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp, start = 4.dp)
-    )
-}
-
+/**
+ * Kept public for the player's options panel (TvPlayerScreen imports it). Same look as a settings row.
+ * [valueColor] is honoured when given; otherwise the value uses the secondary text colour.
+ */
 @Composable
 fun SettingsItem(
     title: String,
     subtitle: String,
     value: String = "",
-    valueColor: Color = com.fenyx.jtv.theme.TvPrimary,
+    valueColor: Color = Color.Unspecified,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
+    val c = Jtv.colors
+    JtvClickable(
         onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = TvDarkSurface,
-            focusedContainerColor = TvDarkSurfaceVariant
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, TvPrimary.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(12.dp)
-            )
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        modifier = modifier.fillMaxWidth().heightIn(min = if (Jtv.isTv) 56.dp else 64.dp),
+        container = c.s1,
+        focusedScale = 1.02f,
+    ) { focused ->
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).align(Alignment.CenterStart),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, color = TvOnSurface, fontWeight = FontWeight.Medium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TvOnSurfaceVariant)
+            Column(Modifier.weight(1f)) {
+                Text(title, style = textStyle(18.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1)
+                if (subtitle.isNotEmpty()) {
+                    Text(subtitle, style = textStyle(14.sp), color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2, maxLines = 2)
+                }
             }
+            val vc = if (focused) c.invTx else if (valueColor != Color.Unspecified) valueColor else c.t2
             if (icon != null) {
-                androidx.tv.material3.Icon(icon, contentDescription = null, tint = valueColor, modifier = Modifier.size(24.dp))
-            } else if (value.isNotEmpty()) {
-                Text(value, color = valueColor, fontWeight = FontWeight.SemiBold)
+                androidx.tv.material3.Icon(icon, contentDescription = null, tint = vc, modifier = Modifier.size(24.dp))
+            }
+            if (value.isNotEmpty()) {
+                Text(value, style = textStyle(16.sp, FontWeight.SemiBold), color = vc, maxLines = 1)
             }
         }
     }
 }
 
+// ───────────────────────── Dialogs ─────────────────────────
+
 @Composable
-private fun SettingsToggle(
-    title: String,
-    subtitle: String,
-    isEnabled: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = TvDarkSurface,
-            focusedContainerColor = TvDarkSurfaceVariant
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, TvPrimary.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(12.dp)
-            )
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+private fun DialogPanel(onDismiss: () -> Unit, width: androidx.compose.ui.unit.Dp = 480.dp, content: @Composable ColumnScope.() -> Unit) {
+    val c = Jtv.colors
+    val isPhone = Jtv.form == FormFactor.Phone
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            Modifier.fillMaxSize().background(c.bg.copy(alpha = 0.8f)).padding(16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, color = TvOnSurface, fontWeight = FontWeight.Medium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TvOnSurfaceVariant)
-            }
-            // Custom toggle
-            Box(
-                modifier = Modifier
-                    .width(48.dp)
-                    .height(26.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(if (isEnabled) TvPrimary.copy(alpha = 0.3f) else TvDarkSurfaceVariant)
-                    .padding(3.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(if (isEnabled) TvPrimary else TvOnSurfaceVariant)
-                        .align(if (isEnabled) Alignment.CenterEnd else Alignment.CenterStart)
-                )
-            }
+            Column(
+                Modifier
+                    .then(if (isPhone) Modifier.fillMaxWidth() else Modifier.width(width))
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(c.s1)
+                    .padding(24.dp),
+                content = content
+            )
         }
     }
 }
@@ -665,91 +473,113 @@ private fun PickerDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent),
-        contentAlignment = Alignment.Center
-    ) {
+    val c = Jtv.colors
+    val selectedFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { selectedFocus.requestFocus() } }
+    DialogPanel(onDismiss) {
+        Text(title, style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+        Spacer(Modifier.height(12.dp))
         Column(
-            modifier = Modifier
-                .width(400.dp)
-                .background(TvDarkSurface, RoundedCornerShape(16.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = TvOnBackground
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.heightIn(max = 400.dp)
-            ) {
-                items(options.size) { index ->
-                    val (value, label) = options[index]
-                    val isSelected = value == currentValue
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { onSelect(value) },
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = if (isSelected) TvPrimaryContainer.copy(alpha = 0.3f) else Color.Transparent,
-                            focusedContainerColor = TvDarkSurfaceVariant
-                        ),
-                        border = ClickableSurfaceDefaults.border(
-                            focusedBorder = androidx.tv.material3.Border(
-                                border = androidx.compose.foundation.BorderStroke(1.dp, TvPrimary.copy(alpha = 0.4f)),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                        )
+            val hasSelected = options.any { it.first == currentValue }
+            options.forEachIndexed { i, (value, label) ->
+                val isSelected = value == currentValue
+                JtvClickable(
+                    onClick = { onSelect(value) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = if (Jtv.isTv) 52.dp else 60.dp)
+                        .then(if (isSelected || (!hasSelected && i == 0)) Modifier.focusRequester(selectedFocus) else Modifier),
+                    container = if (isSelected) c.s2 else Color.Transparent,
+                ) { focused ->
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp).align(Alignment.CenterStart),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (isSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(TvPrimary)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                            }
-                            Text(
-                                label,
-                                color = if (isSelected) TvPrimary else TvOnSurface,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                            )
+                        Text(
+                            label,
+                            modifier = Modifier.weight(1f),
+                            style = textStyle(18.sp, if (isSelected) FontWeight.SemiBold else FontWeight.Normal),
+                            color = if (focused) c.invTx else c.tx,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        if (isSelected) {
+                            Text("Selected", style = textStyle(14.sp), color = if (focused) c.invTx else c.t2)
                         }
                     }
                 }
             }
+        }
+        Spacer(Modifier.height(16.dp))
+        JtvButton("Cancel", onDismiss)
+    }
+}
 
-            Spacer(modifier = Modifier.height(16.dp))
+@Composable
+private fun ConfirmDialog(
+    title: String,
+    message: String,
+    confirm: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val c = Jtv.colors
+    // Focus starts on Cancel: nothing destructive happens on a single accidental OK press.
+    val cancelFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
+    DialogPanel(onDismiss) {
+        Text(title, style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+        Spacer(Modifier.height(8.dp))
+        Text(message, style = textStyle(18.sp), color = c.t2)
+        Spacer(Modifier.height(24.dp))
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            JtvButton("Cancel", onDismiss, Modifier.focusRequester(cancelFocus), fontSize = 18.sp)
+            JtvButton(confirm, onConfirm, primary = true, fontSize = 18.sp)
+        }
+    }
+}
 
-            Surface(
-                onClick = onDismiss,
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = TvDarkSurfaceVariant,
-                    focusedContainerColor = TvPrimaryContainer
-                )
-            ) {
-                Text(
-                    "Cancel",
-                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 10.dp),
-                    color = TvOnSurface
-                )
-            }
+@Composable
+private fun EpgUrlDialog(initial: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    val c = Jtv.colors
+    var tempUrl by remember { mutableStateOf(initial) }
+    var focused by remember { mutableStateOf(false) }
+    val urlFieldFocus = remember { FocusRequester() }
+    val epgKeyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        runCatching { urlFieldFocus.requestFocus() }
+        kotlinx.coroutines.delay(50)
+        epgKeyboard?.show() // TV: focus alone doesn't open the on-screen keyboard
+    }
+    DialogPanel(onDismiss, width = 560.dp) {
+        Text("Guide source", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+        Spacer(Modifier.height(16.dp))
+        Text("Web address", style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
+        Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .background(c.bg, RoundedCornerShape(8.dp))
+                .border(if (focused) 2.dp else 1.dp, if (focused) c.acc else c.line, RoundedCornerShape(8.dp))
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            BasicTextField(
+                value = tempUrl,
+                onValueChange = { tempUrl = it },
+                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusRequester(urlFieldFocus),
+                textStyle = textStyle(18.sp).copy(color = c.tx),
+                cursorBrush = SolidColor(c.acc),
+                singleLine = true
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            JtvButton("Cancel", onDismiss, fontSize = 18.sp)
+            JtvButton("Save", { onSave(tempUrl) }, primary = true, fontSize = 18.sp)
         }
     }
 }
@@ -765,219 +595,77 @@ private fun UpdateDialog(
     onDownloadAndInstall: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val c = Jtv.colors
+    val isPhone = Jtv.form == FormFactor.Phone
     val initialFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        runCatching { initialFocus.requestFocus() }
-    }
+    LaunchedEffect(Unit) { runCatching { initialFocus.requestFocus() } }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(TvDarkBackground.copy(alpha = 0.85f)),
+        modifier = Modifier.fillMaxSize().background(c.bg.copy(alpha = 0.8f)).padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .width(520.dp)
-                .background(TvDarkSurface, RoundedCornerShape(16.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .then(if (isPhone) Modifier.fillMaxWidth() else Modifier.width(560.dp))
+                .clip(RoundedCornerShape(10.dp))
+                .background(c.s1)
+                .padding(24.dp)
         ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Software Update",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = TvOnBackground
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        "Release: ${updateInfo.tagName}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TvOnSurfaceVariant
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(TvPrimaryContainer.copy(alpha = 0.4f))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        "v${updateInfo.versionName}",
-                        color = TvPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Changelog Box
-            Text(
-                "What's New:",
-                style = MaterialTheme.typography.labelMedium,
-                color = TvOnSurface,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.align(Alignment.Start)
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
+            Text("Update available", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+            Text("Version ${updateInfo.versionName}", style = textStyle(16.sp), color = c.t2)
+            Spacer(Modifier.height(16.dp))
+            Text("What's new", style = textStyle(16.sp, FontWeight.SemiBold), color = c.tx)
+            Spacer(Modifier.height(6.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 60.dp, max = 160.dp)
+                    .heightIn(min = 60.dp, max = 180.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(TvDarkSurfaceVariant)
+                    .background(c.bg)
                     .padding(12.dp)
             ) {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item {
                         Text(
                             text = updateInfo.changelog.ifBlank { "Performance improvements and bug fixes." },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TvOnSurfaceVariant,
-                            lineHeight = 18.sp
+                            style = textStyle(16.sp),
+                            color = c.t2
                         )
                     }
                 }
             }
 
-            // File Size / Download Info
             if (updateInfo.apkSize > 0) {
                 val sizeMb = String.format(java.util.Locale.US, "%.1f MB", updateInfo.apkSize / (1024.0 * 1024.0))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Download size: $sizeMb",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TvOnSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Start)
-                )
+                Spacer(Modifier.height(8.dp))
+                Text("Download size: $sizeMb", style = textStyle(14.sp), color = c.t2)
             }
 
-            // Progress bar when downloading
             if (isDownloading) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "Downloading...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TvPrimary,
-                            fontWeight = FontWeight.Medium
-                        )
-                        val dlMb = String.format(java.util.Locale.US, "%.1f", downloadedBytes / (1024.0 * 1024.0))
-                        val totMb = if (totalBytes > 0) String.format(java.util.Locale.US, "%.1f MB", totalBytes / (1024.0 * 1024.0)) else ""
-                        Text(
-                            "${(downloadProgress * 100).toInt()}% ($dlMb / $totMb)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TvOnSurfaceVariant
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(TvDarkSurfaceVariant)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(fraction = downloadProgress.coerceIn(0f, 1f))
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(TvPrimary)
-                        )
-                    }
-                }
-            }
-
-            // Error message
-            if (errorMessage != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
+                val dlMb = String.format(java.util.Locale.US, "%.1f", downloadedBytes / (1024.0 * 1024.0))
+                val totMb = if (totalBytes > 0) String.format(java.util.Locale.US, "%.1f MB", totalBytes / (1024.0 * 1024.0)) else ""
                 Text(
-                    text = "⚠ $errorMessage",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFFF5252),
-                    modifier = Modifier.align(Alignment.Start)
+                    "Downloading… ${(downloadProgress * 100).toInt()}% ($dlMb / $totMb)",
+                    style = textStyle(16.sp), color = c.tx
                 )
+                Spacer(Modifier.height(8.dp))
+                JtvProgress(downloadProgress.coerceIn(0f, 1f), height = 6.dp)
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            if (errorMessage != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(errorMessage, style = textStyle(16.sp), color = c.error)
+            }
 
-            // Action buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (!isDownloading) {
-                    Surface(
-                        onClick = onDismiss,
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = TvDarkSurfaceVariant,
-                            focusedContainerColor = TvDarkSurface
-                        ),
-                        border = ClickableSurfaceDefaults.border(
-                            focusedBorder = androidx.tv.material3.Border(
-                                border = androidx.compose.foundation.BorderStroke(1.5.dp, TvFocusBorder),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                        )
-                    ) {
-                        Text(
-                            "Later",
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-                            color = TvOnSurface
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Surface(
-                        modifier = Modifier.focusRequester(initialFocus),
-                        onClick = onDownloadAndInstall,
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = TvPrimaryContainer,
-                            focusedContainerColor = TvPrimary
-                        ),
-                        border = ClickableSurfaceDefaults.border(
-                            focusedBorder = androidx.tv.material3.Border(
-                                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color.White),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                        )
-                    ) {
-                        Text(
-                            "Download & Install",
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                } else {
-                    Text(
-                        "Downloading update...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TvOnSurfaceVariant
-                    )
+            Spacer(Modifier.height(24.dp))
+            if (!isDownloading) {
+                androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    JtvButton("Download and install", onDownloadAndInstall, Modifier.focusRequester(initialFocus), primary = true, fontSize = 18.sp)
+                    JtvButton("Later", onDismiss, fontSize = 18.sp)
                 }
+            } else {
+                Text("Please wait. The installer opens when the download finishes.", style = textStyle(16.sp), color = c.t2)
             }
         }
     }

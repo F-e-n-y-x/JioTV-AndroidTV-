@@ -1,32 +1,43 @@
 package com.fenyx.jtv.ui.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
-import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.fenyx.jtv.theme.*
-import com.fenyx.jtv.ui.main.ChannelCard
+import com.fenyx.jtv.data.Channel
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.ChannelPlate
+import com.fenyx.jtv.ui.components.JText
+import com.fenyx.jtv.ui.components.JtvClickable
+import com.fenyx.jtv.ui.components.JtvClock
+import com.fenyx.jtv.ui.components.KeyHint
+import com.fenyx.jtv.ui.components.numberStyle
+import com.fenyx.jtv.ui.components.rememberMinuteClock
+import com.fenyx.jtv.ui.components.textStyle
 import com.fenyx.jtv.ui.main.MainViewModel
 
 /**
@@ -40,6 +51,9 @@ fun SearchScreen(
     onChannelClick: (Int, String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val c = Jtv.colors
+    val isTv = Jtv.isTv
+    val isPhone = Jtv.form == FormFactor.Phone
     val allChannels by viewModel.displayChannels.collectAsState()
     val indexMap = remember(allChannels) { allChannels.withIndex().associate { (i, c) -> c.id to i } }
 
@@ -52,83 +66,145 @@ fun SearchScreen(
             // feed like "Colors Kannada" is still findable via its "Colors" tile.
             ch.name.contains(q, ignoreCase = true) ||
                 viewModel.variantsFor(ch.id).any { it.channel.name.contains(q, ignoreCase = true) }
-        }.take(150)
+        }.distinctBy { it.id }.take(150)
     }
 
     val fieldFocus = remember { FocusRequester() }
+    val firstResultFocus = remember { FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) {
         runCatching { fieldFocus.requestFocus() }
         kotlinx.coroutines.delay(50)
         keyboard?.show() // TV: focus alone doesn't open the on-screen keyboard
     }
+    val now = rememberMinuteClock()
+    var fieldFocused by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(TvDarkBackground)
+            .background(c.bg)
             .padding(
-                horizontal = TvDimens.OverscanHorizontal,
-                vertical = TvDimens.OverscanVertical
+                horizontal = if (isTv) 48.dp else 16.dp,
+                vertical = if (isTv) 27.dp else 12.dp
             )
     ) {
-        // ─── Search field ───
+        // ─── Title ───
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            JText("Search", 28.sp, modifier = Modifier.weight(1f), weight = FontWeight.Bold)
+            if (isTv) JtvClock(now, dateColor = c.t2)
+        }
+        Spacer(Modifier.height(if (isTv) 12.dp else 8.dp))
+
+        // ─── Search field (visible label above it) ───
+        Text("Channel name", style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
+        Spacer(Modifier.height(6.dp))
         Row(
             modifier = Modifier
+                .then(if (isTv) Modifier.widthIn(max = 720.dp) else Modifier)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(TvDarkSurface)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .heightIn(min = if (isTv) 60.dp else 64.dp)
+                .background(c.s1, RoundedCornerShape(8.dp))
+                .border(if (fieldFocused) 2.dp else 1.dp, if (fieldFocused) c.acc else c.line, RoundedCornerShape(8.dp))
+                .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Search, contentDescription = null, tint = TvPrimary, modifier = Modifier.size(22.dp))
+            Icon(Icons.Default.Search, contentDescription = null, tint = c.t2, modifier = Modifier.size(26.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Box(modifier = Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Text("Search channels…", color = TvOnSurfaceVariant, fontSize = 18.sp)
+                    Text("For example: Sony, Colors, news", style = textStyle(20.sp), color = c.t2, maxLines = 1)
                 }
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier
                         .fillMaxWidth()
+                        .onFocusChanged { fieldFocused = it.hasFocus }
                         .focusRequester(fieldFocus)
                         .focusable(),
-                    textStyle = TextStyle(color = TvOnSurface, fontSize = 18.sp),
-                    cursorBrush = SolidColor(TvPrimary),
-                    singleLine = true
+                    textStyle = textStyle(22.sp).copy(color = c.tx),
+                    cursorBrush = SolidColor(c.acc),
+                    singleLine = true,
+                    // "Search" on the keyboard closes it and moves to the first result.
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        keyboard?.hide()
+                        if (results.isNotEmpty()) runCatching { firstResultFocus.requestFocus() }
+                    })
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         when {
-            query.isBlank() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Type to search across all channels", color = TvOnSurfaceVariant)
-                }
-            }
-            results.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No channels match \"${query.trim()}\"", color = TvOnSurfaceVariant)
-                }
-            }
+            query.isBlank() -> CenterNote("Type a channel name. Results appear as you type.", Modifier.weight(1f))
+            results.isEmpty() -> CenterNote("No channels match “${query.trim()}”.", Modifier.weight(1f))
             else -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(150.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize().focusRestorer(),
-                    contentPadding = PaddingValues(bottom = TvDimens.OverscanVertical)
+                Text(
+                    if (results.size == 1) "1 channel" else "${results.size} channels",
+                    style = textStyle(14.sp), color = c.t2
+                )
+                Spacer(Modifier.height(6.dp))
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth().focusRestorer(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
-                    itemsIndexed(items = results, key = { _, ch -> ch.id }) { _, channel ->
-                        ChannelCard(
+                    items(items = results, key = { it.id }, contentType = { "search-row" }) { channel ->
+                        val isFirst = channel.id == results.first().id
+                        SearchRow(
                             channel = channel,
+                            compact = isPhone,
+                            modifier = if (isFirst) Modifier.focusRequester(firstResultFocus) else Modifier,
                             onClick = { onChannelClick(indexMap[channel.id] ?: 0, null) }
                         )
                     }
                 }
+            }
+        }
+
+        if (isTv) {
+            Spacer(Modifier.height(6.dp))
+            KeyHint(listOf("OK" to "watch", "Down" to "results", "Back" to "close search"))
+        }
+    }
+}
+
+@Composable
+private fun CenterNote(text: String, modifier: Modifier) {
+    Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Text(text, style = textStyle(20.sp), color = Jtv.colors.t2, textAlign = TextAlign.Center)
+    }
+}
+
+/** Same row shape as the home channel list: number, logo plate, name, category underneath. */
+@Composable
+private fun SearchRow(channel: Channel, compact: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val c = Jtv.colors
+    JtvClickable(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth().height(64.dp),
+        focusedScale = 1.02f,
+    ) { focused ->
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                if (channel.channelNumber > 0) channel.channelNumber.toString() else "",
+                modifier = Modifier.width(if (compact) 44.dp else 56.dp),
+                style = numberStyle(if (compact) 18.sp else 22.sp),
+                color = if (focused) c.invTx else c.tx,
+                textAlign = TextAlign.End,
+                maxLines = 1
+            )
+            ChannelPlate(channel.logoUrl, if (compact) 56.dp else 64.dp, if (compact) 32.dp else 36.dp)
+            Column(Modifier.weight(1f)) {
+                JText(channel.name, 18.sp, color = if (focused) c.invTx else c.tx, weight = FontWeight.SemiBold)
+                JText(channel.group, 14.sp, color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2)
             }
         }
     }

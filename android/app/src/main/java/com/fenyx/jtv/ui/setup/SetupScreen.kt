@@ -1,36 +1,34 @@
 package com.fenyx.jtv.ui.setup
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.MaterialTheme
-import com.fenyx.jtv.theme.Surface
+import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import com.fenyx.jtv.theme.*
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.JtvClickable
+import com.fenyx.jtv.ui.components.KeyHint
+import com.fenyx.jtv.ui.components.textStyle
 
 /**
- * First-boot setup chooser. Presents the two ways to sign in as large, focusable TV cards:
+ * First-boot setup chooser. Presents the ways to sign in as large, focusable, labelled cards:
+ *  - **Access code** — JTV Server, no URL needed.
  *  - **Phone** — the existing OTP login on this device.
  *  - **Server** — pull shared credentials from a self-hosted JTV proxy server (log in once, every TV).
  */
@@ -41,130 +39,54 @@ fun SetupScreen(
     onChooseJtv: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val c = Jtv.colors
+    val isTv = Jtv.isTv
+    val isPhone = Jtv.form == FormFactor.Phone
     val firstCard = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstCard.requestFocus() } }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(TvDarkBackground)
-            .tvOverscan(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "Welcome to JTV",
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
-            color = TvOnBackground
-        )
-        Spacer(Modifier.height(TvDimens.SpaceSm))
-        Text(
-            "Choose how you want to set up",
-            style = MaterialTheme.typography.titleMedium,
-            color = TvOnSurfaceVariant
-        )
-        Spacer(Modifier.height(TvDimens.SpaceXl))
+    val options = listOf(
+        Triple("Connect with a code", "Type the access code you were given. No web address needed.", Icons.Default.Lock) to onChooseJtv,
+        Triple("Sign in with Jio number", "Get a one-time code on your Jio mobile number.", Icons.Default.Phone) to onChoosePhone,
+        Triple("Use your own server", "Type your server's address and access code.", Icons.Default.Build) to onChooseServer,
+    )
 
-        // fillMaxWidth + weight(1f) so the three cards SHARE the row width equally and always fit any
-        // screen — fixed widths overflowed narrow TVs and clipped the third card.
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(TvDimens.SpaceMd)) {
-            SetupCard(
-                title = "Connect with a code",
-                subtitle = "Enter your JTV Server access code. No URL needed.",
-                icon = { KeyGlyph() },
-                modifier = Modifier.weight(1f).focusRequester(firstCard),
-                onClick = onChooseJtv
-            )
-            SetupCard(
-                title = "Sign in with Jio number",
-                subtitle = "Enter your mobile number and OTP on this TV.",
-                icon = { PhoneGlyph() },
-                modifier = Modifier.weight(1f),
-                onClick = onChoosePhone
-            )
-            SetupCard(
-                title = "Use your own server",
-                subtitle = "Enter your server URL and access code.",
-                icon = { ServerGlyph() },
-                modifier = Modifier.weight(1f),
-                onClick = onChooseServer
-            )
-        }
-    }
-}
+    Box(Modifier.fillMaxSize().background(c.bg)) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .then(if (isPhone) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                .padding(horizontal = if (isTv) 48.dp else 16.dp, vertical = if (isTv) 27.dp else 24.dp),
+            horizontalAlignment = if (isPhone) Alignment.Start else Alignment.CenterHorizontally,
+            verticalArrangement = if (isPhone) Arrangement.Top else Arrangement.Center
+        ) {
+            Text("Welcome to JTV", style = textStyle(if (isPhone) 30.sp else 36.sp, FontWeight.Bold), color = c.tx)
+            Spacer(Modifier.height(8.dp))
+            Text("How do you want to sign in?", style = textStyle(20.sp), color = c.t2)
+            Spacer(Modifier.height(if (isPhone) 24.dp else 32.dp))
 
-/** Server-rack glyph: two stacked rack units, each with status lights. Accent-coloured to match the
- *  phone glyph so the two setup cards read as one icon set. */
-@Composable
-private fun ServerGlyph(color: Color = TvPrimary) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        repeat(2) {
-            Box(
-                modifier = Modifier
-                    .size(width = 54.dp, height = 20.dp)
-                    .border(2.dp, color, RoundedCornerShape(5.dp)),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Row(
-                    modifier = Modifier.padding(start = 9.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(Modifier.size(6.dp).clip(CircleShape).background(color))
-                    Box(Modifier.size(6.dp).clip(CircleShape).background(color.copy(alpha = 0.4f)))
+            if (isPhone) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    options.forEachIndexed { i, (o, onClick) ->
+                        SetupCard(o.first, o.second, o.third, onClick,
+                            Modifier.fillMaxWidth().then(if (i == 0) Modifier.focusRequester(firstCard) else Modifier), compact = true)
+                    }
+                }
+            } else {
+                // fillMaxWidth + weight(1f) so the three cards SHARE the row width equally and always fit any
+                // screen — fixed widths overflowed narrow TVs and clipped the third card.
+                Row(modifier = Modifier.fillMaxWidth().widthIn(max = 1000.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    options.forEachIndexed { i, (o, onClick) ->
+                        SetupCard(o.first, o.second, o.third, onClick,
+                            Modifier.weight(1f).then(if (i == 0) Modifier.focusRequester(firstCard) else Modifier), compact = false)
+                    }
                 }
             }
+            if (isTv) {
+                Spacer(Modifier.height(32.dp))
+                KeyHint(listOf("Left / Right" to "choose", "OK" to "continue"))
+            }
         }
-    }
-}
-
-/** Phone glyph matching [ServerGlyph]'s line-art style (rounded body, speaker slit + home dot). */
-@Composable
-private fun PhoneGlyph(color: Color = TvPrimary) {
-    Box(
-        modifier = Modifier
-            .size(width = 34.dp, height = 54.dp)
-            .border(2.5.dp, color, RoundedCornerShape(8.dp))
-    ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 7.dp)
-                .size(width = 10.dp, height = 2.5.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(color)
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 5.dp)
-                .size(5.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-    }
-}
-
-/** Key glyph for the JTV Server card = "connect with an access code". Same accent line-art weight as
- *  the phone/server glyphs so the three cards read as one set, distinct from the server-rack. */
-@Composable
-private fun KeyGlyph(color: Color = TvPrimary) {
-    Canvas(modifier = Modifier.size(width = 60.dp, height = 46.dp)) {
-        val s = 3.dp.toPx()
-        val ringR = 12.dp.toPx()
-        val cy = size.height / 2f
-        val cx = ringR + s / 2f
-        // Bow (ring) + a clearly proportioned hole.
-        drawCircle(color, radius = ringR, center = Offset(cx, cy), style = Stroke(width = s))
-        drawCircle(color, radius = ringR * 0.42f, center = Offset(cx, cy), style = Stroke(width = s))
-        // Blade (shaft) reaching to the right edge, with two teeth at the tip.
-        val shaftStart = cx + ringR
-        val shaftEnd = size.width - s / 2f
-        drawLine(color, Offset(shaftStart, cy), Offset(shaftEnd, cy), strokeWidth = s, cap = StrokeCap.Round)
-        val toothLong = 11.dp.toPx()
-        drawLine(color, Offset(shaftEnd, cy), Offset(shaftEnd, cy + toothLong), strokeWidth = s, cap = StrokeCap.Round)
-        drawLine(color, Offset(shaftEnd - 11.dp.toPx(), cy), Offset(shaftEnd - 11.dp.toPx(), cy + toothLong * 0.7f), strokeWidth = s, cap = StrokeCap.Round)
     }
 }
 
@@ -172,59 +94,41 @@ private fun KeyGlyph(color: Color = TvPrimary) {
 private fun SetupCard(
     title: String,
     subtitle: String,
+    icon: ImageVector,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    icon: (@Composable () -> Unit)? = null
+    modifier: Modifier,
+    compact: Boolean,
 ) {
-    Surface(
+    val c = Jtv.colors
+    JtvClickable(
         onClick = onClick,
-        modifier = modifier.height(240.dp),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
-        // No focus scale on the setup cards (the border marks focus) — per user preference.
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = TvDarkSurface,
-            focusedContainerColor = TvDarkSurfaceVariant
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(BorderStroke(2.dp, TvPrimary), shape = RoundedCornerShape(16.dp))
-        )
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(TvDimens.SpaceLg),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            // Fixed icon area so glyphs of different heights (phone vs server) occupy the same space —
-            // otherwise the centered content shifts and the cards look mismatched.
-            Box(modifier = Modifier.height(56.dp), contentAlignment = Alignment.Center) {
-                icon?.invoke()
+        modifier = modifier.then(if (compact) Modifier.heightIn(min = 96.dp) else Modifier.height(220.dp)),
+        container = c.s1,
+        focusedScale = 1.03f,
+    ) { focused ->
+        val fg = if (focused) c.invTx else c.tx
+        val fg2 = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2
+        if (compact) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp).align(Alignment.CenterStart),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Icon(icon, contentDescription = null, tint = if (focused) c.invTx else c.acc, modifier = Modifier.size(32.dp))
+                Column {
+                    Text(title, style = textStyle(20.sp, FontWeight.SemiBold), color = fg)
+                    Text(subtitle, style = textStyle(16.sp), color = fg2)
+                }
             }
-            Spacer(Modifier.height(TvDimens.SpaceMd))
-            // Reserve two lines for the title so 1-line and 2-line titles start their subtitle at the
-            // same y across all cards.
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = TvOnBackground,
-                textAlign = TextAlign.Center,
-                minLines = 2,
-                maxLines = 2
-            )
-            Spacer(Modifier.height(TvDimens.SpaceSm))
-            // Reserve exactly two lines for the subtitle on EVERY card so the icon+title+subtitle block
-            // is the same height everywhere — otherwise a longer subtitle (self-hosted) overflowed the
-            // fixed card height and clipped, making the cards look unequal.
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TvOnSurfaceVariant,
-                textAlign = TextAlign.Center,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+        } else {
+            Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+                Icon(icon, contentDescription = null, tint = if (focused) c.invTx else c.acc, modifier = Modifier.size(36.dp))
+                Spacer(Modifier.height(16.dp))
+                // Two lines reserved for title and subtitle so every card lines up.
+                Text(title, style = textStyle(22.sp, FontWeight.Bold), color = fg, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(6.dp))
+                Text(subtitle, style = textStyle(16.sp), color = fg2, minLines = 2, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }
