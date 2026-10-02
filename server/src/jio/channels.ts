@@ -46,10 +46,16 @@ async function fetchChannelPage(url: string, categoryMap: Record<string, string>
     const result: any[] = json.result ?? [];
     for (const c of result) {
       const id = Number(c.channel_id);
-      if (!id || out.has(id)) continue;
+      if (!id) continue;
+      const stb = Number(c.stbChannelNumber);
+      const existing = out.get(id);
+      if (existing) {
+        // v1.4 (fetched first) has no stbChannelNumber; v3.1 does — fill it in from the later list.
+        if (!existing.stbNumber && Number.isInteger(stb) && stb > 0) existing.stbNumber = stb;
+        continue;
+      }
       const isDrm = c.isDrm === true || String(c.isDrm) === "true" || c.streamType === "mpd";
       const isCatchup = c.isCatchupAvailable === true || String(c.isCatchupAvailable) === "true";
-      const stb = Number(c.stbChannelNumber);
       out.set(id, {
         id: String(id),
         name: c.channel_name || "Unknown",
