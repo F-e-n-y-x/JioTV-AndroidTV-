@@ -9,6 +9,8 @@ export interface Channel {
   isDrm: boolean;
   isCatchup?: boolean;
   channelNumber: number;
+  /** Jio's set-top-box channel number (`stbChannelNumber`) when the list carries one → M3U tvg-chno. */
+  stbNumber?: number;
 }
 
 // JioTV language-id → name (well-known ids).
@@ -47,6 +49,7 @@ async function fetchChannelPage(url: string, categoryMap: Record<string, string>
       if (!id || out.has(id)) continue;
       const isDrm = c.isDrm === true || String(c.isDrm) === "true" || c.streamType === "mpd";
       const isCatchup = c.isCatchupAvailable === true || String(c.isCatchupAvailable) === "true";
+      const stb = Number(c.stbChannelNumber);
       out.set(id, {
         id: String(id),
         name: c.channel_name || "Unknown",
@@ -56,6 +59,7 @@ async function fetchChannelPage(url: string, categoryMap: Record<string, string>
         isDrm,
         isCatchup,
         channelNumber: id,
+        ...(Number.isInteger(stb) && stb > 0 ? { stbNumber: stb } : {}),
       });
     }
   } catch {

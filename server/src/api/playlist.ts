@@ -1,7 +1,6 @@
 import { getNativeXmltv } from "../jio/nativeXmltv";
 import zlib from "node:zlib";
 import { Readable } from "node:stream";
-import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { getChannels, type Channel } from "../jio/channels";
 import { getNativeEpg } from "../jio/epg";
@@ -74,18 +73,20 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     const qualityQ = quality && quality !== "auto" ? `&q=${encodeURIComponent(quality)}` : "";
 
     const lines: string[] = [];
-    const header = includeEpg
-      ? `#EXTM3U url-tvg="${base}/epg.xml${code ? `?code=${encodeURIComponent(code)}` : ""}"`
-      : "#EXTM3U";
+    // `url-tvg` and `x-tvg-url` both point at the guide: players differ in which one they read.
+    const epgUrl = `${base}/epg.xml${code ? `?code=${encodeURIComponent(code)}` : ""}`;
+    const header = includeEpg ? `#EXTM3U url-tvg="${epgUrl}" x-tvg-url="${epgUrl}"` : "#EXTM3U";
     lines.push(header);
 
     for (const c of channels) {
       const streamUrl = `${base}/live/${encodeURIComponent(c.id)}.m3u8?ts=1${codeQ}${qualityQ}`;
-      const catchupAttr = enableCatchup
+      // Only channels Jio actually keeps a catch-up archive for get the catch-up attributes.
+      const catchupAttr = enableCatchup && c.isCatchup
         ? `catchup="default" catchup-days="7" catchup-source="${base}/live/${encodeURIComponent(c.id)}.m3u8?utc={utc}&lutc={lutc}${codeQ}${qualityQ}" `
         : "";
+      const chnoAttr = c.stbNumber ? `tvg-chno="${c.stbNumber}" ` : "";
       lines.push(
-        `#EXTINF:-1 tvg-id="${attr(c.id)}" tvg-name="${attr(c.name)}" tvg-logo="${attr(c.logoUrl)}" ` +
+        `#EXTINF:-1 tvg-id="${attr(c.id)}" tvg-name="${attr(c.name)}" ${chnoAttr}tvg-logo="${attr(c.logoUrl)}" ` +
           `group-title="${attr(c.group)}" tvg-language="${attr(c.language)}" ${catchupAttr},${c.name}`
       );
       lines.push(streamUrl);
@@ -109,37 +110,26 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
       // Catch-up replay requested via IPTV {utc} parameter
       const utcNum = Number(utcRaw);
       const utcMs = Number.isFinite(utcNum) ? (utcNum > 1e11 ? utcNum : utcNum * 1000) : Date.parse(utcRaw);
-      if (Number.isFinite(utcMs) && utcMs > 0) {
-        try {
-          const epg = await getNativeEpg(rawId, { fullCatchup: true });
-          const prog = epg.find((p) => utcMs >= p.startMs && utcMs < p.stopMs);
-          if (prog && prog.srno) {
-            const cu = {
-              c: rawId,
-              s: prog.srno,
-              p: prog.showId ?? "",
-              b: prog.startMs,
-              e: prog.stopMs,
-              t: prog.showtime ?? "",
-            };
-            const b64 = Buffer.from(JSON.stringify(cu), "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-            key = `cu.${b64}`;
-          } else {
-            const cu = {
-              c: rawId,
-              s: randomUUID(),
-              p: "",
-              b: utcMs,
-              e: utcMs + 3600_000,
-              t: "",
-            };
-            const b64 = Buffer.from(JSON.stringify(cu), "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-            key = `cu.${b64}`;
-          }
-        } catch {
-          /* fallback to live */
-        }
+      if (!Number.isFinite(utcMs) || utcMs <= 0) {
+        return reply.code(400).send("# Invalid utc / lutc catch-up time.");
       }
+      const epg = await getNativeEpg(rawId, { fullCatchup: true });
+      const prog = epg.find((p) => utcMs >= p.startMs && utcMs < p.stopMs);
+      // Jio can only replay a programme it has in its EPG (it needs that show's srno). Without one
+      // there is nothing to replay — say so instead of asking Jio for a made-up programme.
+      if (!prog || !prog.srno) {
+        return reply.code(404).send("# No catch-up programme in the guide at that time for this channel.");
+      }
+      const cu = {
+        c: rawId,
+        s: prog.srno,
+        p: prog.showId ?? "",
+        b: prog.startMs,
+        e: prog.stopMs,
+        t: prog.showtime ?? "",
+      };
+      const b64 = Buffer.from(JSON.stringify(cu), "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      key = `cu.${b64}`;
     }
 
     try {
