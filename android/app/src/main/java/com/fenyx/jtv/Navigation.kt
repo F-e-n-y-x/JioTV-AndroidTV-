@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
@@ -264,6 +265,11 @@ fun MainNavigation() {
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
+            // One short cross-fade for every screen change — forward, Back, tab switch AND the system
+            // predictive-back gesture (which otherwise shrinks the page), so going home always looks the same.
+            transitionSpec = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) },
+            popTransitionSpec = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) },
+            predictivePopTransitionSpec = { _ -> androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) },
             // While the player is expanded it covers everything: skip drawing the screens under it
             // (read in the draw phase only, so this never recomposes them).
             modifier = Modifier.fillMaxSize().drawWithContent { if (session.value?.mini != false) drawContent() },
