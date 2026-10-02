@@ -17,6 +17,9 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
+    <!-- Android 7–9 only: saving the favourites backup to the public Downloads folder. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
     <application
         android:name=".JioTvApplication"
         android:allowBackup="true"
@@ -42,6 +45,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <!-- "Open with JTV" for a favourites backup file (restore on boxes without a file picker). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/json" />
             </intent-filter>
         </activity>
 

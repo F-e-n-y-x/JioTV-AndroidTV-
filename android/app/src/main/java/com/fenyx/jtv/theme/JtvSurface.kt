@@ -9,6 +9,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -58,9 +63,20 @@ fun Surface(
     // a mouse/touch tap would call the lambda captured on first composition (stale toggles, wrong item).
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnLongClick by rememberUpdatedState(onLongClick)
+    // Hold OK opens the long-press menu; the RELEASE of that same press must not then "click" this row
+    // (that opened the channel and closed the menu at once on remotes without a mouse).
+    val swallowOkUp = remember { androidx.compose.runtime.mutableStateOf(false) }
+    val longClick: (() -> Unit)? = onLongClick?.let { { swallowOkUp.value = true; currentOnLongClick?.invoke() } }
     androidx.tv.material3.Surface(
         onClick = onClick,
         modifier = modifier
+            .onPreviewKeyEvent { e ->
+                val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                if (ok && swallowOkUp.value) {
+                    if (e.type == KeyEventType.KeyUp) swallowOkUp.value = false
+                    true
+                } else false
+            }
             .mouseHoverToFocus(focusRequester)
             .pointerInput(Unit) {
                 detectTapGestures(
@@ -83,7 +99,7 @@ fun Surface(
                 )
             }
             .indication(interactionSource, LocalIndication.current),
-        onLongClick = onLongClick,
+        onLongClick = longClick,
         shape = shape,
         colors = colors,
         scale = scale,

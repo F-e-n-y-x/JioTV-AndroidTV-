@@ -58,6 +58,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
     val scope = rememberCoroutineScope()
+    val backup = rememberFavoritesBackup { id -> mainViewModel.getAllChannels().firstOrNull { it.id == id }?.name }
 
     val language by settingsManager.defaultLanguageFlow.collectAsState(initial = "hi")
     val quality by settingsManager.defaultQualityFlow.collectAsState(initial = "auto")
@@ -280,6 +281,24 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                         subtitle = "Show one tile per channel and pick the language in the player (e.g. Star Sports Hindi/Tamil/Telugu). Turn off to see every language as its own channel.",
                         isEnabled = groupLanguageVariants,
                         onClick = { scope.launch { settingsManager.setGroupLanguageVariants(!groupLanguageVariants) } }
+                    )
+                }
+
+                item { SectionHeader("Favourites") }
+
+                item {
+                    SettingsItem(
+                        title = "Back Up Favourites",
+                        subtitle = "Save your favourites to Downloads so you can restore them after reinstalling",
+                        onClick = backup.save
+                    )
+                }
+
+                item {
+                    SettingsItem(
+                        title = "Restore Favourites",
+                        subtitle = "Add the favourites from your backup file (Downloads/${com.fenyx.jtv.data.FavoritesBackup.FILE_NAME})",
+                        onClick = backup.restore
                     )
                 }
 

@@ -9,6 +9,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -43,6 +48,7 @@ fun ChannelActionsDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             modifier = Modifier
+                .ignoreHeldOk()
                 .width(420.dp)
                 .background(TvDarkSurface, RoundedCornerShape(16.dp))
                 .padding(20.dp),
@@ -128,4 +134,19 @@ fun FavoritesHint(modifier: Modifier = Modifier) {
         fontSize = 12.sp,
         modifier = modifier
     )
+}
+
+/**
+ * The menu opens while OK is still held (hold OK = options). Ignore OK until a FRESH press starts
+ * inside the menu, so releasing the hold can't trigger "Watch" (or skip past "Move") by itself.
+ */
+@Composable
+internal fun Modifier.ignoreHeldOk(): Modifier {
+    val armed = remember { androidx.compose.runtime.mutableStateOf(false) }
+    return this.onPreviewKeyEvent { e ->
+        val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+        if (!ok) return@onPreviewKeyEvent false
+        if (e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0) armed.value = true
+        !armed.value
+    }
 }
