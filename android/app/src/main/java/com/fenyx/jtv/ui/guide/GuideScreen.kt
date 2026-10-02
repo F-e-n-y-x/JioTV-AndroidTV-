@@ -155,16 +155,19 @@ fun GuideScreen(
     val categories = remember(groups, favoriteOrder.isEmpty()) {
         buildList {
             add(MainViewModel.GROUP_ALL)
+            // Only the channels Jio lets you replay (about 6 in 10), so they're easy to find.
+            add(GROUP_REPLAY)
             if (favoriteOrder.isNotEmpty()) add(MainViewModel.GROUP_FAVORITES)
             addAll(groups)
         }
     }
     LaunchedEffect(categories) { if (category !in categories) category = MainViewModel.GROUP_ALL }
     val channels = remember(category, allChannels, favoriteOrder) {
-        viewModel.getChannelsByGroup(category).distinctBy { it.id }
+        if (category == GROUP_REPLAY) viewModel.getChannelsByGroup(MainViewModel.GROUP_ALL).filter { it.isCatchup }.distinctBy { it.id }
+        else viewModel.getChannelsByGroup(category).distinctBy { it.id }
     }
     val indexOf = remember(allChannels) { allChannels.withIndex().associate { (i, ch) -> ch.id to i } }
-    val playGroup = category.takeIf { it != MainViewModel.GROUP_ALL }
+    val playGroup = category.takeIf { it != MainViewModel.GROUP_ALL && it != GROUP_REPLAY }
     val maxBack = remember(channels) { if (channels.any { it.isCatchup }) Catchup.WINDOW_MS else MAX_BACK }
     // "Replay earlier shows" from a channel's options: open on that channel (see below).
     val focusChannelId by viewModel.guideFocusChannel.collectAsState()
@@ -558,8 +561,12 @@ private fun dayLabel(t: Long, now: Long): String {
     }
 }
 
+/** Guide-only pseudo category: channels with Jio catch-up. */
+private const val GROUP_REPLAY = "__REPLAY__"
+
 private fun categoryLabel(group: String): String = when (group) {
     MainViewModel.GROUP_ALL -> "All channels"
+    GROUP_REPLAY -> "Replay"
     MainViewModel.GROUP_FAVORITES -> "Favourites"
     MainViewModel.GROUP_RECENT -> "Recent"
     else -> group
@@ -786,7 +793,13 @@ private fun GuideRow(
             )
             ChannelPlate(channel.logoUrl, if (compact) 48.dp else 46.dp, if (compact) 28.dp else 27.dp)
             if (!compact) {
-                JText(channel.name, 16.sp, color = if (rowFocused) c.tx else c.t2, weight = if (rowFocused) FontWeight.SemiBold else FontWeight.Normal)
+                JText(channel.name, 16.sp, color = if (rowFocused) c.tx else c.t2, weight = if (rowFocused) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.weight(1f, fill = false))
+                // Channels Jio lets you replay carry the replay mark, so it's clear where catch-up exists.
+                if (channel.isCatchup) androidx.tv.material3.Icon(
+                    com.fenyx.jtv.ui.player.PlayerIcons.Replay, contentDescription = "Replay available",
+                    tint = c.acc, modifier = Modifier.padding(start = 4.dp).size(14.dp),
+                )
             }
         }
 
@@ -885,8 +898,8 @@ private fun Cell(
                     if (replay) Row(verticalAlignment = Alignment.CenterVertically) {
                         androidx.tv.material3.Icon(
                             com.fenyx.jtv.ui.player.PlayerIcons.Replay, contentDescription = "Can be replayed",
-                            tint = if (focused) c.invTx.copy(alpha = 0.75f) else c.t3,
-                            modifier = Modifier.padding(end = 4.dp).size(14.dp),
+                            tint = if (focused) c.invTx else c.acc,
+                            modifier = Modifier.padding(end = 4.dp).size(16.dp),
                         )
                         JText(time, 14.sp, color = tc)
                     } else JText(time, 14.sp, color = tc)
