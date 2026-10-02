@@ -1,6 +1,5 @@
 package com.fenyx.jtv.theme
 
-import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
@@ -23,7 +22,6 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ClickableSurfaceGlow
 import androidx.tv.material3.ClickableSurfaceScale
 import androidx.tv.material3.ClickableSurfaceShape
-import androidx.compose.foundation.LocalIndication
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun Modifier.mouseHoverToFocus(focusRequester: FocusRequester): Modifier = this
@@ -82,7 +80,9 @@ fun Surface(
                     onLongPress = { currentOnLongClick?.invoke() }
                 )
             }
-            .indication(interactionSource, LocalIndication.current),
+            // No extra indication here: it ignored the item's shape and drew a rectangular press
+            // highlight around pills/circles. The Surface's own pressed colours (shape-aware) show the press.
+            ,
         onLongClick = onLongClick,
         shape = shape,
         colors = colors,
