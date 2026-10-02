@@ -60,7 +60,22 @@ async function masterAlive(url: string, headers: Record<string, string>): Promis
   }
 }
 
-async function resolve(key: string): Promise<CachedStream> {
+/** In-flight resolves per key: concurrent requests for the same channel / catch-up share one geturl. */
+const resolving = new Map<string, Promise<CachedStream>>();
+
+/** Single-flight wrapper: a player opening a channel fires several requests at once (manifest, key,
+ *  first segments); without this each would call Jio's geturl separately. */
+function resolve(key: string): Promise<CachedStream> {
+  const pending = resolving.get(key);
+  if (pending) return pending;
+  const p = resolveOnce(key).finally(() => {
+    if (resolving.get(key) === p) resolving.delete(key);
+  });
+  resolving.set(key, p);
+  return p;
+}
+
+async function resolveOnce(key: string): Promise<CachedStream> {
   const dead = deadCache.get(key);
   if (dead && Date.now() < dead.expiresAtMs) {
     throw dead.error;

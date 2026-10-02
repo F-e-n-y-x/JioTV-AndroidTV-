@@ -18,6 +18,21 @@ export class GeturlAuthError extends Error {
   }
 }
 
+type JioReq = Parameters<typeof jioRequest>[0];
+
+/**
+ * Jio's Varnish edge intermittently answers geturl with a 5xx ("backend read error") that succeeds on
+ * an immediate retry, so retry exactly once on a 5xx after a short pause. 4xx are never retried (auth
+ * errors are handled by the caller's refresh path).
+ */
+async function geturlWithRetry(req: JioReq): Promise<{ status: number; text: string }> {
+  const res = await jioRequest(req);
+  if (res.status < 500 || res.status > 599) return res;
+  console.warn(`[geturl] HTTP ${res.status} from Jio, retrying once`);
+  await new Promise((r) => setTimeout(r, 400));
+  return jioRequest(req);
+}
+
 /** Catch-up (VOD replay) parameters, taken from the EPG programme. begin/end are epoch MILLISECONDS. */
 export interface CatchupParams {
   srno: string;
@@ -50,7 +65,7 @@ export async function getStreamData(
     body = `stream_type=Live&channel_id=${enc(channelId)}`;
   }
 
-  const res = await jioRequest({
+  const res = await geturlWithRetry({
     method: "POST",
     url: "https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl",
     headers: {
