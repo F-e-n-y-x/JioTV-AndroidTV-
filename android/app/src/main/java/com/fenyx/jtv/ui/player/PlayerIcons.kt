@@ -51,6 +51,13 @@ internal object PlayerIcons {
     val SkipPrevious by lazy { icon("SkipPrevious", "M6,6h2v12L6,18zM9.5,12l8.5,6L18,6z") }
     /** Material "expand_more": the chevron-down that minimises the player (YouTube-style). */
     val ExpandMore by lazy { icon("ExpandMore", "M16.59,8.59L12,13.17 7.41,8.59 6,10l6,6 6,-6z") }
+    /** Material "replay": marks guide shows that can be watched again (catch-up). */
+    val Replay by lazy {
+        icon(
+            "Replay",
+            "M12,5V1L7,6l5,5V7c3.31,0 6,2.69 6,6s-2.69,6 -6,6 -6,-2.69 -6,-6H4c0,4.42 3.58,8 8,8s8,-3.58 8,-8 -3.58,-8 -8,-8z",
+        )
+    }
     val SkipNext by lazy { icon("SkipNext", "M6,18l8.5,-6L6,6v12zM16,6v12h2L18,6h-2z") }
     val Fullscreen by lazy {
         icon(

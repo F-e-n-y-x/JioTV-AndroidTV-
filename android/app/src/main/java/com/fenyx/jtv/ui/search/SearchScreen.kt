@@ -89,6 +89,19 @@ fun SearchScreen(
     val now = rememberMinuteClock()
     var fieldFocused by remember { mutableStateOf(false) }
 
+    // Hold OK / long-press on a result: Watch, and "Replay earlier shows" for catch-up channels.
+    var menuChannel by remember { mutableStateOf<Channel?>(null) }
+    menuChannel?.let { ch ->
+        val actions = buildList {
+            add(com.fenyx.jtv.ui.main.ChannelAction("Watch") { onChannelClick(indexMap[ch.id] ?: 0, null) })
+            if (ch.isCatchup && onTab != null) add(com.fenyx.jtv.ui.main.ChannelAction("Replay earlier shows", "Shows from the last 7 days") {
+                viewModel.requestGuideFocus(ch.id)
+                onTab(com.fenyx.jtv.ui.main.PhoneTab.Guide)
+            })
+        }
+        com.fenyx.jtv.ui.main.ChannelActionsDialog(ch, actions) { menuChannel = null }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -179,7 +192,8 @@ fun SearchScreen(
                             channel = channel,
                             compact = isPhone,
                             modifier = if (firstSection && channel.id == firstId) Modifier.focusRequester(firstResultFocus) else Modifier,
-                            onClick = { onChannelClick(indexMap[channel.id] ?: 0, null) }
+                            onClick = { onChannelClick(indexMap[channel.id] ?: 0, null) },
+                            onLongClick = { menuChannel = channel },
                         )
                     }
                 }
@@ -199,7 +213,7 @@ fun SearchScreen(
 
         if (isTv) {
             Spacer(Modifier.height(6.dp))
-            KeyHint(listOf("OK" to "watch", "Down" to "results", "Back" to "close search"))
+            KeyHint(listOf("OK" to "watch", "Hold OK" to "options", "Down" to "results", "Back" to "close search"))
         }
     }
 }
@@ -213,10 +227,11 @@ private fun CenterNote(text: String, modifier: Modifier) {
 
 /** Same row shape as the home channel list: number, logo plate, name, category underneath. */
 @Composable
-private fun SearchRow(channel: Channel, compact: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun SearchRow(channel: Channel, compact: Boolean, modifier: Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = Jtv.colors
     JtvClickable(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier.fillMaxWidth().height(64.dp),
         focusedScale = 1.02f,
     ) { focused ->

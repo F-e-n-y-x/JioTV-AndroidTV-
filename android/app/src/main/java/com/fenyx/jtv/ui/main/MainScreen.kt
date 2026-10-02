@@ -160,6 +160,11 @@ fun MainScreen(
     fun actionsFor(ch: Channel): List<ChannelAction> = buildList {
         val isFav = favoriteChannels.contains(ch.id)
         add(ChannelAction("Watch") { play(ch) })
+        // Catch-up: the guide, on this channel, a little back in time (Jio keeps 7 days).
+        if (ch.isCatchup) add(ChannelAction("Replay earlier shows", "Shows from the last 7 days") {
+            viewModel.requestGuideFocus(ch.id)
+            onGuideClick()
+        })
         add(
             if (isFav) ChannelAction("Remove from favourites", confirm = "Remove ${ch.name} from favourites?") { viewModel.toggleFavorite(ch.id) }
             else ChannelAction("Add to favourites") { viewModel.toggleFavorite(ch.id) }

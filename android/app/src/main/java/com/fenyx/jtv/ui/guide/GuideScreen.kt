@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -70,6 +71,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
+import com.fenyx.jtv.data.Catchup
+import com.fenyx.jtv.data.CatchupRequest
 import com.fenyx.jtv.data.Channel
 import com.fenyx.jtv.data.EpgProgram
 import com.fenyx.jtv.data.SettingsManager
@@ -98,7 +101,10 @@ private const val MIN = 60_000L
 private const val HALF_HOUR = 30 * MIN
 private const val DAY = 24 * 60 * MIN
 
-/** How far the guide may travel from now (catch-up data rarely goes further back than a day). */
+/**
+ * How far the guide may travel back from now: a day, or Jio's 7-day catch-up window when the list has
+ * catch-up channels (their earlier days are fetched as the window reaches them).
+ */
 private const val MAX_BACK = DAY
 private const val MAX_AHEAD = 7 * DAY
 
@@ -124,6 +130,8 @@ fun GuideScreen(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     onTab: ((com.fenyx.jtv.ui.main.PhoneTab) -> Unit)? = null,
+    /** Replay a past (or the airing) programme from its start: Jio catch-up. */
+    onReplay: (displayIndex: Int, group: String?, request: CatchupRequest) -> Unit = { _, _, _ -> },
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsManager(context) }
@@ -157,6 +165,9 @@ fun GuideScreen(
     }
     val indexOf = remember(allChannels) { allChannels.withIndex().associate { (i, ch) -> ch.id to i } }
     val playGroup = category.takeIf { it != MainViewModel.GROUP_ALL }
+    val maxBack = remember(channels) { if (channels.any { it.isCatchup }) Catchup.WINDOW_MS else MAX_BACK }
+    // "Replay earlier shows" from a channel's options: open on that channel (see below).
+    val focusChannelId by viewModel.guideFocusChannel.collectAsState()
 
     // ── Time window + virtual focus ──
     var viewStart by rememberSaveable { mutableLongStateOf(initialWindowStart(System.currentTimeMillis())) }
@@ -227,7 +238,7 @@ fun GuideScreen(
             val pxPerMs = timelinePx / span
             val rowH = if (isPhone) 64.dp else if (isTv) 56.dp else 64.dp
 
-            fun clampStart(t: Long): Long = t.coerceIn(now - MAX_BACK, now + MAX_AHEAD - span)
+            fun clampStart(t: Long): Long = t.coerceIn(now - maxBack, now + MAX_AHEAD - span)
 
             // Keep the anchor inside the window when the window is dragged (touch) or paged.
             fun showTime(t: Long) {
@@ -244,10 +255,41 @@ fun GuideScreen(
 
             fun activate(row: Int, prog: EpgProgram?) {
                 val ch = channels.getOrNull(row) ?: return
-                // There is no catch-up player path yet, so past and current shows both open the channel live.
-                // Future shows can't be watched yet: show their details (with a "watch channel" button).
-                if (prog != null && prog.startMs > now) details = DetailsRequest(row, prog)
-                else onPlay(indexOf[ch.id] ?: return, playGroup)
+                val t = System.currentTimeMillis()
+                when {
+                    // Future shows can't be watched yet: their details (with a "watch channel" button).
+                    prog != null && prog.startMs > t -> details = DetailsRequest(row, prog)
+                    // A finished show: replay it from Jio's catch-up, or explain that it can't be.
+                    prog != null && prog.stopMs <= t -> {
+                        val req = Catchup.request(ch, prog, t)
+                        if (req != null) onReplay(indexOf[ch.id] ?: return, playGroup, req)
+                        else details = DetailsRequest(row, prog)
+                    }
+                    // On now (or the channel itself): live. "Watch from start" is in the details.
+                    else -> onPlay(indexOf[ch.id] ?: return, playGroup)
+                }
+            }
+
+            // "Replay earlier shows": all channels, that channel's row, the window ending a little after now.
+            LaunchedEffect(focusChannelId, channels) {
+                val id = focusChannelId ?: return@LaunchedEffect
+                if (allChannels.isEmpty()) return@LaunchedEffect
+                if (channels.none { it.id == id } && category != MainViewModel.GROUP_ALL) {
+                    category = MainViewModel.GROUP_ALL
+                    return@LaunchedEffect // runs again with the full list
+                }
+                val row = channels.indexOfFirst { it.id == id }
+                viewModel.consumeGuideFocus()
+                if (row < 0) return@LaunchedEffect
+                focusRow = row
+                val t = System.currentTimeMillis()
+                viewStart = clampStart(t - span + span / 4)
+                // Focus the show before the one on now (the most recent finished one), else now.
+                val progs = epgData[id].orEmpty()
+                val prev = progs.lastOrNull { it.stopMs <= t && it.stopMs > viewStart }
+                anchor = prev?.startMs?.coerceAtLeast(viewStart) ?: t
+                listState.scrollToItem((row - 1).coerceAtLeast(0))
+                if (isTv) runCatching { gridFocus.requestFocus() }
             }
 
             Column(Modifier.fillMaxSize()) {
@@ -257,6 +299,7 @@ fun GuideScreen(
                     FocusLine(
                         channel = focusedChannel,
                         prog = focusedProg,
+                        now = now,
                         showButtons = false,
                         onWatch = { activate(focusRow, focusedProg?.takeIf { it.startMs <= now }) },
                         onDetails = { details = DetailsRequest(focusRow, focusedProg) },
@@ -283,6 +326,23 @@ fun GuideScreen(
                         .collectLatest { keys ->
                             kotlinx.coroutines.delay(120)
                             keys.forEach { (it as? String)?.let(viewModel::fetchNativeEpgIfMissing) }
+                        }
+                }
+                // Catch-up channels on screen: fetch the earlier guide days the window has reached
+                // (Jio's getepg offset -1 … -6), once each.
+                LaunchedEffect(listState, channels) {
+                    val byId = channels.associateBy { it.id }
+                    snapshotFlow {
+                        listState.layoutInfo.visibleItemsInfo.map { it.key } to Catchup.dayOffset(viewStart, System.currentTimeMillis())
+                    }
+                        .distinctUntilChanged()
+                        .collectLatest { (keys, oldest) ->
+                            if (oldest >= 0) return@collectLatest
+                            kotlinx.coroutines.delay(250)
+                            keys.forEach { k ->
+                                val ch = (k as? String)?.let(byId::get) ?: return@forEach
+                                if (ch.isCatchup) for (off in -1 downTo oldest) viewModel.fetchPastEpgIfMissing(ch.id, off)
+                            }
                         }
                 }
 
@@ -350,7 +410,7 @@ fun GuideScreen(
                                         while (prev.stopMs <= vs + span / 6 && vs > prev.startMs) vs -= HALF_HOUR
                                         viewStart = clampStart(vs)
                                         anchor = prev.startMs.coerceAtLeast(viewStart)
-                                    } else if (anchor - HALF_HOUR >= now - MAX_BACK) {
+                                    } else if (anchor - HALF_HOUR >= now - maxBack) {
                                         anchor -= HALF_HOUR
                                         if (anchor < viewStart) viewStart = clampStart(viewStart - HALF_HOUR)
                                     }
@@ -414,7 +474,12 @@ fun GuideScreen(
                                     focusRow = row
                                     val p = programAt(progs ?: emptyList(), t)
                                     anchor = p?.startMs?.coerceAtLeast(viewStart) ?: t
-                                    details = DetailsRequest(row, p)
+                                    // Tap on a finished show that Jio can replay: replay it. Otherwise
+                                    // (and on long-press) its details.
+                                    val req = if (!long && p != null && p.stopMs <= System.currentTimeMillis()) Catchup.request(ch, p) else null
+                                    val idx = indexOf[ch.id]
+                                    if (req != null && idx != null) onReplay(idx, playGroup, req)
+                                    else details = DetailsRequest(row, p)
                                 },
                             )
                         }
@@ -450,6 +515,12 @@ fun GuideScreen(
             onWatch = {
                 details = null
                 indexOf[ch.id]?.let { onPlay(it, playGroup) }
+            },
+            onWatchFromStart = req.prog?.let { p -> Catchup.request(ch, p, now) }?.let { cu ->
+                {
+                    details = null
+                    indexOf[ch.id]?.let { onReplay(it, playGroup, cu) }
+                }
             },
             onClose = { details = null },
         )
@@ -571,6 +642,7 @@ private fun CategoryChips(
 private fun FocusLine(
     channel: Channel?,
     prog: EpgProgram?,
+    now: Long,
     showButtons: Boolean,
     onWatch: () -> Unit,
     onDetails: () -> Unit,
@@ -582,7 +654,12 @@ private fun FocusLine(
             if (channel.channelNumber > 0) append("${channel.channelNumber} ")
             append(channel.name)
         }
-        if (prog != null) append(" · ${formatTime(prog.startMs)} – ${formatTime(prog.stopMs)}")
+        if (prog != null) {
+            append(" · ${formatTime(prog.startMs)} – ${formatTime(prog.stopMs)}")
+            if (channel != null && prog.stopMs <= now) {
+                append(if (Catchup.isReplayable(channel, prog, now)) " · OK to replay" else " · Not available to replay")
+            }
+        }
     }
     val title = prog?.title ?: if (channel != null) "No guide for this channel" else ""
     if (isPhone) {
@@ -745,15 +822,21 @@ private fun GuideRow(
                     val e = minOf(p.stopMs, viewEnd)
                     val x = with(density) { ((s - viewStart) * pxPerMs).toDp() }
                     val w = with(density) { ((e - s) * pxPerMs).toDp() }
+                    val past = p.stopMs <= now
+                    val replayable = past && Catchup.isReplayable(channel, p, now)
+                    val isFocused = focusedStart != null && focusedStart == p.startMs
                     Cell(
                         title = p.title,
-                        time = formatTime(p.startMs),
+                        // The focused finished show that can't be replayed says so (dimmed cells don't).
+                        time = if (isFocused && past && !replayable) "Not available to replay" else formatTime(p.startMs),
                         xDp = x,
                         widthDp = w,
-                        focused = focusedStart != null && focusedStart == p.startMs,
+                        focused = isFocused,
                         onNow = p.startMs <= now && now < p.stopMs,
-                        past = p.stopMs <= now,
+                        // Finished shows Jio can replay stay at full strength, with a small replay mark.
+                        past = past && !replayable,
                         muted = false,
+                        replay = replayable,
                     )
                 }
             }
@@ -771,6 +854,8 @@ private fun Cell(
     onNow: Boolean,
     past: Boolean,
     muted: Boolean,
+    /** Can be watched again (catch-up): a small replay mark before the time. */
+    replay: Boolean = false,
 ) {
     val c = Jtv.colors
     val w = (widthDp - 3.dp).coerceAtLeast(2.dp)
@@ -795,18 +880,31 @@ private fun Cell(
         if (w > 36.dp) {
             Column {
                 JText(title, 16.sp, color = fg, weight = if (muted) FontWeight.Normal else FontWeight.SemiBold)
-                if (time != null) JText(time, 14.sp, color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2)
+                if (time != null) {
+                    val tc = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2
+                    if (replay) Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.tv.material3.Icon(
+                            com.fenyx.jtv.ui.player.PlayerIcons.Replay, contentDescription = "Can be replayed",
+                            tint = if (focused) c.invTx.copy(alpha = 0.75f) else c.t3,
+                            modifier = Modifier.padding(end = 4.dp).size(14.dp),
+                        )
+                        JText(time, 14.sp, color = tc)
+                    } else JText(time, 14.sp, color = tc)
+                }
             }
         }
     }
 }
 
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 private fun GuideDetails(
     channel: Channel,
     prog: EpgProgram?,
     now: Long,
     onWatch: () -> Unit,
+    /** Non-null when Jio can replay [prog] from its start (catch-up). */
+    onWatchFromStart: (() -> Unit)?,
     onClose: () -> Unit,
 ) {
     val c = Jtv.colors
@@ -849,6 +947,7 @@ private fun GuideDetails(
                 JText(chLine, 18.sp, color = c.t2)
                 if (prog != null) {
                     val state = when {
+                        prog.stopMs <= now && onWatchFromStart == null -> "Not available to replay"
                         prog.stopMs <= now -> "Already shown"
                         prog.startMs <= now -> "On now"
                         else -> "Starts at ${formatTime(prog.startMs)}"
@@ -868,11 +967,21 @@ private fun GuideDetails(
                 }
                 Spacer(Modifier.height(22.dp))
                 val onNow = prog != null && prog.startMs <= now && now < prog.stopMs
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    JtvButton(
-                        if (onNow || prog == null) "Watch" else "Watch channel live",
-                        onWatch, Modifier.focusRequester(watchFocus), primary = true, fontSize = 18.sp,
-                    )
+                val past = prog != null && prog.stopMs <= now
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    val live = if (onNow || prog == null) "Watch" else "Watch channel live"
+                    if (past && onWatchFromStart != null) {
+                        // A finished show: replaying it is the point of opening it.
+                        JtvButton("Watch from start", onWatchFromStart, Modifier.focusRequester(watchFocus), primary = true, fontSize = 18.sp)
+                        JtvButton(live, onWatch, fontSize = 18.sp)
+                    } else {
+                        JtvButton(live, onWatch, Modifier.focusRequester(watchFocus), primary = true, fontSize = 18.sp)
+                        // The show on now, from its beginning (when Jio offers catch-up for it).
+                        if (onWatchFromStart != null) JtvButton("Watch from start", onWatchFromStart, fontSize = 18.sp)
+                    }
                     JtvButton("Close", onClose, fontSize = 18.sp)
                 }
             }
