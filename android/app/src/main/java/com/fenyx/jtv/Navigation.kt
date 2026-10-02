@@ -75,18 +75,24 @@ private data class PlayerSession(
     val mini: Boolean = false,
     /** Bumped on every open, so an already-running player retunes instead of being rebuilt. */
     val token: Int = 0,
+    /** Catch-up: replay this programme (null = live). */
+    val catchup: com.fenyx.jtv.data.CatchupRequest? = null,
 )
 
 private val PlayerSessionSaver = Saver<MutableState<PlayerSession?>, Any>(
     save = { st ->
         val s = st.value
-        if (s == null) arrayListOf<Any?>() else arrayListOf<Any?>(s.channelIndex, s.group, s.mini, s.token)
+        if (s == null) arrayListOf<Any?>()
+        else arrayListOf<Any?>(s.channelIndex, s.group, s.mini, s.token, ArrayList(com.fenyx.jtv.ui.player.catchupToList(s.catchup)))
     },
     restore = { v ->
         val l = v as List<*>
         mutableStateOf(
             if (l.size < 4) null
-            else PlayerSession(l[0] as Int, l[1] as String?, l[2] as Boolean, l[3] as Int)
+            else PlayerSession(
+                l[0] as Int, l[1] as String?, l[2] as Boolean, l[3] as Int,
+                catchup = (l.getOrNull(4) as? List<*>)?.let { com.fenyx.jtv.ui.player.catchupFromList(it) },
+            )
         )
     },
 )
@@ -161,12 +167,12 @@ fun MainNavigation() {
      * picked from (null = all). TV pushes the Player screen; phone/tablet open (or retune) the player
      * host in its expanded state — the same running player is reused if one is already up (mini).
      */
-    fun openPlayer(index: Int, group: String?) {
+    fun openPlayer(index: Int, group: String?, catchup: com.fenyx.jtv.data.CatchupRequest? = null) {
         if (isTv) {
-            backStack.add(Player(channelIndex = index, group = group))
+            backStack.add(Player(channelIndex = index, group = group, catchup = catchup))
         } else {
             val prev = session.value
-            session.value = PlayerSession(index, group, mini = false, token = (prev?.token ?: 0) + 1)
+            session.value = PlayerSession(index, group, mini = false, token = (prev?.token ?: 0) + 1, catchup = catchup)
         }
     }
 
@@ -298,7 +304,8 @@ fun MainNavigation() {
                         onPlay = { index, group -> openPlayer(index, group) },
                         onOpenSettings = { onTab(PhoneTab.Settings) },
                         modifier = m,
-                        onTab = onTab
+                        onTab = onTab,
+                        onReplay = { index, group, cu -> openPlayer(index, group, cu) }, // catch-up
                     )
                   }
                 }
@@ -339,6 +346,7 @@ fun MainNavigation() {
                     PlayerForChannel(
                         channelIndex = playerArgs.channelIndex,
                         group = playerArgs.group,
+                        catchup = playerArgs.catchup, // catch-up
                         mainViewModel = mainViewModel,
                         onBack = { backStack.removeLastOrNull() },
                         onSettings = { backStack.add(Settings) },
@@ -396,6 +404,7 @@ private fun BoxScope.PlayerHost(
         onMinimize = { session.value = session.value?.copy(mini = true) },
         onExpand = { session.value = session.value?.copy(mini = false) },
         openToken = s.token,
+        catchup = s.catchup, // catch-up
         modifier = frame,
     )
 }
@@ -412,6 +421,7 @@ private fun PlayerForChannel(
     onMinimize: (() -> Unit)? = null,
     onExpand: () -> Unit = {},
     openToken: Int = 0,
+    catchup: com.fenyx.jtv.data.CatchupRequest? = null, // catch-up
     modifier: Modifier = Modifier,
 ) {
     val groups by mainViewModel.groups.collectAsState()
@@ -458,5 +468,6 @@ private fun PlayerForChannel(
         onMinimize = onMinimize,
         onExpand = onExpand,
         openToken = openToken,
+        catchup = catchup, // catch-up
     )
 }

@@ -340,14 +340,19 @@ internal fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
         val meta = programMeta(cur, language)
         if (meta.isNotEmpty()) JText(meta, 14.sp, color = c.t2, modifier = Modifier.padding(top = 4.dp))
 
-        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            JText("${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)}", 14.sp, color = c.t2)
-            val left = cur.minutesLeft(now)
-            Spacer(Modifier.width(8.dp))
-            if (left <= 10) EndsSoonPill(cur.stopMs, fontSize = 14.sp)
-            else JText("· $left min left", 14.sp, color = c.t2)
+        if (isReplaying(cur)) {
+            // Catch-up: when it was on (the seek bar over the video shows the position).
+            JText(replayStatus(cur), 14.sp, color = c.tx, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+        } else {
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                JText("${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)}", 14.sp, color = c.t2)
+                val left = cur.minutesLeft(now)
+                Spacer(Modifier.width(8.dp))
+                if (left <= 10) EndsSoonPill(cur.stopMs, fontSize = 14.sp)
+                else JText("· $left min left", 14.sp, color = c.t2)
+            }
+            JtvProgress(cur.progress(now), Modifier.padding(top = 8.dp))
         }
-        JtvProgress(cur.progress(now), Modifier.padding(top = 8.dp))
 
         // Description: two lines, "More" opens everything the guide has.
         val desc = cur.description.ifBlank { cur.episodeDesc.orEmpty() }

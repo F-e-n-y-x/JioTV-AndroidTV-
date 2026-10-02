@@ -527,20 +527,24 @@ private fun MiniInfoLine(ch: Channel, epg: EpgSource, ts: Timeshift?, modifier: 
     val tv = Jtv.isTv
     val now = LocalNow.current
     val cur = rememberNowNext(epg, ch.id, always = true)?.now
+    val replaying = isReplaying(cur)
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg.copy(alpha = 0.85f))) {
         Row(Modifier.height(if (tv) 56.dp else 48.dp), verticalAlignment = Alignment.CenterVertically) {
             NumberBlock(ch.channelNumber, Modifier.width(64.dp).fillMaxHeight(), 22.sp)
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 JText(cur?.title ?: ch.name, if (tv) 18.sp else 16.sp, color = c.tx, weight = FontWeight.SemiBold)
                 JText(
-                    if (cur != null) "${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)} · ${cur.minutesLeft(now)} min left"
-                    else listOfNotNull(ch.group, ch.language).joinToString(" · "),
+                    when {
+                        cur != null && replaying -> replayStatus(cur)
+                        cur != null -> "${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)} · ${cur.minutesLeft(now)} min left"
+                        else -> listOfNotNull(ch.group, ch.language).joinToString(" · ")
+                    },
                     14.sp, color = c.t2,
                 )
             }
             if (ts != null) BehindLiveTag(ts, 14.sp, Modifier.padding(end = 12.dp))
         }
-        if (cur != null) JtvProgress(cur.progress(now), height = 2.dp, track = Color(0x33FFFFFF))
+        if (cur != null && !replaying) JtvProgress(cur.progress(now), height = 2.dp, track = Color(0x33FFFFFF))
     }
 }
 

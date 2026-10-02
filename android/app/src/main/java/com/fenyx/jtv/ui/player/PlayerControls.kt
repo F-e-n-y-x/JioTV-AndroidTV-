@@ -109,12 +109,21 @@ internal class Timeshift {
     var scheduleMs by mutableLongStateOf(-1L)
         private set
 
+    /**
+     * Replaying a past show (Jio catch-up), set by the player per load (not cleared by [reset]). The
+     * bar covers the programme; the Live button reads "Go live" and returns to the live channel.
+     */
+    var replay by mutableStateOf(false)
+
     val behindMs: Long get() = (spanMs - positionMs).coerceAtLeast(0L)
-    /** Live: at the live point. Schedule file: within 30 s of the scheduled position. */
-    val atLive: Boolean get() = if (vod) scheduleMs >= 0 && kotlin.math.abs(positionMs - scheduleMs) < ScheduleToleranceMs
-                                else !live || behindMs < LiveToleranceMs
-    /** The Live / Back to schedule button has something to do. */
-    val hasLiveButton: Boolean get() = if (vod) scheduleMs >= 0 else live
+    /** Live: at the live point. Schedule file: within 30 s of the scheduled position. Replay: never. */
+    val atLive: Boolean get() = when {
+        replay -> false
+        vod -> scheduleMs >= 0 && kotlin.math.abs(positionMs - scheduleMs) < ScheduleToleranceMs
+        else -> !live || behindMs < LiveToleranceMs
+    }
+    /** The Live / Back to schedule / Go live button has something to do. */
+    val hasLiveButton: Boolean get() = replay || if (vod) scheduleMs >= 0 else live
 
     private val window = Timeline.Window()
     private var holdStart = 0L
@@ -372,7 +381,7 @@ internal fun BehindTime(ts: Timeshift, modifier: Modifier = Modifier) {
 /** "Behind live · −02:35" for the info strap / video tag, so a returning viewer knows what they see. */
 @Composable
 internal fun BehindLiveTag(ts: Timeshift, size: androidx.compose.ui.unit.TextUnit, modifier: Modifier = Modifier) {
-    val secs by remember(ts) { derivedStateOf { if (ts.vod || ts.atLive) -1L else ts.behindMs / 1000 } }
+    val secs by remember(ts) { derivedStateOf { if (ts.replay || ts.vod || ts.atLive) -1L else ts.behindMs / 1000 } }
     if (secs >= 0) {
         val c = Jtv.colors
         Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -392,12 +401,18 @@ internal fun LiveButton(ts: Timeshift, onClick: () -> Unit, modifier: Modifier =
     val c = Jtv.colors
     val atLive by remember(ts) { derivedStateOf { ts.atLive } }
     val vod = ts.vod
-    val label = if (vod) "Back to schedule" else "Live"
+    val replay = ts.replay
+    val label = when {
+        replay -> "Go live"
+        vod -> "Back to schedule"
+        else -> "Live"
+    }
     JtvClickable(
         onClick = onClick,
         modifier = modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
             .semantics {
                 contentDescription = when {
+                    replay -> "Go live. Leave the replay and watch the channel live"
                     vod -> if (atLive) "On schedule" else "Back to schedule"
                     atLive -> "Live. Playing live"
                     else -> "Go to live"

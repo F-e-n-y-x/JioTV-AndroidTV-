@@ -155,7 +155,8 @@ internal fun MiniPlayerContent(
                     if (channel != null) {
                         val title = if (channel.channelNumber > 0) "${channel.channelNumber} ${channel.name}" else channel.name
                         JText(title, 14.sp, color = c.tx, weight = FontWeight.SemiBold)
-                        val sub = error ?: cur?.title ?: channel.group.ifBlank { channel.language }
+                        val sub = error ?: cur?.let { if (isReplaying(it)) replayLine(it) else it.title }
+                            ?: channel.group.ifBlank { channel.language }
                         if (sub.isNotBlank()) JText(sub, 13.sp, color = c.t2)
                     }
                 }
@@ -168,7 +169,7 @@ internal fun MiniPlayerContent(
             }
             // The show's progress (2dp); an empty line keeps the bar height steady without a guide.
             Box(Modifier.fillMaxWidth().height(2.dp)) {
-                if (cur != null) JtvProgress(cur.progress(now), height = 2.dp, color = c.acc, track = c.line)
+                if (cur != null && !isReplaying(cur)) JtvProgress(cur.progress(now), height = 2.dp, color = c.acc, track = c.line)
             }
         }
     }

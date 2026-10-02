@@ -100,6 +100,8 @@ fun TvPlayerScreen(
      * instead of a second ExoPlayer being built.
      */
     openToken: Int = 0,
+    /** Catch-up: replay this programme of the launch channel instead of playing it live (null = live). */
+    catchup: com.fenyx.jtv.data.CatchupRequest? = null,
 ) {
     val context = LocalContext.current
     // The app theme (the player itself is dark-only); the mini player matches the app.
@@ -137,6 +139,17 @@ fun TvPlayerScreen(
     var langOverride by remember { mutableStateOf<Channel?>(null) }
     LaunchedEffect(currentChannel) { langOverride = null }
 
+    // ── Catch-up (replay) state ──
+    // The programme being replayed (null = live). Set from the launch request and each re-open; any
+    // zap / tune / "Go live" clears it. Only applies to the channel it was made for.
+    var replay by rememberSaveable(stateSaver = CatchupRequestSaver) { mutableStateOf(catchup) }
+    var replayEnded by remember { mutableStateOf(false) }
+    val activeReplay = replay?.takeIf { it.channelId == currentChannel?.id }
+    val replayRef = rememberUpdatedState(activeReplay)
+    // Last replay loaded and where it was, so a re-fetch (expired token, error) resumes in place.
+    val replayResume = remember { object { var req: com.fenyx.jtv.data.CatchupRequest? = null } }
+    // ── end catch-up state ──
+
     // A channel opened again from outside (mini player host): retune this same player.
     var seenOpenToken by rememberSaveable { mutableIntStateOf(openToken) }
     LaunchedEffect(openToken) {
@@ -144,6 +157,8 @@ fun TvPlayerScreen(
             seenOpenToken = openToken
             currentGroup = initialGroup
             currentIndex = initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            replay = catchup // catch-up
+            replayEnded = false
         }
     }
 
@@ -391,9 +406,12 @@ fun TvPlayerScreen(
                 if (timeline.isEmpty) return
                 val w = timeline.getWindow(exoPlayer.currentMediaItemIndex.coerceIn(0, timeline.windowCount - 1),
                     androidx.media3.common.Timeline.Window())
-                if (!w.isPlaceholder && !w.isLive && !vodItem) vodItem = true
+                // A replay is a file too, but not a recorded-schedule channel (catch-up).
+                if (!w.isPlaceholder && !w.isLive && !vodItem && replayRef.value == null) vodItem = true
             }
             override fun onPlaybackStateChanged(state: Int) {
+                // Catch-up: the replayed programme is over -> "Watch next programme" / "Go live".
+                if (state == Player.STATE_ENDED && replayRef.value != null) replayEnded = true
                 // Schedule file finished: Jio now hands out the next programme's file.
                 if (state == Player.STATE_ENDED && vodItem) {
                     android.util.Log.d("TvPlayer", "Schedule file ended: loading the next programme")
@@ -449,8 +467,14 @@ fun TvPlayerScreen(
     // a moment after open, or the hardware-decoder toggle changes), the NEW instance must be given the
     // media source — otherwise it buffers forever until some other change re-triggers this. That was the
     // "loads until I change a setting" bug.
-    LaunchedEffect(exoPlayer, playingChannel, prefsLoaded, streamRefreshTrigger) {
+    LaunchedEffect(exoPlayer, playingChannel, prefsLoaded, streamRefreshTrigger, activeReplay) {
         val ch = playingChannel
+        // Catch-up: replay this programme (from Jio's catch-up CDN) instead of the live stream.
+        val cu = activeReplay
+        // Re-loading the same replay (token expiry, error): carry on from where it was.
+        val resumeMs = if (cu != null && cu == replayResume.req) exoPlayer.currentPosition.coerceAtLeast(0L) else 0L
+        replayResume.req = cu
+        ts.replay = cu != null
         // Wait for the saved prefs before the first prepare(), so the correct quality constraints are
         // already in place and playback never has to switch rendition (and re-init the secure decoder)
         // right after it starts. NOTE: `quality` is deliberately NOT a key here — it does not change
@@ -484,8 +508,11 @@ fun TvPlayerScreen(
             val chNumber = ch.channelNumber.toString()
             android.util.Log.d("TvPlayer", "Fetching stream URL for channel $chNumber")
             
-            val result = com.fenyx.jtv.data.JioApiClient.getStreamUrl(context, chNumber, authData)
-            
+            val result = if (cu != null) {
+                // The channel the guide entry belongs to (not a language sibling): its srno is for it.
+                com.fenyx.jtv.data.JioApiClient.getStreamUrl(context, cu.channelNumber.toString(), authData, catchup = cu.toParams())
+            } else com.fenyx.jtv.data.JioApiClient.getStreamUrl(context, chNumber, authData)
+
             if (result.isSuccess) {
                 val streamData = result.getOrNull()!!
                 val finalUrl = streamData.streamUrl
@@ -493,7 +520,8 @@ fun TvPlayerScreen(
                 // Seed the token holder so the ResolvingDataSource and refresh loop have the current token.
                 tokenHolder.set(com.fenyx.jtv.data.JioApiClient.extractHdneaToken(finalUrl))
                 streamBase.set(finalUrl.substringBefore('?'))
-                vodItem = isScheduleFileUrl(finalUrl)
+                vodItem = cu == null && isScheduleFileUrl(finalUrl)
+                replayEnded = false
                 keyHeadersHolder.set(if (streamData.isMpd) emptyMap() else streamData.licenseHeaders)
 
                 android.util.Log.d("TvPlayer", "Loading stream: $finalUrl (isMpd: ${streamData.isMpd})")
@@ -527,6 +555,7 @@ fun TvPlayerScreen(
 
                 httpDataSourceFactory.setDefaultRequestProperties(streamData.headers)
                 ts.reset()
+                ts.replay = cu != null
 
                 val mediaSource = mediaSourceFactory.createMediaSource(mediaItemBuilder.build())
 
@@ -535,6 +564,7 @@ fun TvPlayerScreen(
                     exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
                         .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO).build()
                     exoPlayer.setMediaSource(mediaSource)
+                    if (resumeMs > 0) exoPlayer.seekTo(resumeMs) // catch-up: same replay, same place
                     exoPlayer.prepare()
                     exoPlayer.playWhenReady = true
                     userPaused = false // a new channel always starts playing
@@ -547,7 +577,12 @@ fun TvPlayerScreen(
                 android.util.Log.e("TvPlayer", "Failed to fetch stream: $fetchErr")
                 // Jio refusing the channel, or its stream being gone from the CDN, won't fix itself in
                 // the next few seconds — say so at once instead of retrying 5x and then blaming the login.
-                if (fetchEx is com.fenyx.jtv.data.JioApiClient.SessionExpiredException) {
+                if (cu != null && fetchEx !is com.fenyx.jtv.data.JioApiClient.SessionExpiredException &&
+                    (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException || retryCount.intValue >= 2)) {
+                    // Catch-up: Jio won't hand out this show (any more). Say so; live is one press away.
+                    isBuffering = false
+                    playbackError = PlayerError("This show can't be replayed right now.", ErrorAction.GoLive, ErrorAction.Retry)
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.SessionExpiredException) {
                     isBuffering = false
                     playbackError = if (playerSetupMode == "server" || playerSetupMode == "jtv")
                         PlayerError("The Jio sign-in on your JTV server has expired.", ErrorAction.Retry)
@@ -619,8 +654,11 @@ fun TvPlayerScreen(
     // The Jio `__hdnea__` token expires ~120s after issue. This loop fetches a fresh stream URL a few
     // seconds BEFORE expiry and publishes the new token to tokenHolder, so the ResolvingDataSource
     // keeps rewriting requests with a valid token. Playback never sees a 403 -> no reload, no buffering.
-    LaunchedEffect(playingChannel) {
+    // Catch-up: keyed on the replay too, and it asks geturl for the SAME catch-up programme, so a
+    // replay's token is only ever refreshed from a replay URL (never swapped for the live stream's).
+    LaunchedEffect(playingChannel, activeReplay) {
         val ch = playingChannel ?: return@LaunchedEffect
+        val cu = activeReplay
         while (true) {
             val token = tokenHolder.get()
             val expSec = com.fenyx.jtv.data.JioApiClient.extractTokenExpiryEpochSec(token)
@@ -634,7 +672,9 @@ fun TvPlayerScreen(
             // only re-runs failing refreshes every minute. The user's OK press reloads the stream.
             if (playbackError != null) continue
             val authData = settingsManager.authDataFlow.first() ?: continue
-            val res = com.fenyx.jtv.data.JioApiClient.getStreamUrl(
+            val res = if (cu != null) com.fenyx.jtv.data.JioApiClient.getStreamUrl(
+                context, cu.channelNumber.toString(), authData, catchup = cu.toParams(), useCache = false
+            ) else com.fenyx.jtv.data.JioApiClient.getStreamUrl(
                 context, ch.channelNumber.toString(), authData, useCache = false
             )
             if (res.isSuccess) {
@@ -642,7 +682,8 @@ fun TvPlayerScreen(
                 val newToken = com.fenyx.jtv.data.JioApiClient.extractHdneaToken(newUrl)
                 // Schedule file: geturl may already point at the NEXT programme's file; its token is for
                 // that file, so only take it when it is the same file (never reload mid-programme).
-                if (vodItem && newUrl.substringBefore('?') != streamBase.get()) continue
+                // Catch-up: likewise only for the same replay file.
+                if ((vodItem || cu != null) && newUrl.substringBefore('?') != streamBase.get()) continue
                 if (newToken.isNotEmpty()) {
                     tokenHolder.set(newToken)
                     android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
@@ -869,6 +910,9 @@ fun TvPlayerScreen(
 
     // Banner on every tune.
     LaunchedEffect(currentChannel?.id) { if (currentChannel != null) ui.showBanner() }
+    // Catch-up: the strap ("Replay · …") on every replay start too; the end panel only while expanded.
+    LaunchedEffect(activeReplay) { if (activeReplay != null && !mini) ui.showBanner() }
+    val replayEndShown = replayEnded && activeReplay != null && !mini && playbackError == null
 
     fun setPaused(p: Boolean) {
         if (p) { exoPlayer.pause(); userPaused = true } else { exoPlayer.play(); userPaused = false }
@@ -908,7 +952,29 @@ fun TvPlayerScreen(
         ui.bannerToken++
     }
 
+    // ── Catch-up actions ──
+    /** Leave the replay: the same channel, live (the load effect re-tunes on the change). */
+    fun exitReplay() {
+        replay = null
+        replayEnded = false
+        playbackError = null
+        retryCount.intValue = 0
+        ui.showBanner()
+    }
+
+    /** "Watch next programme": replay the show after the one that ended, else go live. */
+    fun replayNext(next: com.fenyx.jtv.data.EpgProgram?) {
+        val ch = currentChannel
+        val req = if (ch != null && next != null) com.fenyx.jtv.data.Catchup.request(ch, next) else null
+        if (req == null) { exitReplay(); return }
+        replay = req
+        replayEnded = false
+        ui.showBanner()
+    }
+    // ── end catch-up actions ──
+
     fun doGoLive() {
+        if (replay != null) { exitReplay(); return } // catch-up: "Go live"
         if (ts.vod) {
             // Back to schedule: where the broadcast is now.
             val t = ts.scheduleMs
@@ -928,6 +994,7 @@ fun TvPlayerScreen(
     fun doZap(delta: Int) {
         val n = currentChannels.size
         if (n == 0) return
+        replay = null; replayEnded = false // catch-up: a zap goes to the live neighbour
         currentIndex = ((currentIndex + delta) % n + n) % n
         ui.showBanner()
     }
@@ -935,6 +1002,7 @@ fun TvPlayerScreen(
     fun doTune(group: String?, index: Int) {
         val list = if (group == currentGroup) currentChannels else resolveGroup(group)
         if (list.isEmpty()) return
+        replay = null; replayEnded = false // catch-up: tuning anywhere is live
         currentGroup = group
         currentIndex = index.coerceIn(0, list.size - 1)
         ui.overlay = PlayerOverlay.Banner
@@ -1180,7 +1248,8 @@ fun TvPlayerScreen(
     // Not while mini: the screen behind owns focus then (restarted on expand, which re-takes focus).
     LaunchedEffect(mini) {
         if (mini) return@LaunchedEffect
-        snapshotFlow { Triple(ui.overlay, ui.pointerChrome, playbackError != null && !isBuffering) }
+        // (The catch-up end panel takes focus like the error panel: it uses the same first-button focus.)
+        snapshotFlow { Triple(ui.overlay, ui.pointerChrome, (playbackError != null && !isBuffering) || (replayEnded && replay != null)) }
             .collect { (ov, _, err) ->
                 if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) {
                     withFrameNanos { }
@@ -1230,6 +1299,8 @@ fun TvPlayerScreen(
 
 
     JtvDarkOnly {
+      // Catch-up: overlays show "Replay · …" for the replayed show (see PlayerReplay.kt).
+      CompositionLocalProvider(LocalReplay provides activeReplay) {
         Box(
             modifier = modifier
                 .then(rootFrame)
@@ -1282,7 +1353,7 @@ fun TvPlayerScreen(
                     val isCenter = k == Key.Enter || k == Key.DirectionCenter || k == Key.NumPadEnter
                     val ov = ui.overlay
                     val clean = ov == PlayerOverlay.None || ov == PlayerOverlay.Banner
-                    val errShown = playbackError != null && !isBuffering
+                    val errShown = (playbackError != null && !isBuffering) || replayEndShown // catch-up end panel keeps OK / Left / Right
                     val entering = ui.number.isNotEmpty()
                     val controlsUp = ov == PlayerOverlay.Controls
                     // Any key inside the TV controls layer keeps it up.
@@ -1499,12 +1570,37 @@ fun TvPlayerScreen(
                             ErrorAction.Retry -> doRetry()
                             ErrorAction.NextChannel -> doZap(1)
                             ErrorAction.Settings -> onSettings()
+                            ErrorAction.GoLive -> exitReplay()
                         }
                     },
                     modifier = Modifier.padding(24.dp),
                 ) }
             }
+
+            // ── Catch-up: the replayed programme ended ──
+            val endedReplay = activeReplay
+            if (replayEndShown && endedReplay != null) {
+                val errBox = if (tabletPage) Modifier.videoBox(videoMode) else Modifier.matchParentSize()
+                val next = remember(endedReplay) {
+                    val ch = currentChannel
+                    val progs = vm?.epgData?.value?.get(endedReplay.channelId).orEmpty()
+                    com.fenyx.jtv.data.Catchup.nextProgramme(progs, endedReplay)
+                        ?.takeIf { ch != null && com.fenyx.jtv.data.Catchup.isReplayable(ch, it, System.currentTimeMillis()) }
+                }
+                Box(errBox, contentAlignment = Alignment.Center) {
+                    ReplayEndPanel(
+                        finished = endedReplay.title,
+                        next = next,
+                        firstFocus = errorFocus,
+                        touch = !isTv,
+                        onNext = { replayNext(next) },
+                        onLive = { exitReplay() },
+                        modifier = Modifier.padding(24.dp),
+                    )
+                }
+            }
         }
+      }
     }
 
     LaunchedEffect(mini) {

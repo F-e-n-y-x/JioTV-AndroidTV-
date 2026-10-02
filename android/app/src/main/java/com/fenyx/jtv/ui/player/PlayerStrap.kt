@@ -109,6 +109,13 @@ internal class EpgSource(private val vm: MainViewModel?, private val enabled: St
 internal fun rememberNowNext(epg: EpgSource, channelId: String, always: Boolean = false): NowNext? {
     val programs = epg.programs(channelId, always)
     val now = LocalNow.current
+    // Replaying a show on this (the playing) channel: that show is "now"; nothing is "next".
+    val replay = LocalReplay.current?.takeIf { always && it.channelId == channelId }
+    if (replay != null) {
+        return remember(programs, replay) {
+            NowNext(programs?.firstOrNull { replay.isFor(it) } ?: replay.asProgram(), null, emptyList())
+        }
+    }
     return remember(programs, now) { programs?.takeIf { it.isNotEmpty() }?.let { nowNext(it, now) } }
 }
 
@@ -160,7 +167,10 @@ internal fun InfoStrap(
                 }
                 JText(cur.title, s.titleSize, weight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
                 if (meta.isNotEmpty()) JText(meta, s.metaSize, color = c.t2, modifier = Modifier.padding(top = 2.dp))
-                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (isReplaying(cur)) {
+                    // Catch-up: when it was on; the seek bar shows where in the show we are.
+                    JText(replayStatus(cur), s.metaSize, color = c.tx, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+                } else Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     JText("${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)}", s.metaSize, color = c.t2)
                     Spacer(Modifier.width(12.dp))
                     JtvProgress(cur.progress(now), Modifier.weight(1f))
@@ -373,6 +383,7 @@ internal fun errorActionLabel(a: ErrorAction) = when (a) {
     ErrorAction.Retry -> "Try again"
     ErrorAction.NextChannel -> "Next channel"
     ErrorAction.Settings -> "Open settings"
+    ErrorAction.GoLive -> "Go live"
 }
 
 /** One sentence and one or two buttons; focus lands on the first button. */

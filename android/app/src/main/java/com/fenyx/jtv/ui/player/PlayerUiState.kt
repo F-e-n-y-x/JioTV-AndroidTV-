@@ -20,7 +20,7 @@ enum class PlayerOverlay { None, Banner, Browse, Options, Menu, Controls }
 enum class OptionsPage { Main, Language, Quality, Aspect, Voice, Sleep }
 
 /** The ways a failed channel is explained. Each maps to one sentence and one or two buttons. */
-enum class ErrorAction { Retry, NextChannel, Settings }
+enum class ErrorAction { Retry, NextChannel, Settings, GoLive }
 
 @Immutable
 data class PlayerError(val message: String, val primary: ErrorAction, val secondary: ErrorAction? = null)
