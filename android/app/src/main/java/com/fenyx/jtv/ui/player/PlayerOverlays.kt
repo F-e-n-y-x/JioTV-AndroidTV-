@@ -551,7 +551,7 @@ private fun MiniInfoLine(ch: Channel, epg: EpgSource, ts: Timeshift?, modifier: 
                     when {
                         cur != null && replaying -> replayStatus(cur)
                         cur != null -> "${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)} · " + cur.minutesLeft(now).let { pluralStringResource(R.plurals.player_min_left, it, it) }
-                        else -> listOfNotNull(ch.group, ch.language).joinToString(" · ")
+                        else -> listOfNotNull(com.fenyx.jtv.ui.main.groupLabel(ch.group), com.fenyx.jtv.ui.main.languageLabel(ch.language)).joinToString(" · ")
                     },
                     14.sp, color = c.t2,
                 )

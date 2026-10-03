@@ -258,7 +258,7 @@ private fun SearchRow(channel: Channel, compact: Boolean, modifier: Modifier, on
             ChannelPlate(channel.logoUrl, if (compact) 56.dp else 64.dp, if (compact) 32.dp else 36.dp)
             Column(Modifier.weight(1f)) {
                 JText(channel.name, 18.sp, color = if (focused) c.invTx else c.tx, weight = FontWeight.SemiBold)
-                JText(channel.group, 14.sp, color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2)
+                JText(com.fenyx.jtv.ui.main.groupLabel(channel.group), 14.sp, color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2)
             }
         }
     }

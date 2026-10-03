@@ -104,7 +104,7 @@ internal fun groupLabel(group: String?): String = when (group) {
     null, MainViewModel.GROUP_ALL -> stringResource(R.string.player_group_all)
     MainViewModel.GROUP_FAVORITES -> stringResource(R.string.common_favourites)
     MainViewModel.GROUP_RECENT -> stringResource(R.string.player_group_recent)
-    else -> group
+    else -> com.fenyx.jtv.ui.main.groupLabel(group)
 }
 
 internal val QUALITY_OPTIONS = listOf(

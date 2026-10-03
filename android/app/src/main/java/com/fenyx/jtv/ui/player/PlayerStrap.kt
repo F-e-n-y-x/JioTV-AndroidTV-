@@ -122,8 +122,9 @@ internal fun rememberNowNext(epg: EpgSource, channelId: String, always: Boolean 
     return remember(programs, now) { programs?.takeIf { it.isNotEmpty() }?.let { nowNext(it, now) } }
 }
 
+@androidx.compose.runtime.Composable
 internal fun channelSubtitle(ch: Channel): String =
-    listOf(ch.group, ch.language).filter { it.isNotBlank() }.distinct().joinToString(" · ")
+    listOf(com.fenyx.jtv.ui.main.groupLabel(ch.group), com.fenyx.jtv.ui.main.languageLabel(ch.language)).filter { it.isNotBlank() }.distinct().joinToString(" · ")
 
 /** "Series · Sitcom · U · Hindi" (like the official app), skipping what the guide doesn't have. */
 internal fun programMeta(p: EpgProgram, language: String?): String {
