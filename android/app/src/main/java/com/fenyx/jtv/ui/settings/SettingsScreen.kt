@@ -1,5 +1,9 @@
 package com.fenyx.jtv.ui.settings
 
+import com.fenyx.jtv.i18n.AppLocale
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,7 +56,7 @@ import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.launch
 
 /** Which second-level picker / dialog is open. */
-private enum class Sheet { None, Theme, Accent, StartWith, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
+private enum class Sheet { None, Theme, AppLanguage, Accent, StartWith, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
 
 /**
  * Settings, v2 "Everyday": a plain two-level list. Section labels, then rows of *label + current
@@ -121,32 +125,48 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     LaunchedEffect(Unit) { if (isTv) runCatching { firstItemFocus.requestFocus() } }
 
     val bufferOptions = listOf(
-        30 to "Data saver (30 seconds)",
-        60 to "Balanced (60 seconds)",
-        90 to "Smooth (90 seconds)",
-        120 to "Smoothest (120 seconds)"
+        30 to stringResource(R.string.settings_buffer_30),
+        60 to stringResource(R.string.settings_buffer_60),
+        90 to stringResource(R.string.settings_buffer_90),
+        120 to stringResource(R.string.settings_buffer_120)
     )
     val languages = listOf(
-        "hi" to "Hindi", "en" to "English", "ta" to "Tamil", "te" to "Telugu",
-        "kn" to "Kannada", "ml" to "Malayalam", "bn" to "Bengali", "mr" to "Marathi",
-        "gu" to "Gujarati", "pa" to "Punjabi", "or" to "Odia", "as" to "Assamese"
+        "hi" to stringResource(R.string.settings_lang_hi), "en" to stringResource(R.string.settings_lang_en),
+        "ta" to stringResource(R.string.settings_lang_ta), "te" to stringResource(R.string.settings_lang_te),
+        "kn" to stringResource(R.string.settings_lang_kn), "ml" to stringResource(R.string.settings_lang_ml),
+        "bn" to stringResource(R.string.settings_lang_bn), "mr" to stringResource(R.string.settings_lang_mr),
+        "gu" to stringResource(R.string.settings_lang_gu), "pa" to stringResource(R.string.settings_lang_pa),
+        "or" to stringResource(R.string.settings_lang_or), "as" to stringResource(R.string.settings_lang_as)
     )
     val qualities = listOf(
-        "auto" to "Automatic", "high" to "High (1080p)", "medium" to "Medium (720p)", "low" to "Low (480p)"
+        "auto" to stringResource(R.string.settings_quality_auto), "high" to stringResource(R.string.settings_quality_high),
+        "medium" to stringResource(R.string.settings_quality_medium), "low" to stringResource(R.string.settings_quality_low)
     )
     val resizeModes = listOf(
-        0 to "Fit the screen (default)",
-        3 to "Fill the screen (crops edges)",
-        4 to "Zoom",
-        1 to "Stretch to width",
-        2 to "Stretch to height"
+        0 to stringResource(R.string.settings_size_fit),
+        3 to stringResource(R.string.settings_size_fill),
+        4 to stringResource(R.string.settings_size_zoom),
+        1 to stringResource(R.string.settings_size_stretch_width),
+        2 to stringResource(R.string.settings_size_stretch_height)
     )
-    val themes = listOf("system" to "Same as device", "dark" to "Dark", "light" to "Light")
+    val themes = listOf(
+        "system" to stringResource(R.string.settings_theme_system),
+        "dark" to stringResource(R.string.settings_theme_dark),
+        "light" to stringResource(R.string.settings_theme_light),
+    )
+    // App language: Same as device / English / हिन्दी (English and Hindi are always shown in their own script).
+    val appLanguages = listOf(
+        AppLocale.SYSTEM to stringResource(R.string.settings_app_language_system),
+        "en" to stringResource(R.string.settings_app_language_en),
+        "hi" to stringResource(R.string.settings_app_language_hi),
+    )
+    val appLanguageValue = remember { AppLocale.current(context) }
+    val accents = com.fenyx.jtv.theme.ACCENTS.map { it.first to stringResource(it.second) }
     // No stored choice = dark on TV, device setting on phone/tablet (see JioTVGoTVTheme).
     val themeValue = themeMode ?: if (isTv) "dark" else "system"
     val accentMode by settingsManager.accentFlow.collectAsState(initial = null)
     val accentValue = accentMode ?: "amber"
-    val startOptions = listOf("list" to "Channel list", "last" to "Last channel")
+    val startOptions = listOf("list" to stringResource(R.string.settings_start_list), "last" to stringResource(R.string.settings_start_last))
 
     val versionName = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
@@ -156,99 +176,105 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     // ─── Rows (built as data so the list stays a flat, keyed LazyColumn) ───
     val backup = rememberFavoritesBackup { id -> mainViewModel.getAllChannels().firstOrNull { it.id == id }?.name }
     val rows: List<SRow> = buildList {
-        add(SRow.Section("General"))
-        add(SRow.Item("theme", "Appearance", value = themes.first { it.first == themeValue }.second) { sheet = Sheet.Theme })
-        add(SRow.Item("accent", "Accent colour", value = com.fenyx.jtv.theme.ACCENTS.firstOrNull { it.first == accentValue }?.second ?: "Amber",
-            description = "Used for highlights, the channel number and progress") { sheet = Sheet.Accent })
-        add(SRow.Item("start", "Start with", value = if (autoplayLastChannel) "Last channel" else "Channel list",
-            description = "What you see when the app opens") { sheet = Sheet.StartWith })
+        add(SRow.Section(stringResource(R.string.settings_section_general)))
+        add(SRow.Item("theme", stringResource(R.string.settings_appearance), value = themes.first { it.first == themeValue }.second) { sheet = Sheet.Theme })
+        add(SRow.Item("appLanguage", stringResource(R.string.settings_app_language),
+            value = appLanguages.firstOrNull { it.first == appLanguageValue }?.second ?: appLanguages[0].second,
+            description = stringResource(R.string.settings_app_language_desc)) { sheet = Sheet.AppLanguage })
+        add(SRow.Item("accent", stringResource(R.string.settings_accent), value = accents.firstOrNull { it.first == accentValue }?.second ?: accents[0].second,
+            description = stringResource(R.string.settings_accent_desc)) { sheet = Sheet.Accent })
+        add(SRow.Item("start", stringResource(R.string.settings_start), value = stringResource(if (autoplayLastChannel) R.string.settings_start_last else R.string.settings_start_list),
+            description = stringResource(R.string.settings_start_desc)) { sheet = Sheet.StartWith })
 
-        add(SRow.Section("Picture and sound"))
-        add(SRow.Item("quality", "Picture quality", value = qualities.find { it.first == quality }?.second ?: "Automatic") { sheet = Sheet.Quality })
-        add(SRow.Item("language", "Sound language", value = languages.find { it.first == language }?.second ?: language,
-            description = "Preferred language when a channel has more than one") { sheet = Sheet.Language })
-        add(SRow.Item("resize", "Picture size", value = resizeModes.find { it.first == playerResizeMode }?.second ?: "Fit the screen") { sheet = Sheet.PictureSize })
-        add(SRow.Item("buffer", "Smooth playback", value = bufferOptions.find { it.first == playbackBufferSec }?.second ?: "$playbackBufferSec seconds",
-            description = "More smoothness uses more memory") { sheet = Sheet.Buffer })
-        if (showPip) add(SRow.Item("pip", "Picture-in-picture when leaving the app", value = if (pipOnLeave) "On" else "Off",
-            description = "Keeps the channel playing in a small window") { scope.launch { settingsManager.setPipOnLeave(!pipOnLeave) } })
-        if (showRemote) add(SRow.Item("remote", "Remote buttons", value = remoteProfileLabel(remoteMap),
-            description = "Choose what each button on your remote does") { remoteScreen = true })
+        add(SRow.Section(stringResource(R.string.settings_section_picture_sound)))
+        add(SRow.Item("quality", stringResource(R.string.settings_quality), value = qualities.find { it.first == quality }?.second ?: qualities[0].second) { sheet = Sheet.Quality })
+        add(SRow.Item("language", stringResource(R.string.settings_sound_language), value = languages.find { it.first == language }?.second ?: language,
+            description = stringResource(R.string.settings_sound_language_desc)) { sheet = Sheet.Language })
+        add(SRow.Item("resize", stringResource(R.string.settings_picture_size), value = resizeModes.find { it.first == playerResizeMode }?.second ?: stringResource(R.string.settings_size_fit_short)) { sheet = Sheet.PictureSize })
+        add(SRow.Item("buffer", stringResource(R.string.settings_buffer), value = bufferOptions.find { it.first == playbackBufferSec }?.second
+            ?: pluralStringResource(R.plurals.settings_buffer_seconds, playbackBufferSec, playbackBufferSec),
+            description = stringResource(R.string.settings_buffer_desc)) { sheet = Sheet.Buffer })
+        if (showPip) add(SRow.Item("pip", stringResource(R.string.settings_pip), value = onOff(pipOnLeave),
+            description = stringResource(R.string.settings_pip_desc)) { scope.launch { settingsManager.setPipOnLeave(!pipOnLeave) } })
+        if (showRemote) add(SRow.Item("remote", stringResource(R.string.settings_remote), value = remoteProfileLabel(remoteMap),
+            description = stringResource(R.string.settings_remote_desc)) { remoteScreen = true })
 
-        add(SRow.Section("Programme guide"))
-        add(SRow.Item("epg", "Programme guide", value = if (epgMode) "On" else "Off",
-            description = "Show what's on now and later") { scope.launch { settingsManager.setEpgMode(!epgMode) } })
-        add(SRow.Item("epgUrl", "Guide source", value = "Change", description = epgUrl) { sheet = Sheet.EpgUrl })
-        add(SRow.Item("epgRefresh", "Update the guide now", value = when (epgSyncStatus) {
-            EpgSyncStatus.IDLE -> "Update"
-            EpgSyncStatus.DOWNLOADING -> "Downloading…"
-            EpgSyncStatus.EXTRACTING -> "Unpacking…"
-            EpgSyncStatus.PARSING -> "Reading…"
-            EpgSyncStatus.COMPLETED -> "Done"
-            EpgSyncStatus.ERROR -> "Failed, try again"
-        }) {
+        add(SRow.Section(stringResource(R.string.settings_section_guide)))
+        add(SRow.Item("epg", stringResource(R.string.settings_section_guide), value = onOff(epgMode),
+            description = stringResource(R.string.settings_guide_desc)) { scope.launch { settingsManager.setEpgMode(!epgMode) } })
+        add(SRow.Item("epgUrl", stringResource(R.string.settings_guide_source), value = stringResource(R.string.settings_change), description = epgUrl) { sheet = Sheet.EpgUrl })
+        add(SRow.Item("epgRefresh", stringResource(R.string.settings_guide_update), value = stringResource(when (epgSyncStatus) {
+            EpgSyncStatus.IDLE -> R.string.settings_guide_status_idle
+            EpgSyncStatus.DOWNLOADING -> R.string.settings_guide_status_downloading
+            EpgSyncStatus.EXTRACTING -> R.string.settings_guide_status_extracting
+            EpgSyncStatus.PARSING -> R.string.settings_guide_status_parsing
+            EpgSyncStatus.COMPLETED -> R.string.common_done
+            EpgSyncStatus.ERROR -> R.string.settings_guide_status_error
+        })) {
             if (epgSyncStatus == EpgSyncStatus.IDLE || epgSyncStatus == EpgSyncStatus.COMPLETED || epgSyncStatus == EpgSyncStatus.ERROR) {
                 mainViewModel.fetchEpg(forceRefresh = true)
             }
         })
 
-        add(SRow.Section("Channels"))
-        add(SRow.Item("variants", "Group languages together", value = if (groupLanguageVariants) "On" else "Off",
-            description = "One entry per channel; pick the language while watching") {
+        add(SRow.Section(stringResource(R.string.settings_section_channels)))
+        add(SRow.Item("variants", stringResource(R.string.settings_group_languages), value = onOff(groupLanguageVariants),
+            description = stringResource(R.string.settings_group_languages_desc)) {
             scope.launch { settingsManager.setGroupLanguageVariants(!groupLanguageVariants) }
         })
 
-        add(SRow.Section("Favourites backup"))
-        add(SRow.Item("favSave", "Back up favourites", value = "Save",
-            description = "Saves them to Downloads, to restore after reinstalling") { backup.save() })
-        add(SRow.Item("favRestore", "Restore favourites", value = "Restore",
-            description = "Adds the favourites from your backup file") { backup.restore() })
+        add(SRow.Section(stringResource(R.string.settings_section_backup)))
+        add(SRow.Item("favSave", stringResource(R.string.settings_backup_save), value = stringResource(R.string.common_save),
+            description = stringResource(R.string.settings_backup_save_desc)) { backup.save() })
+        add(SRow.Item("favRestore", stringResource(R.string.settings_backup_restore), value = stringResource(R.string.settings_backup_restore_value),
+            description = stringResource(R.string.settings_backup_restore_desc)) { backup.restore() })
 
-        add(SRow.Section("Devices"))
-        add(SRow.Item("devName", "This device's name", value = deviceName) { showNameDialog = true })
-        add(SRow.Item("devPair", "Sync with another device", value = "",
-            description = "Share favourites with a phone, tablet or TV on the same Wi-Fi") { showPairFlow = true })
+        add(SRow.Section(stringResource(R.string.settings_section_devices)))
+        add(SRow.Item("devName", stringResource(R.string.settings_device_name), value = deviceName) { showNameDialog = true })
+        add(SRow.Item("devPair", stringResource(R.string.settings_device_pair), value = "",
+            description = stringResource(R.string.settings_device_pair_desc)) { showPairFlow = true })
         syncDevices.filter { it.paired }.forEach { d ->
-            add(SRow.Item("dev:${d.id}", d.name, value = "Forget", description = pairedDeviceLine(d)) { forgetDevice = d })
+            add(SRow.Item("dev:${d.id}", d.name, value = stringResource(R.string.settings_device_forget), description = pairedDeviceLine(d)) { forgetDevice = d })
         }
-        add(SRow.Item("devAuto", "Sync favourites automatically", value = if (autoSync) "On" else "Off",
-            description = "Changes on one device appear on the others") { com.fenyx.jtv.sync.LanSync.setAutoSync(!autoSync) })
-        add(SRow.Item("devNow", "Sync now", value = syncStatus ?: "Sync") { com.fenyx.jtv.sync.LanSync.syncNow() })
+        add(SRow.Item("devAuto", stringResource(R.string.settings_device_auto), value = onOff(autoSync),
+            description = stringResource(R.string.settings_device_auto_desc)) { com.fenyx.jtv.sync.LanSync.setAutoSync(!autoSync) })
+        add(SRow.Item("devNow", stringResource(R.string.settings_device_sync_now), value = syncStatus ?: stringResource(R.string.settings_device_sync)) { com.fenyx.jtv.sync.LanSync.syncNow() })
 
-        add(SRow.Section("If the picture has problems"))
-        add(SRow.Item("hw", "Hardware decoder", value = if (hwDecoder) "On" else "Off",
-            description = "Keep on for most TVs. Applies to the next channel.") {
+        add(SRow.Section(stringResource(R.string.settings_section_problems)))
+        add(SRow.Item("hw", stringResource(R.string.settings_hw), value = onOff(hwDecoder),
+            description = stringResource(R.string.settings_hw_desc)) {
             scope.launch { settingsManager.setHardwareDecoder(!hwDecoder) }
         })
-        add(SRow.Item("tunnel", "Tunnelling", value = if (tunneling) "On" else "Off",
-            description = "Keep off if the picture freezes or goes black. Applies to the next channel.") {
+        add(SRow.Item("tunnel", stringResource(R.string.settings_tunnel), value = onOff(tunneling),
+            description = stringResource(R.string.settings_tunnel_desc)) {
             scope.launch { settingsManager.setTunneling(!tunneling) }
         })
 
-        add(SRow.Section("Account"))
-        add(SRow.Item("method", "Sign-in method", value = when (setupMode) {
-            "server" -> "Own server"
-            "jtv" -> "Access code"
-            else -> "Jio number"
-        }, description = if (setupMode == "server") serverUrl.ifEmpty { "Server address not set" } else "Change how this device signs in") {
+        add(SRow.Section(stringResource(R.string.settings_section_account)))
+        add(SRow.Item("method", stringResource(R.string.settings_method), value = stringResource(when (setupMode) {
+            "server" -> R.string.settings_method_server
+            "jtv" -> R.string.settings_method_jtv
+            else -> R.string.settings_method_jio
+        }), description = if (setupMode == "server") serverUrl.ifEmpty { stringResource(R.string.settings_method_no_server) }
+            else stringResource(R.string.settings_method_desc)) {
             sheet = Sheet.ConfirmChangeMethod
         })
         if (setupMode == "server" || setupMode == "jtv") {
-            add(SRow.Item("refresh", "Refresh from server", value = if (serverRefreshing) "Refreshing…" else (serverRefreshMsg ?: "Refresh"),
-                description = "Get the latest sign-in and channel list") { mainViewModel.refreshFromServer() })
+            add(SRow.Item("refresh", stringResource(R.string.settings_refresh),
+                value = if (serverRefreshing) stringResource(R.string.settings_refreshing) else (serverRefreshMsg ?: stringResource(R.string.settings_refresh_value)),
+                description = stringResource(R.string.settings_refresh_desc)) { mainViewModel.refreshFromServer() })
         }
-        add(SRow.Item("signout", "Sign out", value = "", description = "Removes your sign-in from this device") { sheet = Sheet.ConfirmSignOut })
+        add(SRow.Item("signout", stringResource(R.string.settings_signout), value = "", description = stringResource(R.string.settings_signout_desc)) { sheet = Sheet.ConfirmSignOut })
 
-        add(SRow.Section("About"))
-        add(SRow.Item("version", "App version", value = if (versionName.isNotEmpty()) versionName else "") { })
-        add(SRow.Item("update", "Check for updates", value = when {
+        add(SRow.Section(stringResource(R.string.settings_section_about)))
+        add(SRow.Item("version", stringResource(R.string.settings_version), value = if (versionName.isNotEmpty()) versionName else "") { })
+        add(SRow.Item("update", stringResource(R.string.settings_update), value = when {
             isDownloadingUpdate -> "${(updateDownloadProgress * 100).toInt()}%"
-            isCheckingUpdate -> "Checking…"
-            updateAvailable -> "Version ${updateInfo?.versionName} ready"
-            else -> "Check now"
+            isCheckingUpdate -> stringResource(R.string.settings_update_checking)
+            updateAvailable -> stringResource(R.string.settings_update_ready, updateInfo?.versionName ?: "")
+            else -> stringResource(R.string.settings_update_check_now)
         }, description = when {
-            isDownloadingUpdate -> "Downloading the update"
-            updateAvailable -> "Choose to see what's new and install"
+            isDownloadingUpdate -> stringResource(R.string.settings_update_downloading)
+            updateAvailable -> stringResource(R.string.settings_update_available_desc)
             updateStatusMessage != null -> updateStatusMessage
             else -> null
         }) {
@@ -291,7 +317,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 // No Back button: phone has the bottom tab bar, tablet the navigation rail, TV the tabs.
-                JText("Settings", if (isTv) 28.sp else 24.sp, Modifier.weight(1f), weight = FontWeight.Bold)
+                JText(stringResource(R.string.common_settings), if (isTv) 28.sp else 24.sp, Modifier.weight(1f), weight = FontWeight.Bold)
                 if (isTv && onTab != null) com.fenyx.jtv.ui.main.TvTabs(com.fenyx.jtv.ui.main.PhoneTab.Settings, onTab, Modifier.padding(end = 20.dp))
                 if (form != FormFactor.Phone) JtvClock(now, dateColor = c.t2, size = if (isTv) 34.sp else 28.sp)
             }
@@ -324,32 +350,38 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             }
             if (isTv) {
                 Spacer(Modifier.height(6.dp))
-                KeyHint(listOf("OK" to "change", "Back" to "close settings"))
+                KeyHint(listOf(stringResource(R.string.settings_hint_ok_key) to stringResource(R.string.settings_hint_change), stringResource(R.string.common_back) to stringResource(R.string.settings_hint_close)))
             }
         }
 
         // ─── Second level ───
         when (sheet) {
-            Sheet.Accent -> PickerDialog("Accent colour", com.fenyx.jtv.theme.ACCENTS.map { it.first to it.second }, accentValue,
+            Sheet.AppLanguage -> PickerDialog(stringResource(R.string.settings_app_language), appLanguages, appLanguageValue,
+                onSelect = { v ->
+                    sheet = Sheet.None
+                    context.findActivity()?.let { AppLocale.set(it, v) }
+                },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.Accent -> PickerDialog(stringResource(R.string.settings_accent), accents, accentValue,
                 onSelect = { v -> scope.launch { settingsManager.setAccent(v) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None },
                 swatches = com.fenyx.jtv.theme.ACCENTS.associate { it.first to (if (c.isDark) it.third.first else it.third.second) })
-            Sheet.Theme -> PickerDialog("Appearance", themes, themeValue,
+            Sheet.Theme -> PickerDialog(stringResource(R.string.settings_appearance), themes, themeValue,
                 onSelect = { v -> scope.launch { settingsManager.setThemeMode(v) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
-            Sheet.StartWith -> PickerDialog("Start with", startOptions, if (autoplayLastChannel) "last" else "list",
+            Sheet.StartWith -> PickerDialog(stringResource(R.string.settings_start), startOptions, if (autoplayLastChannel) "last" else "list",
                 onSelect = { v -> scope.launch { settingsManager.setAutoplayLastChannel(v == "last") }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
-            Sheet.Quality -> PickerDialog("Picture quality", qualities, quality,
+            Sheet.Quality -> PickerDialog(stringResource(R.string.settings_quality), qualities, quality,
                 onSelect = { v -> scope.launch { settingsManager.setDefaultQuality(v) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
-            Sheet.Language -> PickerDialog("Sound language", languages, language,
+            Sheet.Language -> PickerDialog(stringResource(R.string.settings_sound_language), languages, language,
                 onSelect = { v -> scope.launch { settingsManager.setDefaultLanguage(v) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
-            Sheet.PictureSize -> PickerDialog("Picture size", resizeModes.map { it.first.toString() to it.second }, playerResizeMode.toString(),
+            Sheet.PictureSize -> PickerDialog(stringResource(R.string.settings_picture_size), resizeModes.map { it.first.toString() to it.second }, playerResizeMode.toString(),
                 onSelect = { v -> scope.launch { settingsManager.setPlayerResizeMode(v.toInt()) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
-            Sheet.Buffer -> PickerDialog("Smooth playback", bufferOptions.map { it.first.toString() to it.second }, playbackBufferSec.toString(),
+            Sheet.Buffer -> PickerDialog(stringResource(R.string.settings_buffer), bufferOptions.map { it.first.toString() to it.second }, playbackBufferSec.toString(),
                 onSelect = { v -> scope.launch { settingsManager.setPlaybackBufferSec(v.toInt()) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
             Sheet.EpgUrl -> EpgUrlDialog(
@@ -357,16 +389,16 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                 onSave = { url -> scope.launch { settingsManager.setEpgUrl(url) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
             Sheet.ConfirmSignOut -> ConfirmDialog(
-                title = "Sign out?",
-                message = "You will need to sign in again to watch.",
-                confirm = "Sign out",
+                title = stringResource(R.string.settings_signout_title),
+                message = stringResource(R.string.settings_signout_message),
+                confirm = stringResource(R.string.settings_signout),
                 onConfirm = { sheet = Sheet.None; scope.launch { settingsManager.clearAuthData() } },
                 onDismiss = { sheet = Sheet.None })
             // Returning to the chooser = clear credentials + reset the chosen mode.
             Sheet.ConfirmChangeMethod -> ConfirmDialog(
-                title = "Change sign-in method?",
-                message = "This signs you out. You will choose how to sign in again.",
-                confirm = "Sign out and change",
+                title = stringResource(R.string.settings_change_method_title),
+                message = stringResource(R.string.settings_change_method_message),
+                confirm = stringResource(R.string.settings_change_method_confirm),
                 onConfirm = {
                     sheet = Sheet.None
                     scope.launch {
@@ -402,13 +434,23 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             onDismiss = { showNameDialog = false })
         forgetDevice?.let { d ->
             ConfirmDialog(
-                title = "Forget ${d.name}?",
-                message = "Favourites stop syncing with it. You can pair again later.",
-                confirm = "Forget",
+                title = stringResource(R.string.settings_forget_title, d.name),
+                message = stringResource(R.string.settings_forget_message),
+                confirm = stringResource(R.string.settings_device_forget),
                 onConfirm = { com.fenyx.jtv.sync.LanSync.forget(d.id); forgetDevice = null },
                 onDismiss = { forgetDevice = null })
         }
     }
+}
+
+@Composable
+private fun onOff(on: Boolean): String = stringResource(if (on) R.string.common_on else R.string.common_off)
+
+/** The Activity behind a Compose context (needed to switch the app language). */
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private sealed interface SRow {
@@ -475,7 +517,7 @@ internal fun SettingsRow(
                         description,
                         style = textStyle(if (isTv) 14.sp else 13.sp),
                         color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                        maxLines = 2, overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -519,9 +561,9 @@ fun SettingsItem(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(Modifier.weight(1f)) {
-                Text(title, style = textStyle(18.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1)
+                Text(title, style = textStyle(18.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (subtitle.isNotEmpty()) {
-                    Text(subtitle, style = textStyle(14.sp), color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2, maxLines = 2)
+                    Text(subtitle, style = textStyle(14.sp), color = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
             val vc = if (focused) c.invTx else if (valueColor != Color.Unspecified) valueColor else c.t2
@@ -529,7 +571,8 @@ fun SettingsItem(
                 androidx.tv.material3.Icon(icon, contentDescription = null, tint = vc, modifier = Modifier.size(24.dp))
             }
             if (value.isNotEmpty()) {
-                Text(value, style = textStyle(16.sp, FontWeight.SemiBold), color = vc, maxLines = 1)
+                Text(value, style = textStyle(16.sp, FontWeight.SemiBold), color = vc, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 220.dp))
             }
         }
     }
@@ -609,14 +652,14 @@ internal fun PickerDialog(
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                         if (isSelected) {
-                            Text("Selected", style = textStyle(14.sp), color = if (focused) c.invTx else c.t2)
+                            Text(stringResource(R.string.settings_selected), style = textStyle(14.sp), color = if (focused) c.invTx else c.t2)
                         }
                     }
                 }
             }
         }
         Spacer(Modifier.height(16.dp))
-        JtvButton("Cancel", onDismiss)
+        JtvButton(stringResource(R.string.common_cancel), onDismiss)
     }
 }
 
@@ -638,7 +681,7 @@ internal fun ConfirmDialog(
         Text(message, style = textStyle(18.sp), color = c.t2)
         Spacer(Modifier.height(24.dp))
         androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            JtvButton("Cancel", onDismiss, Modifier.focusRequester(cancelFocus), fontSize = 18.sp)
+            JtvButton(stringResource(R.string.common_cancel), onDismiss, Modifier.focusRequester(cancelFocus), fontSize = 18.sp)
             JtvButton(confirm, onConfirm, primary = true, fontSize = 18.sp)
         }
     }
@@ -657,9 +700,9 @@ private fun EpgUrlDialog(initial: String, onSave: (String) -> Unit, onDismiss: (
         epgKeyboard?.show() // TV: focus alone doesn't open the on-screen keyboard
     }
     DialogPanel(onDismiss, width = 560.dp) {
-        Text("Guide source", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+        Text(stringResource(R.string.settings_guide_source), style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
         Spacer(Modifier.height(16.dp))
-        Text("Web address", style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
+        Text(stringResource(R.string.settings_web_address), style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
@@ -681,8 +724,8 @@ private fun EpgUrlDialog(initial: String, onSave: (String) -> Unit, onDismiss: (
         }
         Spacer(Modifier.height(24.dp))
         androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            JtvButton("Cancel", onDismiss, fontSize = 18.sp)
-            JtvButton("Save", { onSave(tempUrl) }, primary = true, fontSize = 18.sp)
+            JtvButton(stringResource(R.string.common_cancel), onDismiss, fontSize = 18.sp)
+            JtvButton(stringResource(R.string.common_save), { onSave(tempUrl) }, primary = true, fontSize = 18.sp)
         }
     }
 }
@@ -714,10 +757,10 @@ private fun UpdateDialog(
                 .background(c.s1)
                 .padding(24.dp)
         ) {
-            Text("Update available", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
-            Text("Version ${updateInfo.versionName}", style = textStyle(16.sp), color = c.t2)
+            Text(stringResource(R.string.settings_update_title), style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+            Text(stringResource(R.string.settings_update_version, updateInfo.versionName), style = textStyle(16.sp), color = c.t2)
             Spacer(Modifier.height(16.dp))
-            Text("What's new", style = textStyle(16.sp, FontWeight.SemiBold), color = c.tx)
+            Text(stringResource(R.string.settings_update_whats_new), style = textStyle(16.sp, FontWeight.SemiBold), color = c.tx)
             Spacer(Modifier.height(6.dp))
             Box(
                 modifier = Modifier
@@ -730,7 +773,7 @@ private fun UpdateDialog(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item {
                         Text(
-                            text = updateInfo.changelog.ifBlank { "Performance improvements and bug fixes." },
+                            text = updateInfo.changelog.ifBlank { stringResource(R.string.settings_update_default_notes) },
                             style = textStyle(16.sp),
                             color = c.t2
                         )
@@ -741,7 +784,7 @@ private fun UpdateDialog(
             if (updateInfo.apkSize > 0) {
                 val sizeMb = String.format(java.util.Locale.US, "%.1f MB", updateInfo.apkSize / (1024.0 * 1024.0))
                 Spacer(Modifier.height(8.dp))
-                Text("Download size: $sizeMb", style = textStyle(14.sp), color = c.t2)
+                Text(stringResource(R.string.settings_update_size, sizeMb), style = textStyle(14.sp), color = c.t2)
             }
 
             if (isDownloading) {
@@ -749,7 +792,7 @@ private fun UpdateDialog(
                 val dlMb = String.format(java.util.Locale.US, "%.1f", downloadedBytes / (1024.0 * 1024.0))
                 val totMb = if (totalBytes > 0) String.format(java.util.Locale.US, "%.1f MB", totalBytes / (1024.0 * 1024.0)) else ""
                 Text(
-                    "Downloading… ${(downloadProgress * 100).toInt()}% ($dlMb / $totMb)",
+                    stringResource(R.string.settings_update_progress, (downloadProgress * 100).toInt(), dlMb, totMb),
                     style = textStyle(16.sp), color = c.tx
                 )
                 Spacer(Modifier.height(8.dp))
@@ -764,11 +807,11 @@ private fun UpdateDialog(
             Spacer(Modifier.height(24.dp))
             if (!isDownloading) {
                 androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    JtvButton("Download and install", onDownloadAndInstall, Modifier.focusRequester(initialFocus), primary = true, fontSize = 18.sp)
-                    JtvButton("Later", onDismiss, fontSize = 18.sp)
+                    JtvButton(stringResource(R.string.settings_update_install), onDownloadAndInstall, Modifier.focusRequester(initialFocus), primary = true, fontSize = 18.sp)
+                    JtvButton(stringResource(R.string.settings_update_later), onDismiss, fontSize = 18.sp)
                 }
             } else {
-                Text("Please wait. The installer opens when the download finishes.", style = textStyle(16.sp), color = c.t2)
+                Text(stringResource(R.string.settings_update_wait), style = textStyle(16.sp), color = c.t2)
             }
         }
     }

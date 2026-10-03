@@ -1,6 +1,8 @@
 package com.fenyx.jtv.data
 
 import android.view.KeyEvent
+import com.fenyx.jtv.R
+import com.fenyx.jtv.i18n.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -171,9 +173,13 @@ class RemoteKeysTest {
     }
 
     @Test fun labels() {
-        assertEquals("Red button", KeySpec(KeyEvent.KEYCODE_PROG_RED).label)
-        assertEquals("Hold OK", KeySpec(KeyEvent.KEYCODE_DPAD_CENTER, hold = true).label)
-        assertEquals("Hold Right arrow", KeySpec(KeyEvent.KEYCODE_DPAD_RIGHT, hold = true).label)
-        assertEquals("Button 500", KeySpec.of(KeyEvent.KEYCODE_UNKNOWN, 500).label)
+        assertEquals(UiText.of(R.string.remote_key_red), KeySpec(KeyEvent.KEYCODE_PROG_RED).label)
+        assertEquals(UiText.of(R.string.remote_hold, UiText.of(R.string.remote_key_ok)),
+            KeySpec(KeyEvent.KEYCODE_DPAD_CENTER, hold = true).label)
+        assertEquals(UiText.of(R.string.remote_hold, UiText.of(R.string.remote_key_right)),
+            KeySpec(KeyEvent.KEYCODE_DPAD_RIGHT, hold = true).label)
+        assertEquals(UiText.of(R.string.remote_key_button, 500), KeySpec.of(KeyEvent.KEYCODE_UNKNOWN, 500).label)
+        assertEquals(UiText.of(R.string.remote_key_number, 7), RemoteKeys.buttonLabel(KeyEvent.KEYCODE_7))
+        assertEquals(UiText.raw("F3"), RemoteKeys.buttonLabel(KeyEvent.KEYCODE_F3))
     }
 }

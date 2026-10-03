@@ -1,5 +1,9 @@
 package com.fenyx.jtv.ui.settings
 
+import com.fenyx.jtv.i18n.text
+import com.fenyx.jtv.i18n.UiText
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -54,13 +58,15 @@ import kotlinx.coroutines.launch
  * device" flow, and the device-name editor. Plain words, one question per step, focus on the first button.
  */
 
-internal fun kindLabel(kind: String) = when (kind) { "tv" -> "TV"; "tablet" -> "Tablet"; else -> "Phone" }
+@Composable
+internal fun kindLabel(kind: String) = stringResource(when (kind) { "tv" -> R.string.devices_kind_tv; "tablet" -> R.string.devices_kind_tablet; else -> R.string.devices_kind_phone })
 
 /** One line under a paired device in Settings, e.g. "TV · On this Wi-Fi · Synced 2:45 PM". */
+@Composable
 internal fun pairedDeviceLine(d: LanSync.Device): String = listOfNotNull(
     kindLabel(d.kind),
-    if (d.reachable) "On this Wi-Fi now" else "Not in reach",
-    d.lastSync.takeIf { it > 0 }?.let { "Synced ${formatTime(it)}" },
+    stringResource(if (d.reachable) R.string.devices_reachable else R.string.devices_not_reachable),
+    d.lastSync.takeIf { it > 0 }?.let { stringResource(R.string.devices_synced, formatTime(it)) },
 ).joinToString(" · ")
 
 /** Asks focus for [r] once the dialog has laid out (TV: the first button is focused). */
@@ -82,19 +88,19 @@ fun PairRequestHost() {
     FocusOnShow(first, p.paired)
     DialogPanel(onDismiss = { LanSync.dismissPairPrompt() }) {
         if (!p.paired) {
-            Text("Pair with ${p.fromName}?", style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
+            Text(stringResource(R.string.devices_pair_with, p.fromName), style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
             Spacer(Modifier.height(8.dp))
-            Text("Enter this code on ${p.fromName}:", style = textStyle(18.sp), color = c.t2, maxLines = 2)
+            Text(stringResource(R.string.devices_enter_code_on, p.fromName), style = textStyle(18.sp), color = c.t2, maxLines = 2)
             Spacer(Modifier.height(8.dp))
             Text(p.code.toCharArray().joinToString(" "), style = numberStyle(48.sp), color = c.acc)
             Spacer(Modifier.height(20.dp))
-            JtvButton("Cancel", { LanSync.dismissPairPrompt() }, Modifier.focusRequester(first), fontSize = 18.sp)
+            JtvButton(stringResource(R.string.common_cancel), { LanSync.dismissPairPrompt() }, Modifier.focusRequester(first), fontSize = 18.sp)
         } else {
-            Text("Paired with ${p.fromName}", style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
+            Text(stringResource(R.string.devices_paired_with, p.fromName), style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
             Spacer(Modifier.height(8.dp))
-            Text("Favourites now stay the same on both devices.", style = textStyle(18.sp), color = c.t2, maxLines = 2)
+            Text(stringResource(R.string.devices_paired_message), style = textStyle(18.sp), color = c.t2, maxLines = 2)
             Spacer(Modifier.height(20.dp))
-            JtvButton("OK", { LanSync.dismissPairPrompt() }, Modifier.focusRequester(first), primary = true, fontSize = 18.sp)
+            JtvButton(stringResource(R.string.common_ok), { LanSync.dismissPairPrompt() }, Modifier.focusRequester(first), primary = true, fontSize = 18.sp)
         }
     }
 }
@@ -102,9 +108,9 @@ fun PairRequestHost() {
 private sealed interface PairStep {
     data object Pick : PairStep
     data class Asking(val d: LanSync.Device) : PairStep
-    data class Code(val d: LanSync.Device, val requestId: String, val message: String? = null) : PairStep
+    data class Code(val d: LanSync.Device, val requestId: String, val message: UiText? = null) : PairStep
     data class Combine(val name: String, val peerId: String) : PairStep
-    data class Done(val title: String, val message: String) : PairStep
+    data class Done(val title: UiText, val message: UiText) : PairStep
 }
 
 /** Settings → Devices → "Sync with another device": pick a device, type its code, combine favourites. */
@@ -127,13 +133,13 @@ internal fun SyncWithDeviceDialog(onDismiss: () -> Unit) {
         when (val s = step) {
             PairStep.Pick -> {
                 val candidates = devices.filter { !it.paired }
-                Text("Sync with another device", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+                Text(stringResource(R.string.settings_device_pair), style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
                 Spacer(Modifier.height(6.dp))
-                Text("Open JTV on the other device. Both must be on the same Wi-Fi.", style = textStyle(16.sp), color = c.t2, maxLines = 3)
+                Text(stringResource(R.string.devices_open_other), style = textStyle(16.sp), color = c.t2, maxLines = 3)
                 Spacer(Modifier.height(12.dp))
                 Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     if (candidates.isEmpty()) {
-                        Text("Looking for devices…", style = textStyle(18.sp), color = c.tx, modifier = Modifier.padding(vertical = 12.dp))
+                        Text(stringResource(R.string.devices_looking), style = textStyle(18.sp), color = c.tx, modifier = Modifier.padding(vertical = 12.dp))
                     }
                     candidates.forEachIndexed { i, d ->
                         JtvClickable(
@@ -142,7 +148,7 @@ internal fun SyncWithDeviceDialog(onDismiss: () -> Unit) {
                                 scope.launch {
                                     val id = LanSync.requestPair(d.id)
                                     step = if (id != null) PairStep.Code(d, id)
-                                    else PairStep.Done("Could not reach ${d.name}", "Check that JTV is open on it, then try again.")
+                                    else PairStep.Done(UiText.of(R.string.devices_cannot_reach, d.name), UiText.of(R.string.devices_cannot_reach_message))
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = if (Jtv.isTv) 52.dp else 60.dp)
@@ -157,14 +163,14 @@ internal fun SyncWithDeviceDialog(onDismiss: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                JtvButton("Cancel", ::close, if (candidates.isEmpty()) Modifier.focusRequester(first) else Modifier)
+                JtvButton(stringResource(R.string.common_cancel), ::close, if (candidates.isEmpty()) Modifier.focusRequester(first) else Modifier)
             }
             is PairStep.Asking -> {
-                Text("Asking ${s.d.name}…", style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
+                Text(stringResource(R.string.devices_asking, s.d.name), style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
                 Spacer(Modifier.height(8.dp))
-                Text("A code will appear on its screen.", style = textStyle(18.sp), color = c.t2)
+                Text(stringResource(R.string.devices_code_appears), style = textStyle(18.sp), color = c.t2)
                 Spacer(Modifier.height(20.dp))
-                JtvButton("Cancel", ::close, Modifier.focusRequester(first), fontSize = 18.sp)
+                JtvButton(stringResource(R.string.common_cancel), ::close, Modifier.focusRequester(first), fontSize = 18.sp)
             }
             is PairStep.Code -> {
                 var code by remember(s.requestId) { mutableStateOf("") }
@@ -176,56 +182,56 @@ internal fun SyncWithDeviceDialog(onDismiss: () -> Unit) {
                         busy = false
                         step = when (r) {
                             is LanSync.PairResult.Paired -> PairStep.Combine(r.peerName, r.peerId)
-                            is LanSync.PairResult.WrongCode -> s.copy(message = "That code is not right. " +
-                                if (r.attemptsLeft == 1) "1 try left." else "${r.attemptsLeft} tries left.")
-                            LanSync.PairResult.Cancelled -> PairStep.Done("Pairing stopped", "It was cancelled on ${s.d.name}, or the code was wrong too many times.")
-                            LanSync.PairResult.Failed -> PairStep.Done("Could not reach ${s.d.name}", "Check that JTV is open on it, then try again.")
+                            is LanSync.PairResult.WrongCode -> s.copy(message = UiText.of(R.string.devices_wrong_code_tries, UiText.of(R.string.devices_wrong_code),
+                                UiText.plural(R.plurals.devices_tries_left, r.attemptsLeft)))
+                            LanSync.PairResult.Cancelled -> PairStep.Done(UiText.of(R.string.devices_pairing_stopped), UiText.of(R.string.devices_pairing_stopped_message, s.d.name))
+                            LanSync.PairResult.Failed -> PairStep.Done(UiText.of(R.string.devices_cannot_reach, s.d.name), UiText.of(R.string.devices_cannot_reach_message))
                         }
                         if (r is LanSync.PairResult.WrongCode) code = ""
                     }
                 }
-                Text("Enter the code", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+                Text(stringResource(R.string.devices_enter_code), style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
                 Spacer(Modifier.height(6.dp))
-                Text("It is shown on ${s.d.name}.", style = textStyle(18.sp), color = c.t2, maxLines = 2)
+                Text(stringResource(R.string.devices_shown_on, s.d.name), style = textStyle(18.sp), color = c.t2, maxLines = 2)
                 Spacer(Modifier.height(12.dp))
                 CodeField(code, { v -> code = v.filter(Char::isDigit).take(4); if (code.length == 4) submit() }, ::submit, Modifier.focusRequester(first))
                 s.message?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, style = textStyle(16.sp), color = c.error)
+                    Text(it.text(), style = textStyle(16.sp), color = c.error)
                 }
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    JtvButton(if (busy) "Checking…" else "Pair", ::submit, primary = true, fontSize = 18.sp)
-                    JtvButton("Cancel", ::close, fontSize = 18.sp)
+                    JtvButton(stringResource(if (busy) R.string.devices_checking else R.string.devices_pair), ::submit, primary = true, fontSize = 18.sp)
+                    JtvButton(stringResource(R.string.common_cancel), ::close, fontSize = 18.sp)
                 }
             }
             is PairStep.Combine -> {
-                Text("Paired with ${s.name}", style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
+                Text(stringResource(R.string.devices_paired_with, s.name), style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
                 Spacer(Modifier.height(8.dp))
-                Text("Combine both lists? Favourites from both devices are kept, with this device's order first.",
+                Text(stringResource(R.string.devices_combine_question),
                     style = textStyle(18.sp), color = c.t2, maxLines = 4)
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    JtvButton(if (busy) "Combining…" else "Combine", {
+                    JtvButton(stringResource(if (busy) R.string.devices_combining else R.string.devices_combine), {
                         if (!busy) {
                             busy = true
                             scope.launch {
                                 val ok = LanSync.combineFavorites(s.peerId)
                                 busy = false
-                                step = if (ok) PairStep.Done("Favourites combined", "${s.name} and this device now have the same favourites.")
-                                else PairStep.Done("Could not combine now", "Use Sync now in Settings to try again.")
+                                step = if (ok) PairStep.Done(UiText.of(R.string.devices_combined), UiText.of(R.string.devices_combined_message, s.name))
+                                else PairStep.Done(UiText.of(R.string.devices_combine_failed), UiText.of(R.string.devices_combine_failed_message))
                             }
                         }
                     }, Modifier.focusRequester(first), primary = true, fontSize = 18.sp)
-                    JtvButton("Not now", onDismiss, fontSize = 18.sp)
+                    JtvButton(stringResource(R.string.devices_not_now), onDismiss, fontSize = 18.sp)
                 }
             }
             is PairStep.Done -> {
-                Text(s.title, style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
+                Text(s.title.text(), style = textStyle(24.sp, FontWeight.Bold), color = c.tx, maxLines = 2)
                 Spacer(Modifier.height(8.dp))
-                Text(s.message, style = textStyle(18.sp), color = c.t2, maxLines = 3)
+                Text(s.message.text(), style = textStyle(18.sp), color = c.t2, maxLines = 3)
                 Spacer(Modifier.height(20.dp))
-                JtvButton("OK", onDismiss, Modifier.focusRequester(first), primary = true, fontSize = 18.sp)
+                JtvButton(stringResource(R.string.common_ok), onDismiss, Modifier.focusRequester(first), primary = true, fontSize = 18.sp)
             }
         }
     }
@@ -271,9 +277,9 @@ internal fun DeviceNameDialog(initial: String, onSave: (String) -> Unit, onDismi
         keyboard?.show()
     }
     DialogPanel(onDismiss) {
-        Text("This device's name", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+        Text(stringResource(R.string.settings_device_name), style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
         Spacer(Modifier.height(6.dp))
-        Text("Other devices show this name.", style = textStyle(16.sp), color = c.t2)
+        Text(stringResource(R.string.devices_name_hint), style = textStyle(16.sp), color = c.t2)
         Spacer(Modifier.height(12.dp))
         Box(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -295,8 +301,8 @@ internal fun DeviceNameDialog(initial: String, onSave: (String) -> Unit, onDismi
         }
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            JtvButton("Save", { onSave(name) }, primary = true, fontSize = 18.sp)
-            JtvButton("Cancel", onDismiss, fontSize = 18.sp)
+            JtvButton(stringResource(R.string.common_save), { onSave(name) }, primary = true, fontSize = 18.sp)
+            JtvButton(stringResource(R.string.common_cancel), onDismiss, fontSize = 18.sp)
         }
     }
 }

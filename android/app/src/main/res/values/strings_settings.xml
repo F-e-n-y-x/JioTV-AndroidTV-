@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ───── Settings: sections ───── -->
+    <string name="settings_section_general">General</string>
+    <string name="settings_section_picture_sound">Picture and sound</string>
+    <string name="settings_section_guide">Programme guide</string>
+    <string name="settings_section_channels">Channels</string>
+    <string name="settings_section_backup">Favourites backup</string>
+    <string name="settings_section_devices">Devices</string>
+    <string name="settings_section_problems">If the picture has problems</string>
+    <string name="settings_section_account">Account</string>
+    <string name="settings_section_about">About</string>
+
+    <!-- General -->
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_theme_system">Same as device</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_accent">Accent colour</string>
+    <string name="settings_accent_desc">Used for highlights, the channel number and progress</string>
+    <string name="settings_start">Start with</string>
+    <string name="settings_start_desc">What you see when the app opens</string>
+    <string name="settings_start_list">Channel list</string>
+    <string name="settings_start_last">Last channel</string>
+    <string name="settings_app_language_desc">Language of the app\'s words</string>
+
+    <!-- Picture and sound -->
+    <string name="settings_quality">Picture quality</string>
+    <string name="settings_quality_auto">Automatic</string>
+    <string name="settings_quality_high">High (1080p)</string>
+    <string name="settings_quality_medium">Medium (720p)</string>
+    <string name="settings_quality_low">Low (480p)</string>
+    <string name="settings_sound_language">Sound language</string>
+    <string name="settings_sound_language_desc">Preferred language when a channel has more than one</string>
+    <string name="settings_lang_hi">Hindi</string>
+    <string name="settings_lang_en">English</string>
+    <string name="settings_lang_ta">Tamil</string>
+    <string name="settings_lang_te">Telugu</string>
+    <string name="settings_lang_kn">Kannada</string>
+    <string name="settings_lang_ml">Malayalam</string>
+    <string name="settings_lang_bn">Bengali</string>
+    <string name="settings_lang_mr">Marathi</string>
+    <string name="settings_lang_gu">Gujarati</string>
+    <string name="settings_lang_pa">Punjabi</string>
+    <string name="settings_lang_or">Odia</string>
+    <string name="settings_lang_as">Assamese</string>
+    <string name="settings_picture_size">Picture size</string>
+    <string name="settings_size_fit">Fit the screen (default)</string>
+    <string name="settings_size_fit_short">Fit the screen</string>
+    <string name="settings_size_fill">Fill the screen (crops edges)</string>
+    <string name="settings_size_zoom">Zoom</string>
+    <string name="settings_size_stretch_width">Stretch to width</string>
+    <string name="settings_size_stretch_height">Stretch to height</string>
+    <string name="settings_buffer">Smooth playback</string>
+    <string name="settings_buffer_desc">More smoothness uses more memory</string>
+    <string name="settings_buffer_30">Data saver (30 seconds)</string>
+    <string name="settings_buffer_60">Balanced (60 seconds)</string>
+    <string name="settings_buffer_90">Smooth (90 seconds)</string>
+    <string name="settings_buffer_120">Smoothest (120 seconds)</string>
+    <plurals name="settings_buffer_seconds">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
+    <string name="settings_pip">Picture-in-picture when leaving the app</string>
+    <string name="settings_pip_desc">Keeps the channel playing in a small window</string>
+    <string name="settings_remote">Remote buttons</string>
+    <string name="settings_remote_desc">Choose what each button on your remote does</string>
+
+    <!-- Programme guide -->
+    <string name="settings_guide_desc">Show what\'s on now and later</string>
+    <string name="settings_guide_source">Guide source</string>
+    <string name="settings_change">Change</string>
+    <string name="settings_guide_update">Update the guide now</string>
+    <string name="settings_guide_status_idle">Update</string>
+    <string name="settings_guide_status_downloading">Downloading…</string>
+    <string name="settings_guide_status_extracting">Unpacking…</string>
+    <string name="settings_guide_status_parsing">Reading…</string>
+    <string name="settings_guide_status_error">Failed, try again</string>
+    <string name="settings_web_address">Web address</string>
+
+    <!-- Channels -->
+    <string name="settings_group_languages">Group languages together</string>
+    <string name="settings_group_languages_desc">One entry per channel; pick the language while watching</string>
+
+    <!-- Favourites backup -->
+    <string name="settings_backup_save">Back up favourites</string>
+    <string name="settings_backup_save_desc">Saves them to Downloads, to restore after reinstalling</string>
+    <string name="settings_backup_restore">Restore favourites</string>
+    <string name="settings_backup_restore_value">Restore</string>
+    <string name="settings_backup_restore_desc">Adds the favourites from your backup file</string>
+
+    <!-- Devices -->
+    <string name="settings_device_name">This device\'s name</string>
+    <string name="settings_device_pair">Sync with another device</string>
+    <string name="settings_device_pair_desc">Share favourites with a phone, tablet or TV on the same Wi-Fi</string>
+    <string name="settings_device_forget">Forget</string>
+    <string name="settings_device_auto">Sync favourites automatically</string>
+    <string name="settings_device_auto_desc">Changes on one device appear on the others</string>
+    <string name="settings_device_sync_now">Sync now</string>
+    <string name="settings_device_sync">Sync</string>
+    <string name="settings_forget_title">Forget %s?</string>
+    <string name="settings_forget_message">Favourites stop syncing with it. You can pair again later.</string>
+
+    <!-- If the picture has problems -->
+    <string name="settings_hw">Hardware decoder</string>
+    <string name="settings_hw_desc">Keep on for most TVs. Applies to the next channel.</string>
+    <string name="settings_tunnel">Tunnelling</string>
+    <string name="settings_tunnel_desc">Keep off if the picture freezes or goes black. Applies to the next channel.</string>
+
+    <!-- Account -->
+    <string name="settings_method">Sign-in method</string>
+    <string name="settings_method_server">Own server</string>
+    <string name="settings_method_jtv">Access code</string>
+    <string name="settings_method_jio">Jio number</string>
+    <string name="settings_method_no_server">Server address not set</string>
+    <string name="settings_method_desc">Change how this device signs in</string>
+    <string name="settings_refresh">Refresh from server</string>
+    <string name="settings_refreshing">Refreshing…</string>
+    <string name="settings_refresh_value">Refresh</string>
+    <string name="settings_refresh_desc">Get the latest sign-in and channel list</string>
+    <string name="settings_signout">Sign out</string>
+    <string name="settings_signout_desc">Removes your sign-in from this device</string>
+    <string name="settings_signout_title">Sign out?</string>
+    <string name="settings_signout_message">You will need to sign in again to watch.</string>
+    <string name="settings_change_method_title">Change sign-in method?</string>
+    <string name="settings_change_method_message">This signs you out. You will choose how to sign in again.</string>
+    <string name="settings_change_method_confirm">Sign out and change</string>
+
+    <!-- About / updates -->
+    <string name="settings_version">App version</string>
+    <string name="settings_update">Check for updates</string>
+    <string name="settings_update_checking">Checking…</string>
+    <string name="settings_update_ready">Version %s ready</string>
+    <string name="settings_update_check_now">Check now</string>
+    <string name="settings_update_downloading">Downloading the update</string>
+    <string name="settings_update_available_desc">Choose to see what\'s new and install</string>
+    <string name="settings_update_title">Update available</string>
+    <string name="settings_update_version">Version %s</string>
+    <string name="settings_update_whats_new">What\'s new</string>
+    <string name="settings_update_default_notes">Performance improvements and bug fixes.</string>
+    <string name="settings_update_size">Download size: %s</string>
+    <string name="settings_update_progress">Downloading… %1$d%% (%2$s / %3$s)</string>
+    <string name="settings_update_install">Download and install</string>
+    <string name="settings_update_later">Later</string>
+    <string name="settings_update_wait">Please wait. The installer opens when the download finishes.</string>
+
+    <!-- Lists, pickers, key hints -->
+    <string name="settings_selected">Selected</string>
+    <string name="settings_hint_ok_key">OK</string>
+    <string name="settings_hint_change">change</string>
+    <string name="settings_hint_close">close settings</string>
+
+    <!-- ───── Accent colours ───── -->
+    <string name="accent_amber">Amber</string>
+    <string name="accent_purple">Purple</string>
+    <string name="accent_blue">Blue</string>
+    <string name="accent_green">Green</string>
+    <string name="accent_rose">Rose</string>
+    <string name="accent_teal">Teal</string>
+
+    <!-- ───── Favourites backup (toasts) ───── -->
+    <string name="backup_none">You have no favourites to back up yet.</string>
+    <plurals name="backup_saved">
+        <item quantity="one">Saved %1$d favourite to %2$s</item>
+        <item quantity="other">Saved %1$d favourites to %2$s</item>
+    </plurals>
+    <string name="backup_save_failed">Could not save the backup: %s</string>
+    <string name="backup_storage_error">storage error</string>
+    <string name="backup_need_storage">JTV needs storage access to save the backup in Downloads.</string>
+    <string name="backup_empty">That backup has no favourites.</string>
+    <plurals name="backup_restored">
+        <item quantity="one">Restored %d favourite.</item>
+        <item quantity="other">Restored %d favourites.</item>
+    </plurals>
+    <string name="backup_already_match">Your favourites already match the backup.</string>
+    <string name="backup_not_a_backup">That file isn\'t a JTV favourites backup.</string>
+    <string name="backup_open_with">Open Downloads/%s with JTV from a file manager to restore.</string>
+
+    <!-- ───── Devices (LAN sync) ───── -->
+    <string name="devices_kind_tv">TV</string>
+    <string name="devices_kind_tablet">Tablet</string>
+    <string name="devices_kind_phone">Phone</string>
+    <string name="devices_reachable">On this Wi-Fi now</string>
+    <string name="devices_not_reachable">Not in reach</string>
+    <string name="devices_synced">Synced %s</string>
+    <string name="devices_pair_with">Pair with %s?</string>
+    <string name="devices_enter_code_on">Enter this code on %s:</string>
+    <string name="devices_paired_with">Paired with %s</string>
+    <string name="devices_paired_message">Favourites now stay the same on both devices.</string>
+    <string name="devices_open_other">Open JTV on the other device. Both must be on the same Wi-Fi.</string>
+    <string name="devices_looking">Looking for devices…</string>
+    <string name="devices_cannot_reach">Could not reach %s</string>
+    <string name="devices_cannot_reach_message">Check that JTV is open on it, then try again.</string>
+    <string name="devices_asking">Asking %s…</string>
+    <string name="devices_code_appears">A code will appear on its screen.</string>
+    <string name="devices_wrong_code">That code is not right.</string>
+    <string name="devices_wrong_code_tries">%1$s %2$s</string>
+    <plurals name="devices_tries_left">
+        <item quantity="one">%d try left.</item>
+        <item quantity="other">%d tries left.</item>
+    </plurals>
+    <string name="devices_pairing_stopped">Pairing stopped</string>
+    <string name="devices_pairing_stopped_message">It was cancelled on %s, or the code was wrong too many times.</string>
+    <string name="devices_enter_code">Enter the code</string>
+    <string name="devices_shown_on">It is shown on %s.</string>
+    <string name="devices_checking">Checking…</string>
+    <string name="devices_pair">Pair</string>
+    <string name="devices_combine_question">Combine both lists? Favourites from both devices are kept, with this device\'s order first.</string>
+    <string name="devices_combining">Combining…</string>
+    <string name="devices_combine">Combine</string>
+    <string name="devices_combined">Favourites combined</string>
+    <string name="devices_combined_message">%s and this device now have the same favourites.</string>
+    <string name="devices_combine_failed">Could not combine now</string>
+    <string name="devices_combine_failed_message">Use Sync now in Settings to try again.</string>
+    <string name="devices_not_now">Not now</string>
+    <string name="devices_name_hint">Other devices show this name.</string>
+
+    <!-- ───── Remote buttons ───── -->
+    <string name="remote_intro">Choose an action, then press the button you want for it.</string>
+    <string name="remote_type">Remote type</string>
+    <string name="remote_type_desc">Sets every button in one step</string>
+    <string name="remote_custom">Custom</string>
+    <string name="remote_reset">Reset to default</string>
+    <string name="remote_section_actions">Buttons for each action</string>
+    <string name="remote_not_set">Not set</string>
+    <string name="remote_note">Back, OK and the arrows always keep their job. You can give OK and the arrows a hold (long press) action.</string>
+    <string name="remote_hint_back">go back</string>
+    <string name="remote_reset_title">Reset remote buttons?</string>
+    <string name="remote_reset_message">Every button goes back to the standard Android TV remote.</string>
+    <string name="remote_reset_confirm">Reset</string>
+    <string name="remote_replace_title">Already used for %s — replace?</string>
+    <string name="remote_replace_message">%1$s will do \"%2$s\" instead.</string>
+    <string name="remote_replace">Replace</string>
+    <string name="remote_locked">%s keeps its own job. Try another button, or hold it.</string>
+    <string name="remote_system">%s belongs to the system. Try another button.</string>
+    <string name="remote_press">Press the button you want to use…</string>
+    <string name="remote_holding">Hold %s: let go to use it</string>
+    <string name="remote_hold_hint">For a long press, hold the button. Back cancels.</string>
+    <string name="remote_no_button">No button yet</string>
+    <string name="remote_now">Now: %s</string>
+    <string name="remote_remove">Remove buttons</string>
+
+    <!-- Remote actions -->
+    <string name="remote_action_quick_menu">Quick menu</string>
+    <string name="remote_action_options">Player options</string>
+    <string name="remote_action_favourite">Favourite on or off</string>
+    <string name="remote_action_guide">Programme guide</string>
+    <string name="remote_action_channel_list">Channel list</string>
+    <string name="remote_action_previous_channel">Previous channel</string>
+    <string name="remote_action_play_pause">Pause or play</string>
+    <string name="remote_action_language">Sound language</string>
+    <string name="remote_action_quality">Picture quality</string>
+    <string name="remote_action_aspect">Picture size</string>
+    <string name="remote_action_voice_boost">Voice boost (next level)</string>
+    <string name="remote_action_sleep">Sleep timer</string>
+    <string name="remote_action_mute">Sound off or on</string>
+    <string name="remote_action_search">Search</string>
+    <string name="remote_action_go_live">Go live</string>
+    <string name="remote_action_number_entry">Type a channel number</string>
+
+    <!-- Remote types -->
+    <string name="remote_profile_standard">Standard Android TV remote</string>
+    <string name="remote_profile_standard_desc">Colour buttons, Guide, Menu and Last channel</string>
+    <string name="remote_profile_fire_tv">Fire TV remote</string>
+    <string name="remote_profile_fire_tv_desc">Menu, rewind and fast-forward buttons</string>
+    <string name="remote_profile_basic">Basic remote</string>
+    <string name="remote_profile_basic_desc">Only arrows, OK and Back. Hold OK for the quick menu</string>
+    <string name="remote_profile_air_mouse">Air mouse</string>
+    <string name="remote_profile_air_mouse_desc">Pointer remote with a small keyboard</string>
+
+    <!-- Remote button names -->
+    <string name="remote_hold">Hold %s</string>
+    <string name="remote_key_unknown">Unknown button</string>
+    <string name="remote_key_button">Button %d</string>
+    <string name="remote_key_ok">OK</string>
+    <string name="remote_key_up">Up arrow</string>
+    <string name="remote_key_down">Down arrow</string>
+    <string name="remote_key_left">Left arrow</string>
+    <string name="remote_key_right">Right arrow</string>
+    <string name="remote_key_back">Back</string>
+    <string name="remote_key_menu">Menu</string>
+    <string name="remote_key_guide">Guide</string>
+    <string name="remote_key_info">Info</string>
+    <string name="remote_key_red">Red button</string>
+    <string name="remote_key_green">Green button</string>
+    <string name="remote_key_yellow">Yellow button</string>
+    <string name="remote_key_blue">Blue button</string>
+    <string name="remote_key_channel_up">Channel up</string>
+    <string name="remote_key_channel_down">Channel down</string>
+    <string name="remote_key_last_channel">Last channel</string>
+    <string name="remote_key_play_pause">Play/Pause</string>
+    <string name="remote_key_play">Play</string>
+    <string name="remote_key_pause">Pause</string>
+    <string name="remote_key_stop">Stop</string>
+    <string name="remote_key_rewind">Rewind</string>
+    <string name="remote_key_fast_forward">Fast forward</string>
+    <string name="remote_key_next">Next</string>
+    <string name="remote_key_previous">Previous</string>
+    <string name="remote_key_record">Record</string>
+    <string name="remote_key_audio">Audio</string>
+    <string name="remote_key_subtitles">Subtitles</string>
+    <string name="remote_key_search">Search</string>
+    <string name="remote_key_bookmark">Bookmark</string>
+    <string name="remote_key_tv">TV</string>
+    <string name="remote_key_recordings">Recordings</string>
+    <string name="remote_key_settings">Settings</string>
+    <string name="remote_key_input">Input</string>
+    <string name="remote_key_window">Window</string>
+    <string name="remote_key_space">Space</string>
+    <string name="remote_key_page_up">Page up</string>
+    <string name="remote_key_page_down">Page down</string>
+    <string name="remote_key_backspace">Backspace</string>
+    <string name="remote_key_number">Number %d</string>
+    <string name="remote_key_letter">Key %s</string>
+</resources>
