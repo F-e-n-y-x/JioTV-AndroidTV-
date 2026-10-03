@@ -1,0 +1,78 @@
+<resources>
+    <!-- Setup: how to sign in (ui/setup/SetupScreen.kt) -->
+    <string name="setup_welcome">Welcome to JTV</string>
+    <string name="setup_how_sign_in">How do you want to sign in?</string>
+    <string name="setup_code_title">Connect with a code</string>
+    <string name="setup_code_card_subtitle">Type the access code you were given. No web address needed.</string>
+    <string name="setup_phone_title">Sign in with Jio number</string>
+    <string name="setup_phone_card_subtitle">Get a one-time code on your Jio mobile number.</string>
+    <string name="setup_own_server_title">Use your own server</string>
+    <string name="setup_hint_left_right">Left / Right</string>
+    <string name="setup_hint_choose">choose</string>
+    <string name="setup_hint_continue">continue</string>
+
+    <!-- Setup: code / own server (ui/setup/ServerSetupScreen.kt) -->
+    <string name="setup_server_title">Connect to your own server</string>
+    <string name="setup_code_subtitle">Type your access code. The server address is built in.</string>
+    <string name="setup_server_subtitle">Type your server\'s address and access code.</string>
+    <string name="setup_server_address">Server address</string>
+    <string name="setup_access_code">Access code</string>
+    <string name="setup_access_code_hint">e.g. 7XK2Q9</string>
+    <string name="setup_connect">Connect</string>
+    <string name="setup_connecting">Connecting…</string>
+    <string name="setup_error_enter_url">Enter the server address.</string>
+    <string name="setup_error_enter_code">Enter your access code.</string>
+    <string name="setup_error_connection_failed">Could not connect. Try again.</string>
+
+    <!-- Server errors shown to the user (data/ServerClient.kt) -->
+    <string name="error_no_server_url">No server address is set.</string>
+    <string name="error_server_access_denied">The server did not accept this access code. Check it and try again.</string>
+    <string name="error_server_outdated">The server is out of date. Update the server.</string>
+    <string name="error_server_http">The server sent an error (%d).</string>
+    <string name="error_server_no_login">The server is not signed in yet. Sign in on the server first.</string>
+    <string name="error_server_unreachable">Could not reach the server. Check the address and your internet.</string>
+
+    <!-- Sign in with Jio number (ui/login/LoginScreen.kt) -->
+    <string name="login_title_number">Sign in with your Jio number</string>
+    <string name="login_title_code">Enter the code</string>
+    <string name="login_subtitle_number">We\'ll send a one-time code to this number.</string>
+    <string name="login_subtitle_code">We sent a code by text message to %s.</string>
+    <string name="login_mobile_number">Mobile number</string>
+    <string name="login_mobile_number_hint">10-digit number</string>
+    <string name="login_code">Code</string>
+    <string name="login_code_hint">Code from the message</string>
+    <string name="login_send_code">Send code</string>
+    <string name="login_sending">Sending…</string>
+    <string name="login_sign_in">Sign in</string>
+    <string name="login_checking">Checking…</string>
+    <string name="login_change_number">Change number</string>
+    <string name="login_other_method">Use a different sign-in method</string>
+    <string name="login_key_delete">Delete</string>
+    <string name="login_error_send_failed">Could not send the code. Try again.</string>
+    <string name="login_error_number_digits">Enter all 10 digits of your mobile number.</string>
+    <string name="login_error_code_wrong">That code didn\'t work. Check it and try again.</string>
+    <string name="login_error_enter_code">Enter the code from the text message.</string>
+    <string name="login_hint_number_keys">Number keys</string>
+    <string name="login_hint_type">type</string>
+    <string name="login_hint_press_key">press a key</string>
+    <string name="login_hint_go_back">go back</string>
+
+    <!-- "Open with JTV" on a favourites backup file (MainActivity.kt) -->
+    <plurals name="backup_restore_restored">
+        <item quantity="one">Restored %d favourite.</item>
+        <item quantity="other">Restored %d favourites.</item>
+    </plurals>
+    <string name="backup_restore_already_match">Your favourites already match the backup.</string>
+    <string name="backup_restore_not_backup">That file isn\'t a JTV favourites backup.</string>
+
+    <!-- Device sync (sync/LanSync.kt) -->
+    <string name="sync_a_device">a device</string>
+    <string name="sync_the_tv">the TV</string>
+    <string name="sync_syncing">Syncing…</string>
+    <string name="sync_no_paired">No paired devices</string>
+    <string name="sync_none_in_reach">No paired device in reach</string>
+    <string name="sync_failed">Could not sync, try again</string>
+    <string name="sync_done">Synced</string>
+    <string name="sync_playing_on">Playing on %s</string>
+    <string name="sync_could_not_reach">Could not reach %s</string>
+</resources>

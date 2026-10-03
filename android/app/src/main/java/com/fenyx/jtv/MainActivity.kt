@@ -31,11 +31,12 @@ class MainActivity : ComponentActivity() {
                 .onSuccess { ids ->
                     val added = com.fenyx.jtv.data.FavoritesBackup.restore(this@MainActivity, ids)
                     android.widget.Toast.makeText(this@MainActivity,
-                        if (added > 0) "Restored $added ${if (added == 1) "favourite" else "favourites"}." else "Your favourites already match the backup.",
+                        if (added > 0) resources.getQuantityString(R.plurals.backup_restore_restored, added, added)
+                        else getString(R.string.backup_restore_already_match),
                         android.widget.Toast.LENGTH_LONG).show()
                 }
                 .onFailure {
-                    android.widget.Toast.makeText(this@MainActivity, "That file isn't a JTV favourites backup.", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(this@MainActivity, getString(R.string.backup_restore_not_backup), android.widget.Toast.LENGTH_LONG).show()
                 }
         }
     }

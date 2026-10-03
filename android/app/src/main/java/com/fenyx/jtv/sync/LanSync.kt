@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.fenyx.jtv.R
 import com.fenyx.jtv.data.SettingsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -368,7 +369,7 @@ object LanSync {
 
     private fun pairStart(body: JSONObject): MiniHttpServer.Response {
         val fromId = body.optString("id").take(64)
-        val fromName = body.optString("name").take(60).ifBlank { "a device" }
+        val fromName = body.optString("name").take(60).ifBlank { app.getString(R.string.sync_a_device) }
         if (fromId.isBlank()) return err(400, "no id")
         val now = System.currentTimeMillis()
         // One new pairing request every few seconds at most, so nobody can flood the screen with dialogs.
@@ -507,16 +508,16 @@ object LanSync {
     /** "Sync now": two-way sync with every paired device in reach. Sets [status]. */
     fun syncNow() {
         appScope.launch {
-            _status.value = "Syncing…"
+            _status.value = app.getString(R.string.sync_syncing)
             val found = _found.value
             val peers = store.peers()
             val inReach = peers.filter { found[it.id] != null }
             val ok = inReach.count { syncWith(it, found.getValue(it.id)) }
             _status.value = when {
-                peers.isEmpty() -> "No paired devices"
-                inReach.isEmpty() -> "No paired device in reach"
-                ok == 0 -> "Could not sync, try again"
-                else -> "Synced"
+                peers.isEmpty() -> app.getString(R.string.sync_no_paired)
+                inReach.isEmpty() -> app.getString(R.string.sync_none_in_reach)
+                ok == 0 -> app.getString(R.string.sync_failed)
+                else -> app.getString(R.string.sync_done)
             }
             delay(4_000)
             _status.value = null
@@ -528,11 +529,11 @@ object LanSync {
         appScope.launch {
             val peer = store.peers().firstOrNull { it.id == deviceId }
             val f = found(deviceId)
-            val name = f?.name ?: peer?.name ?: "the TV"
+            val name = f?.name ?: peer?.name ?: app.getString(R.string.sync_the_tv)
             val ok = peer != null && f != null &&
                 SyncClient.call(f.host, f.port, "POST", "/play", peer.key, JSONObject().put("channelId", channelId)).ok
             withContext(Dispatchers.Main) {
-                Toast.makeText(app, if (ok) "Playing on $name" else "Could not reach $name", Toast.LENGTH_SHORT).show()
+                Toast.makeText(app, app.getString(if (ok) R.string.sync_playing_on else R.string.sync_could_not_reach, name), Toast.LENGTH_SHORT).show()
             }
         }
     }

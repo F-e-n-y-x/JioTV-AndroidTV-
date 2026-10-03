@@ -1,6 +1,8 @@
 package com.fenyx.jtv.data
 
 import android.util.Log
+import com.fenyx.jtv.R
+import com.fenyx.jtv.i18n.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -15,6 +17,12 @@ import java.net.URL
  * bearer access token). Everything downstream — stream resolution, DRM, token refresh — is unchanged,
  * because the app still receives the same AuthData it would have gotten from a direct OTP login.
  */
+/** A failure whose [message] stays English (logs, checks) and whose [ui] text is shown to the user, translated. */
+class UserFacingException(val ui: UiText, englishMessage: String) : Exception(englishMessage)
+
+/** The translated text for [e] when it has one, else [fallback]. */
+fun Throwable?.userText(fallback: UiText): UiText = (this as? UserFacingException)?.ui ?: fallback
+
 object ServerClient {
     private const val TAG = "ServerClient"
 
@@ -60,7 +68,7 @@ object ServerClient {
             if (r.isSuccess) return r
             last = r
         }
-        return last ?: Result.failure(Exception("No server URL configured"))
+        return last ?: Result.failure(UserFacingException(UiText.of(R.string.error_no_server_url), "No server URL configured"))
     }
 
     /**
@@ -108,13 +116,11 @@ object ServerClient {
                 val err = errStream?.bufferedReader()?.use { it.readText() } ?: ""
                 Log.e(TAG, "$method $path failed: $code $err")
                 return@withContext Result.failure(
-                    Exception(
-                        when (code) {
-                            401, 403 -> "Access denied — check the server access token."
-                            404 -> "Server endpoint not found (404). Update the server."
-                            else -> "Server returned HTTP $code."
-                        }
-                    )
+                    when (code) {
+                        401, 403 -> UserFacingException(UiText.of(R.string.error_server_access_denied), "Access denied — check the server access token.")
+                        404 -> UserFacingException(UiText.of(R.string.error_server_outdated), "Server endpoint not found (404). Update the server.")
+                        else -> UserFacingException(UiText.of(R.string.error_server_http, code), "Server returned HTTP $code.")
+                    }
                 )
             }
             val rawInputStream = conn.inputStream
@@ -122,7 +128,7 @@ object ServerClient {
             val json = JSONObject(inputStream?.bufferedReader()?.use { it.readText() } ?: "{}")
             val ssoToken = json.optString("ssoToken", "")
             if (ssoToken.isEmpty()) {
-                return@withContext Result.failure(Exception("Server has no active login yet. Sign in on the server first."))
+                return@withContext Result.failure(UserFacingException(UiText.of(R.string.error_server_no_login), "Server has no active login yet. Sign in on the server first."))
             }
             Result.success(
                 JioApiClient.AuthData(
@@ -136,7 +142,7 @@ object ServerClient {
             )
         } catch (e: Exception) {
             Log.e(TAG, "Exception in $method $path", e)
-            Result.failure(Exception("Couldn't reach the server. Check the URL and network."))
+            Result.failure(UserFacingException(UiText.of(R.string.error_server_unreachable), "Couldn't reach the server. Check the URL and network."))
         }
     }
 }
