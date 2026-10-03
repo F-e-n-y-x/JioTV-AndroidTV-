@@ -2,7 +2,7 @@ import { getStreamData, GeturlAuthError, type StreamData, type CatchupParams } f
 import type { AuthData } from "../jio/types";
 import { extractHdneaToken, extractTokenExpiryEpochSec } from "../jio/hdnea";
 import { refreshNow } from "../refresh";
-import { getStoredCredentials } from "../store/db";
+import { getStoredCredentials, saveStreamMode } from "../store/db";
 
 interface CachedStream {
   key: string;
@@ -46,6 +46,14 @@ function parseKey(key: string): { channelId: string; catchup?: CatchupParams } {
 // Per-channel decision (this process): "hls" = the non-DRM Fallback is alive; "drm" = it's dead (404),
 // use the Widevine DASH instead. Decided once (first play) then reused so we skip the extra check.
 const streamMode = new Map<string, "hls" | "drm">();
+
+/** Remembers the decision for this process AND persists it (SQLite) for `/playlist.m3u?drm=hide`. */
+function learnMode(channelId: string, mode: "hls" | "drm"): void {
+  streamMode.set(channelId, mode);
+  try { saveStreamMode(channelId, mode, Date.now()); } catch (e) {
+    console.warn("[proxy] could not persist stream mode:", (e as Error).message);
+  }
+}
 
 /** A manifest URL is "alive" if it returns 2xx and looks like a real HLS/DASH manifest (not a 404 page).
  *  Some channels (e.g. Zee TV HD) hand back a token-signed URL whose CDN path doesn't actually exist. */
@@ -134,17 +142,17 @@ async function resolveOnce(key: string): Promise<CachedStream> {
         // HLS Fallback is dead — try the Widevine DASH.
         const drm = await getStreamData(channelId, activeCreds, { preferDrm: true });
         if (drm.isMpd && drm.streamUrl && (await masterAlive(drm.streamUrl, drm.streamHeaders))) {
-          data = drm; streamMode.set(channelId, "drm");
+          data = drm; learnMode(channelId, "drm");
         } else {
           throw down();
         }
       } else {
-        streamMode.set(channelId, "hls");
+        learnMode(channelId, "hls");
       }
     } else if (!(await masterAlive(data.streamUrl, data.streamHeaders))) {
       throw down();
     } else {
-      streamMode.set(channelId, "drm");
+      learnMode(channelId, "drm");
     }
   }
 

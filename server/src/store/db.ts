@@ -146,6 +146,42 @@ export function deleteCode(code: string): void {
   codeDel.run(code);
 }
 
+// ── Learned stream modes (what the proxy found on a channel's first live play) ──
+// "hls" = Jio's non-DRM Fallback HLS works; "drm" = only the Widevine DASH works. Persisted so
+// `/playlist.m3u?drm=hide` can leave out Widevine-only channels across restarts.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS stream_modes (
+    channel_id TEXT PRIMARY KEY,
+    mode       TEXT NOT NULL CHECK (mode IN ('hls', 'drm')),
+    updated_at INTEGER
+  );
+`);
+
+export type StreamMode = "hls" | "drm";
+const modeUpsert = db.prepare(`
+  INSERT INTO stream_modes (channel_id, mode, updated_at) VALUES (?, ?, ?)
+  ON CONFLICT(channel_id) DO UPDATE SET mode = excluded.mode, updated_at = excluded.updated_at
+`);
+const modeDrmIds = db.prepare("SELECT channel_id FROM stream_modes WHERE mode = 'drm'");
+const modeGet = db.prepare("SELECT mode FROM stream_modes WHERE channel_id = ?");
+
+/** Records the stream mode learned for a live channel (no write when it's unchanged). */
+export function saveStreamMode(channelId: string, mode: StreamMode, nowMs: number): void {
+  const row = modeGet.get(channelId) as { mode: string } | undefined;
+  if (row?.mode === mode) return;
+  modeUpsert.run(channelId, mode, nowMs);
+}
+
+export function getStreamMode(channelId: string): StreamMode | null {
+  const row = modeGet.get(channelId) as { mode: StreamMode } | undefined;
+  return row?.mode ?? null;
+}
+
+/** Channel ids known to need Widevine (their non-DRM HLS was dead or missing when last played). */
+export function getDrmOnlyChannelIds(): Set<string> {
+  return new Set((modeDrmIds.all() as Array<{ channel_id: string }>).map((r) => r.channel_id));
+}
+
 /** Checkpoints the WAL and closes the database (graceful shutdown). */
 export function closeDb(): void {
   try { db.close(); } catch { /* already closed */ }
