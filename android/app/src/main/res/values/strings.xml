@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">JTV</string>
+    <!-- Settings → About: share the latest crash / freeze report -->
+    <string name="send_problem_report">Send problem report</string>
+    <string name="problem_report_none">No problems recorded</string>
+    <string name="problem_report_share">Share</string>
+    <string name="problem_report_desc">Shares the latest crash or freeze report. Sign-in details are removed.</string>
+    <string name="problem_report_no_app">No app on this device can share it</string>
 </resources>

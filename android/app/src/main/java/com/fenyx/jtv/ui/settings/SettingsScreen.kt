@@ -152,6 +152,18 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
     }
     val updateAvailable = updateInfo?.isUpdateAvailable == true
+    // Newest stored crash / freeze report (redacted), read off the main thread.
+    val latestReport by produceState<String?>(initialValue = null) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.fenyx.jtv.crash.CrashReports.latestReport(context)
+        }
+    }
+    val reportLabel = androidx.compose.ui.res.stringResource(com.fenyx.jtv.R.string.send_problem_report)
+    val reportNone = androidx.compose.ui.res.stringResource(com.fenyx.jtv.R.string.problem_report_none)
+    val reportShare = androidx.compose.ui.res.stringResource(com.fenyx.jtv.R.string.problem_report_share)
+    val reportDesc = androidx.compose.ui.res.stringResource(com.fenyx.jtv.R.string.problem_report_desc)
+    val reportNoApp = androidx.compose.ui.res.stringResource(com.fenyx.jtv.R.string.problem_report_no_app)
+    var reportMsg by remember { mutableStateOf<String?>(null) }
 
     // ─── Rows (built as data so the list stays a flat, keyed LazyColumn) ───
     val backup = rememberFavoritesBackup { id -> mainViewModel.getAllChannels().firstOrNull { it.id == id }?.name }
@@ -253,6 +265,24 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             else -> null
         }) {
             if (updateAvailable) sheet = Sheet.Update else mainViewModel.checkForUpdates(manual = true)
+        })
+        add(SRow.Item("report", reportLabel, value = if (latestReport != null) reportShare else reportNone,
+            description = reportMsg ?: if (latestReport != null) reportDesc else null) {
+            latestReport?.let { text ->
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, reportLabel)
+                    // Binder transactions cap at ~1 MB; a report is at most ~70 KB, but stay well under.
+                    putExtra(android.content.Intent.EXTRA_TEXT, text.take(200_000))
+                }
+                try {
+                    context.startActivity(android.content.Intent.createChooser(send, reportLabel)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    reportMsg = null
+                } catch (_: android.content.ActivityNotFoundException) {
+                    reportMsg = reportNoApp
+                }
+            }
         })
     }
 

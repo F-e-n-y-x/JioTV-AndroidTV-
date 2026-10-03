@@ -5,17 +5,42 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class JioTvApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // Self-hosted crash reports first, so a crash anywhere below is still recorded.
+        com.fenyx.jtv.crash.CrashReports.install(this)
+        collectAndUploadReports()
         // Keep the Jio access token fresh in the background (see TokenRefreshScheduler).
         com.fenyx.jtv.data.TokenRefreshScheduler.schedule(this)
         // Device-to-device sync over the home Wi-Fi; runs only while the app is in the foreground.
         com.fenyx.jtv.sync.LanSync.init(this)
         // Pre-open connections to Jio's video servers so the first channel starts sooner.
         com.fenyx.jtv.data.Net.warmUp()
+    }
+
+    /**
+     * Off the startup path: store ANRs / native crashes since the last run (API 30+), then, when this
+     * device signs in through a JTV server, upload any reports the server hasn't got yet.
+     */
+    private fun collectAndUploadReports() {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
+            kotlinx.coroutines.delay(5_000)
+            val reports = com.fenyx.jtv.crash.CrashReports
+            reports.collectExitReasons(this@JioTvApplication)
+            runCatching {
+                val settings = com.fenyx.jtv.data.SettingsManager(this@JioTvApplication)
+                val mode = settings.setupModeFlow.first()
+                if (mode == "jtv" || mode == "server") {
+                    val urls = com.fenyx.jtv.data.ServerClient.candidateUrls(mode, settings.serverUrlFlow.first())
+                    reports.uploadPending(this@JioTvApplication, urls, settings.serverTokenFlow.first())
+                }
+            }
+        }
     }
 
     override fun newImageLoader(): ImageLoader {
