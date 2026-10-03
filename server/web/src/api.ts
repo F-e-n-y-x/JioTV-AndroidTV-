@@ -47,6 +47,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+/** Crash / ANR report uploaded by a TV app (already redacted). */
+export interface ProblemReport {
+  id: string; kind: string; at: number; receivedAt: number;
+  appVersion: string; device: string; android: string; text: string;
+}
+
 export const api = {
   status: () => req<{ ok: boolean; hasCredentials: boolean }>("/api/status"),
   setupState: () => req<{ needsSetup: boolean; authEnabled: boolean }>("/api/setup/state"),
@@ -58,6 +64,8 @@ export const api = {
   addCode: (body: { name: string; code?: string; length?: number }) =>
     req<{ code: string; name: string }>("/api/admin/codes", { method: "POST", body: JSON.stringify(body) }),
   deleteCode: (code: string) => req(`/api/admin/codes/${encodeURIComponent(code)}`, { method: "DELETE" }),
+  reports: () => req<{ reports: ProblemReport[] }>("/api/admin/reports"),
+  deleteReport: (id: string) => req(`/api/admin/reports/${encodeURIComponent(id)}`, { method: "DELETE" }),
   https: () => req<{ httpsPort: number; hasCert: boolean }>("/api/admin/https"),
   regenerateHttps: () => req<{ ok: boolean; note: string }>("/api/admin/https/regenerate", { method: "POST", body: "{}" }),
   epgConfig: () => req<{ mode: "native" | "xmltv"; url: string; status: string; lastSync: number; channels: number }>("/api/admin/epg"),

@@ -13,6 +13,7 @@ import { config } from "../config";
 import { refreshNow } from "../refresh";
 import { sessions, requireAdmin, requireServerToken } from "./auth";
 import { randomBytes } from "node:crypto";
+import { saveReport, listReports, deleteReport } from "../store/reports";
 
 function startSession(reply: FastifyReply) {
   const sid = randomBytes(24).toString("hex");
@@ -182,6 +183,18 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/admin/logout-jio", { preHandler: requireAdmin }, async () => {
     clearCredentials();
+    return { ok: true };
+  });
+
+  // ── Problem reports: the TV app uploads crash / ANR reports (same access code as /api/credentials) ──
+  app.post("/api/reports", { config: { rateLimit: { max: 20, timeWindow: "1 hour" } }, bodyLimit: 256 * 1024, preHandler: requireServerToken }, async (req, reply) => {
+    const r = saveReport(req.body, Date.now());
+    if (!r) return reply.code(400).send({ error: "Expected {kind, at, appVersion, device, android, text}" });
+    return { ok: true, id: r.id };
+  });
+  app.get("/api/admin/reports", { preHandler: requireAdmin }, async () => ({ reports: listReports() }));
+  app.delete<{ Params: { id: string } }>("/api/admin/reports/:id", { preHandler: requireAdmin }, async (req) => {
+    deleteReport(req.params.id);
     return { ok: true };
   });
 

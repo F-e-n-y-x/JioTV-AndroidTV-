@@ -136,7 +136,27 @@ Machine/player endpoints use a **TV access code** (bearer header or `?code=`).
 | GET  | `/playlist.m3u` | **code** | M3U playlist for external players |
 | GET  | `/live/:id.m3u8` | **code** | Resolve + proxy a channel (HLS, quality/catch-up) |
 | GET  | `/seg` | **code** | Segment/key proxy for external players |
-| GET  | `/epg.xml` | **code** | XMLTV guide for external players |
+| GET  | `/epg.xml` · `/epg.xml.gz` | **code** | XMLTV guide for external players (native guide streamed from `DATA_DIR/epg.xml.gz`) |
+| POST | `/api/reports` | **code** | TV app uploads a crash / ANR report (redacted again on receipt) |
+| GET/DELETE | `/api/admin/reports…` | cookie | Last 50 problem reports (also shown on the Account page) |
+
+### Playlist options worth knowing
+
+- `drm=hide` leaves out channels that need Widevine (external players can't decrypt them). Jio's
+  channel list has no reliable DRM flag, so the server learns it: on a channel's first live play the
+  proxy checks whether Jio's non-DRM HLS works; if only the DASH does, it stores mode `drm` in the
+  `stream_modes` SQLite table (`hls` otherwise). `drm=hide` hides the `drm` ones. A channel nobody has
+  played yet is still listed; once a player gets the 415 from `/live` it is hidden from the next refresh.
+- The native XMLTV guide is built lazily on the first `/epg.xml` request, written through gzip straight
+  to `DATA_DIR/epg.xml.gz` (never held in memory), reused after a restart and rebuilt every 6 h while
+  players keep asking. `/epg.xml` is sent with `Content-Encoding: gzip` when the client accepts it.
+
+### Upgrade notes (v2)
+
+No manual migration. On start the server creates the `stream_modes` table, and writes
+`DATA_DIR/epg.xml.gz` and `DATA_DIR/reports/` on first use. The channel list now comes from Jio's v3.1
+list plus 7 allow-listed Zee regional channels from v1.4, so ~98 dead v1.4-only channels disappear
+from `/playlist.m3u` and the guide.
 
 ## Layout
 
