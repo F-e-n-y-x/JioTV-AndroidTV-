@@ -1,0 +1,34 @@
+<resources>
+    <string name="common_ok">ठीक है</string>
+    <string name="common_cancel">रद्द करें</string>
+    <string name="common_back">वापस</string>
+    <string name="common_close">बंद करें</string>
+    <string name="common_save">सेव करें</string>
+    <string name="common_done">हो गया</string>
+    <string name="common_try_again">फिर से कोशिश करें</string>
+    <string name="common_on">चालू</string>
+    <string name="common_off">बंद</string>
+    <string name="common_yes">हाँ</string>
+    <string name="common_no">नहीं</string>
+    <string name="common_loading">लोड हो रहा है…</string>
+    <string name="common_live_tv">लाइव TV</string>
+    <string name="common_guide">गाइड</string>
+    <string name="common_settings">सेटिंग्स</string>
+    <string name="common_search">खोजें</string>
+    <string name="common_favourites">फ़ेवरेट</string>
+    <string name="common_live">लाइव</string>
+    <plurals name="common_channel_count">
+        <item quantity="one">%d चैनल</item>
+        <item quantity="other">%d चैनल</item>
+    </plurals>
+
+    <string name="settings_app_language">ऐप की भाषा</string>
+    <string name="settings_app_language_system">डिवाइस जैसी</string>
+
+    <!-- Settings → About: share the latest crash / freeze report -->
+    <string name="send_problem_report">समस्या रिपोर्ट भेजें</string>
+    <string name="problem_report_none">कोई समस्या दर्ज नहीं हुई</string>
+    <string name="problem_report_share">शेयर करें</string>
+    <string name="problem_report_desc">सबसे हाल की क्रैश या रुकने की रिपोर्ट शेयर करता है। साइन-इन की जानकारी हटा दी जाती है।</string>
+    <string name="problem_report_no_app">इस डिवाइस पर कोई ऐप इसे शेयर नहीं कर सकता</string>
+</resources>

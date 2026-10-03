@@ -30,6 +30,10 @@ import com.fenyx.jtv.ui.components.KeyHint
 import com.fenyx.jtv.ui.components.numberStyle
 import com.fenyx.jtv.ui.components.textStyle
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.fenyx.jtv.R
+import com.fenyx.jtv.i18n.UiText
+import com.fenyx.jtv.i18n.text
 
 /** On-screen number pad (remote, mouse and touch). Keys are words, not symbols: "Delete" and "OK". */
 @Composable
@@ -81,7 +85,11 @@ fun TvNumpad(
                             else -> c.tx
                         }
                         Text(
-                            text = key,
+                            text = when (key) {
+                                KEY_DELETE -> stringResource(R.string.login_key_delete)
+                                KEY_OK -> stringResource(R.string.common_ok)
+                                else -> key
+                            },
                             modifier = Modifier.align(Alignment.Center),
                             style = if (isWord) textStyle(16.sp, FontWeight.SemiBold) else numberStyle(26.sp),
                             color = fg,
@@ -114,7 +122,7 @@ fun LoginScreen(
     var otp by remember { mutableStateOf("") }
     var step by remember { mutableIntStateOf(1) } // 1: Mobile, 2: OTP
     var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember { mutableStateOf<UiText?>(null) }
 
     // Hardware BACK: from the OTP step go back to the number step; from the number step return to the
     // setup chooser instead of exiting the app.
@@ -150,11 +158,12 @@ fun LoginScreen(
                     if (result.isSuccess) {
                         step = 2
                     } else {
-                        errorMessage = result.exceptionOrNull()?.message ?: "Could not send the code. Try again."
+                        // Jio's reply ("Failed to send OTP: 400") is technical; show a plain, translated message.
+                        errorMessage = UiText.of(R.string.login_error_send_failed)
                     }
                 }
             } else {
-                errorMessage = "Enter all 10 digits of your mobile number."
+                errorMessage = UiText.of(R.string.login_error_number_digits)
             }
         } else {
             if (otp.length >= 4) {
@@ -170,11 +179,11 @@ fun LoginScreen(
                             settingsManager.saveAuthData(authData)
                         }
                     } else {
-                        errorMessage = result.exceptionOrNull()?.message ?: "That code didn't work. Check it and try again."
+                        errorMessage = UiText.of(R.string.login_error_code_wrong)
                     }
                 }
             } else {
-                errorMessage = "Enter the code from the text message."
+                errorMessage = UiText.of(R.string.login_error_enter_code)
             }
         }
     }
@@ -182,38 +191,38 @@ fun LoginScreen(
     val form: @Composable () -> Unit = {
         Column(horizontalAlignment = Alignment.Start) {
             Text(
-                if (step == 1) "Sign in with your Jio number" else "Enter the code",
+                stringResource(if (step == 1) R.string.login_title_number else R.string.login_title_code),
                 style = textStyle(if (isPhone) 28.sp else 32.sp, FontWeight.Bold),
                 color = c.tx
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                if (step == 1) "We'll send a one-time code to this number."
-                else "We sent a code by text message to $mobileNumber.",
+                if (step == 1) stringResource(R.string.login_subtitle_number)
+                else stringResource(R.string.login_subtitle_code, mobileNumber),
                 style = textStyle(18.sp),
                 color = c.t2
             )
             Spacer(Modifier.height(20.dp))
 
             if (errorMessage != null) {
-                Text(errorMessage!!, color = c.error, style = textStyle(18.sp, FontWeight.SemiBold))
+                Text(errorMessage!!.text(), color = c.error, style = textStyle(18.sp, FontWeight.SemiBold))
                 Spacer(Modifier.height(12.dp))
             }
 
             if (step == 1) {
-                InputDisplay(value = mobileNumber, label = "Mobile number", placeholder = "10-digit number")
+                InputDisplay(value = mobileNumber, label = stringResource(R.string.login_mobile_number), placeholder = stringResource(R.string.login_mobile_number_hint))
             } else {
-                InputDisplay(value = otp, label = "Code", placeholder = "Code from the message")
+                InputDisplay(value = otp, label = stringResource(R.string.login_code), placeholder = stringResource(R.string.login_code_hint))
             }
             Spacer(Modifier.height(20.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 JtvButton(
                     when {
-                        step == 1 && isLoading -> "Sending…"
-                        step == 1 -> "Send code"
-                        isLoading -> "Checking…"
-                        else -> "Sign in"
+                        step == 1 && isLoading -> stringResource(R.string.login_sending)
+                        step == 1 -> stringResource(R.string.login_send_code)
+                        isLoading -> stringResource(R.string.login_checking)
+                        else -> stringResource(R.string.login_sign_in)
                     },
                     onSubmit,
                     primary = true,
@@ -222,7 +231,7 @@ fun LoginScreen(
                 )
                 if (step == 2) {
                     JtvButton(
-                        "Change number",
+                        stringResource(R.string.login_change_number),
                         { step = 1; otp = ""; errorMessage = null },
                         fontSize = 18.sp,
                         minHeight = if (isTv) 48.dp else 56.dp
@@ -231,7 +240,7 @@ fun LoginScreen(
             }
             if (onChangeMethod != null) {
                 Spacer(Modifier.height(12.dp))
-                JtvButton("Use a different sign-in method", onChangeMethod, fontSize = 16.sp, minHeight = if (isTv) 44.dp else 56.dp)
+                JtvButton(stringResource(R.string.login_other_method), onChangeMethod, fontSize = 16.sp, minHeight = if (isTv) 44.dp else 56.dp)
             }
         }
     }
@@ -294,7 +303,7 @@ fun LoginScreen(
                     Box(Modifier.weight(1f).padding(end = 32.dp)) { form() }
                     numpad()
                 }
-                if (isTv) KeyHint(listOf("Number keys" to "type", "OK" to "press a key", "Back" to "go back"))
+                if (isTv) KeyHint(listOf(stringResource(R.string.login_hint_number_keys) to stringResource(R.string.login_hint_type), stringResource(R.string.common_ok) to stringResource(R.string.login_hint_press_key), stringResource(R.string.common_back) to stringResource(R.string.login_hint_go_back)))
             }
         }
     }

@@ -99,7 +99,7 @@ object AppUpdateManager {
                 }
                 val tagName = json.optString("tag_name", "")
                 val remoteVersionName = tagName.removePrefix("v").removePrefix("V")
-                val changelog = json.optString("body", "No changelog provided.")
+                val changelog = json.optString("body", "") // blank: the UI shows its own (translated) default
 
                 var apkDownloadUrl = ""
                 var apkSize = 0L

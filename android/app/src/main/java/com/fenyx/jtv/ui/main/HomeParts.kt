@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.main
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -110,14 +113,14 @@ fun ChannelRow(
                     )
                     if (isFavorite) {
                         Icon(
-                            Icons.Filled.Star, contentDescription = "Favourite",
+                            Icons.Filled.Star, contentDescription = stringResource(R.string.home_favourite),
                             tint = if (inverted) fg else c.acc, modifier = Modifier.padding(start = 6.dp).size(14.dp),
                         )
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        nowProgram?.title ?: channel.group, style = textStyle(m.subSize), color = fg2, maxLines = 1,
+                        nowProgram?.title ?: groupLabel(channel.group), style = textStyle(m.subSize), color = fg2, maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
@@ -137,7 +140,7 @@ fun ChannelRow(
             if (onMore != null) {
                 JtvClickable(onClick = onMore, modifier = Modifier.size(56.dp), focusedContainer = c.s2) {
                     Icon(
-                        Icons.Filled.MoreVert, contentDescription = "Options for ${channel.name}",
+                        Icons.Filled.MoreVert, contentDescription = stringResource(R.string.home_options_for, channel.name),
                         tint = fg2, modifier = Modifier.align(Alignment.Center).size(24.dp),
                     )
                 }
@@ -193,7 +196,8 @@ fun CategoryChip(label: String, count: Int, selected: Boolean, onClick: () -> Un
     ) { focused ->
         val fg = if (selected || focused) c.invTx else c.t2
         Row(Modifier.align(Alignment.Center).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = textStyle(14.sp, if (selected) FontWeight.SemiBold else FontWeight.Normal), color = fg, maxLines = 1)
+            Text(label, style = textStyle(14.sp, if (selected) FontWeight.SemiBold else FontWeight.Normal), color = fg, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 200.dp))
             Text("  $count", style = textStyle(13.sp), color = fg.copy(alpha = 0.7f), maxLines = 1)
         }
     }
@@ -207,7 +211,8 @@ fun HeaderAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageV
         Row(Modifier.align(Alignment.Center).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = if (focused) c.invTx else c.t2, modifier = Modifier.size(20.dp))
             Box(Modifier.width(8.dp))
-            Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1)
+            Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }
 }
@@ -226,7 +231,8 @@ fun BottomNavItem(
         if (selected) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth(0.6f).height(3.dp).background(c.acc))
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, contentDescription = null, tint = if (selected) c.acc else c.t2, modifier = Modifier.size(24.dp))
-            Text(label, style = textStyle(12.sp, if (selected) FontWeight.Bold else FontWeight.Normal), color = if (selected) c.tx else c.t2, maxLines = 1)
+            Text(label, style = textStyle(12.sp, if (selected) FontWeight.Bold else FontWeight.Normal), color = if (selected) c.tx else c.t2, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
         }
     }
 }
@@ -237,10 +243,10 @@ enum class PhoneTab { Live, Guide, Search, Settings }
 @Composable
 fun PhoneBottomBar(selected: PhoneTab, onSelect: (PhoneTab) -> Unit) {
     Row(Modifier.fillMaxWidth().background(Jtv.colors.s1)) {
-        BottomNavItem("Live TV", Icons.Filled.Home, selected == PhoneTab.Live, { onSelect(PhoneTab.Live) }, Modifier.weight(1f))
-        BottomNavItem("Guide", Icons.Filled.DateRange, selected == PhoneTab.Guide, { onSelect(PhoneTab.Guide) }, Modifier.weight(1f))
-        BottomNavItem("Search", Icons.Filled.Search, selected == PhoneTab.Search, { onSelect(PhoneTab.Search) }, Modifier.weight(1f))
-        BottomNavItem("Settings", Icons.Filled.Settings, selected == PhoneTab.Settings, { onSelect(PhoneTab.Settings) }, Modifier.weight(1f))
+        BottomNavItem(stringResource(R.string.nav_live_tv), Icons.Filled.Home, selected == PhoneTab.Live, { onSelect(PhoneTab.Live) }, Modifier.weight(1f))
+        BottomNavItem(stringResource(R.string.nav_guide), Icons.Filled.DateRange, selected == PhoneTab.Guide, { onSelect(PhoneTab.Guide) }, Modifier.weight(1f))
+        BottomNavItem(stringResource(R.string.nav_search), Icons.Filled.Search, selected == PhoneTab.Search, { onSelect(PhoneTab.Search) }, Modifier.weight(1f))
+        BottomNavItem(stringResource(R.string.nav_settings), Icons.Filled.Settings, selected == PhoneTab.Settings, { onSelect(PhoneTab.Settings) }, Modifier.weight(1f))
     }
 }
 
@@ -253,10 +259,10 @@ fun TvTabs(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier 
     val c = Jtv.colors
     Row(modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf(
-            Triple(PhoneTab.Live, "Live TV", Icons.Filled.Home),
-            Triple(PhoneTab.Guide, "Guide", Icons.Filled.DateRange),
-            Triple(PhoneTab.Search, "Search", Icons.Filled.Search),
-            Triple(PhoneTab.Settings, "Settings", Icons.Filled.Settings),
+            Triple(PhoneTab.Live, stringResource(R.string.nav_live_tv), Icons.Filled.Home),
+            Triple(PhoneTab.Guide, stringResource(R.string.nav_guide), Icons.Filled.DateRange),
+            Triple(PhoneTab.Search, stringResource(R.string.nav_search), Icons.Filled.Search),
+            Triple(PhoneTab.Settings, stringResource(R.string.nav_settings), Icons.Filled.Settings),
         ).forEach { (tab, label, icon) ->
             val sel = tab == selected
             JtvClickable(
@@ -274,7 +280,8 @@ fun TvTabs(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier 
                 Row(Modifier.align(Alignment.Center).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(icon, contentDescription = null, tint = if (focused) c.invTx else if (sel) c.acc else c.t2, modifier = Modifier.size(20.dp))
                     Box(Modifier.width(8.dp))
-                    Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1)
+                    Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
         }
@@ -296,10 +303,10 @@ fun TabletNavRail(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Mo
             Modifier.width(TabletRailWidth - 1.dp).fillMaxHeight().background(c.s1).padding(top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            RailItem("Live TV", Icons.Filled.Home, selected == PhoneTab.Live) { onSelect(PhoneTab.Live) }
-            RailItem("Guide", Icons.Filled.DateRange, selected == PhoneTab.Guide) { onSelect(PhoneTab.Guide) }
-            RailItem("Search", Icons.Filled.Search, selected == PhoneTab.Search) { onSelect(PhoneTab.Search) }
-            RailItem("Settings", Icons.Filled.Settings, selected == PhoneTab.Settings) { onSelect(PhoneTab.Settings) }
+            RailItem(stringResource(R.string.nav_live_tv), Icons.Filled.Home, selected == PhoneTab.Live) { onSelect(PhoneTab.Live) }
+            RailItem(stringResource(R.string.nav_guide), Icons.Filled.DateRange, selected == PhoneTab.Guide) { onSelect(PhoneTab.Guide) }
+            RailItem(stringResource(R.string.nav_search), Icons.Filled.Search, selected == PhoneTab.Search) { onSelect(PhoneTab.Search) }
+            RailItem(stringResource(R.string.nav_settings), Icons.Filled.Settings, selected == PhoneTab.Settings) { onSelect(PhoneTab.Settings) }
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
     }
@@ -326,6 +333,8 @@ private fun RailItem(
             Text(
                 label, style = textStyle(12.sp, if (selected) FontWeight.Bold else FontWeight.Normal),
                 color = if (selected) c.tx else c.t2, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp),
             )
         }
     }

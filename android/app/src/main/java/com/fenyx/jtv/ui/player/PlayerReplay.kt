@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,10 +54,13 @@ internal fun replayWhen(startMs: Long, stopMs: Long): String =
     "${formatDay(startMs)} · ${formatTime(startMs)} – ${formatTime(stopMs)}"
 
 /** "Replay · Wed, 1 Oct · 8:00 PM – 9:00 PM" (under the show title). */
-internal fun replayStatus(p: EpgProgram): String = "Replay · ${replayWhen(p.startMs, p.stopMs)}"
+@Composable
+internal fun replayStatus(p: EpgProgram): String = stringResource(R.string.player_replay_status, replayWhen(p.startMs, p.stopMs))
 
 /** "Replay · Morning news · Wed, 1 Oct · 8:00 PM" (one line, where the title isn't shown separately). */
-internal fun replayLine(p: EpgProgram): String = "Replay · ${p.title} · ${formatDay(p.startMs)} · ${formatTime(p.startMs)}"
+@Composable
+internal fun replayLine(p: EpgProgram): String =
+    stringResource(R.string.player_replay_line, p.title, formatDay(p.startMs), formatTime(p.startMs))
 
 /** The guide entry for a request when the guide doesn't have it (any more). */
 internal fun CatchupRequest.asProgram(): EpgProgram =
@@ -102,20 +107,20 @@ internal fun ReplayEndPanel(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            "$finished has ended.", style = textStyle(22.sp, FontWeight.SemiBold), color = c.tx,
+            stringResource(R.string.player_replay_ended, finished), style = textStyle(22.sp, FontWeight.SemiBold), color = c.tx,
             textAlign = TextAlign.Center, maxLines = 2,
         )
         if (next != null) {
             Spacer(Modifier.height(6.dp))
-            JText("Next: ${next.title} · ${formatTime(next.startMs)}", 16.sp, color = c.t2)
+            JText(stringResource(R.string.player_replay_next, next.title, formatTime(next.startMs)), 16.sp, color = c.t2, maxLines = 2)
         }
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (next != null) {
-                JtvButton("Watch next programme", onNext, Modifier.focusRequester(firstFocus), primary = true, minHeight = h, fontSize = 18.sp)
-                JtvButton("Go live", onLive, minHeight = h, fontSize = 18.sp)
+                JtvButton(stringResource(R.string.player_watch_next), onNext, Modifier.focusRequester(firstFocus), primary = true, minHeight = h, fontSize = 18.sp)
+                JtvButton(stringResource(R.string.player_go_live), onLive, minHeight = h, fontSize = 18.sp)
             } else {
-                JtvButton("Go live", onLive, Modifier.focusRequester(firstFocus), primary = true, minHeight = h, fontSize = 18.sp)
+                JtvButton(stringResource(R.string.player_go_live), onLive, Modifier.focusRequester(firstFocus), primary = true, minHeight = h, fontSize = 18.sp)
             }
         }
     }

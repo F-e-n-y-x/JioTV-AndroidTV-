@@ -15,6 +15,8 @@ class JioTvApplication : Application(), ImageLoaderFactory {
         // Self-hosted crash reports first, so a crash anywhere below is still recorded.
         com.fenyx.jtv.crash.CrashReports.install(this)
         collectAndUploadReports()
+        // Android 7–12: the in-app language also applies to strings read via the application context.
+        com.fenyx.jtv.i18n.AppLocale.applyToApp(this)
         // Keep the Jio access token fresh in the background (see TokenRefreshScheduler).
         com.fenyx.jtv.data.TokenRefreshScheduler.schedule(this)
         // Device-to-device sync over the home Wi-Fi; runs only while the app is in the foreground.
@@ -41,6 +43,11 @@ class JioTvApplication : Application(), ImageLoaderFactory {
                 }
             }
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        com.fenyx.jtv.i18n.AppLocale.applyToApp(this) // a system config change resets the app resources' locale
     }
 
     override fun newImageLoader(): ImageLoader {

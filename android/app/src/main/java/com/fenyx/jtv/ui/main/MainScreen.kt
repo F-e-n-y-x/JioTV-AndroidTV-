@@ -1,5 +1,8 @@
 package com.fenyx.jtv.ui.main
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -126,13 +129,14 @@ fun MainScreen(
 
     val recentIds by viewModel.recentIds.collectAsState()
     val recentCount = remember(recentIds, displayChannels) { val ids = displayChannels.mapTo(HashSet()) { it.id }; recentIds.count { it in ids } }
-    val categories = remember(displayChannels, groups, favoriteChannels, recentCount) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val categories = remember(displayChannels, groups, favoriteChannels, recentCount, ctx) {
         val counts = displayChannels.groupingBy { it.group }.eachCount()
         buildList {
-            if (favoriteChannels.isNotEmpty()) add(Category(MainViewModel.GROUP_FAVORITES, "Favourites", favoriteChannels.size))
-            if (recentCount > 0) add(Category(MainViewModel.GROUP_RECENT, "Recent", recentCount))
-            add(Category(MainViewModel.GROUP_ALL, "All channels", displayChannels.size))
-            groups.forEach { add(Category(it, it, counts[it] ?: 0)) }
+            if (favoriteChannels.isNotEmpty()) add(Category(MainViewModel.GROUP_FAVORITES, ctx.getString(R.string.home_cat_favourites), favoriteChannels.size))
+            if (recentCount > 0) add(Category(MainViewModel.GROUP_RECENT, ctx.getString(R.string.home_cat_recent), recentCount))
+            add(Category(MainViewModel.GROUP_ALL, ctx.getString(R.string.home_cat_all_channels), displayChannels.size))
+            groups.forEach { add(Category(it, Labels.groupRes(it)?.let(ctx::getString) ?: it, counts[it] ?: 0)) }
         }
     }
     val indexById = remember(displayChannels) { displayChannels.withIndex().associate { (i, ch) -> ch.id to i } }
@@ -160,31 +164,31 @@ fun MainScreen(
 
     fun actionsFor(ch: Channel): List<ChannelAction> = buildList {
         val isFav = favoriteChannels.contains(ch.id)
-        add(ChannelAction("Watch") { play(ch) })
+        add(ChannelAction(ctx.getString(R.string.home_watch)) { play(ch) })
         // Catch-up: the guide, on this channel, a little back in time (Jio keeps 7 days).
-        if (ch.isCatchup) add(ChannelAction("Replay earlier shows", "Shows from the last 7 days") {
+        if (ch.isCatchup) add(ChannelAction(ctx.getString(R.string.home_action_replay_earlier), ctx.getString(R.string.home_action_replay_earlier_note)) {
             viewModel.requestGuideFocus(ch.id)
             onGuideClick()
         })
         add(
-            if (isFav) ChannelAction("Remove from favourites", confirm = "Remove ${ch.name} from favourites?") { viewModel.toggleFavorite(ch.id) }
-            else ChannelAction("Add to favourites") { viewModel.toggleFavorite(ch.id) }
+            if (isFav) ChannelAction(ctx.getString(R.string.home_action_remove_favourite), confirm = ctx.getString(R.string.home_confirm_remove_favourite, ch.name)) { viewModel.toggleFavorite(ch.id) }
+            else ChannelAction(ctx.getString(R.string.home_action_add_favourite)) { viewModel.toggleFavorite(ch.id) }
         )
         playTargets.forEach { tv ->
-            add(ChannelAction("Play on ${tv.name}") { com.fenyx.jtv.sync.LanSync.playOn(tv.id, ch.id) })
+            add(ChannelAction(ctx.getString(R.string.home_action_play_on, tv.name)) { com.fenyx.jtv.sync.LanSync.playOn(tv.id, ch.id) })
         }
         if (isFavoritesGroup && filteredChannels.size > 1) {
             val i = filteredChannels.indexOfFirst { it.id == ch.id }
-            add(ChannelAction("Move", "Use up and down to place it, then press OK") {
+            add(ChannelAction(ctx.getString(R.string.home_action_move), ctx.getString(R.string.home_action_move_note)) {
                 workingOrder = filteredChannels; movingId = ch.id
             })
-            if (i > 0) add(ChannelAction("Move to top") {
+            if (i > 0) add(ChannelAction(ctx.getString(R.string.home_action_move_top)) {
                 viewModel.saveFavoriteOrder(FavoriteOrder.move(filteredChannels, i, 0).map { it.id })
             })
-            if (i in 0 until filteredChannels.lastIndex) add(ChannelAction("Move to bottom") {
+            if (i in 0 until filteredChannels.lastIndex) add(ChannelAction(ctx.getString(R.string.home_action_move_bottom)) {
                 viewModel.saveFavoriteOrder(FavoriteOrder.move(filteredChannels, i, filteredChannels.lastIndex).map { it.id })
             })
-            add(ChannelAction("Group favourites by category", "Categories keep the order they first appear in") {
+            add(ChannelAction(ctx.getString(R.string.home_action_group_by_category), ctx.getString(R.string.home_action_group_by_category_note)) {
                 viewModel.groupFavoritesByCategory()
             })
         }
@@ -194,7 +198,7 @@ fun MainScreen(
     confirmUnfav?.let { ch ->
         ChannelActionsDialog(
             ch, emptyList(),
-            startWith = ChannelAction("Remove", confirm = "Remove ${ch.name} from favourites?") { viewModel.toggleFavorite(ch.id) },
+            startWith = ChannelAction(ctx.getString(R.string.home_action_remove), confirm = ctx.getString(R.string.home_confirm_remove_favourite, ch.name)) { viewModel.toggleFavorite(ch.id) },
         ) { confirmUnfav = null }
     }
 
@@ -288,13 +292,13 @@ fun MainScreen(
 
     val listContent: @Composable (RowMetrics, Boolean) -> Unit = { m, touch ->
         when {
-            isLoading && shown.isEmpty() -> CenterMessage { CircularProgressIndicator(color = c.acc) ; Spacer(Modifier.height(14.dp)); Text("Loading channels…", style = textStyle(16.sp), color = c.t2) }
+            isLoading && shown.isEmpty() -> CenterMessage { CircularProgressIndicator(color = c.acc) ; Spacer(Modifier.height(14.dp)); Text(stringResource(R.string.home_loading_channels), style = textStyle(16.sp), color = c.t2) }
             error != null && shown.isEmpty() -> CenterMessage {
                 Text(error ?: "", style = textStyle(17.sp), color = c.tx, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(16.dp))
-                JtvButton("Try again", onClick = { viewModel.retry() }, primary = true)
+                JtvButton(stringResource(R.string.common_try_again), onClick = { viewModel.retry() }, primary = true)
             }
-            shown.isEmpty() -> CenterMessage { Text("No channels in this category", style = textStyle(16.sp), color = c.t2) }
+            shown.isEmpty() -> CenterMessage { Text(stringResource(R.string.home_no_channels_in_category), style = textStyle(16.sp), color = c.t2) }
             else -> LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().focusRestorer().focusGroup(),
@@ -393,10 +397,15 @@ private fun WideHome(
     Column(Modifier.fillMaxSize().padding(horizontal = if (tv) 48.dp else 32.dp, vertical = if (tv) 27.dp else 24.dp)) {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text("Live TV", style = textStyle(26.sp, FontWeight.Bold), color = c.tx)
+                Text(stringResource(R.string.home_title), style = textStyle(26.sp, FontWeight.Bold), color = c.tx)
                 Text(
-                    if (movingName != null) "Moving $movingName · $movingPos of $total"
-                    else "${categories.firstOrNull { it.key == selected }?.label ?: "All channels"} · $total channels",
+                    if (movingName != null) stringResource(R.string.home_moving, movingName, movingPos, total)
+                    else stringResource(
+                        R.string.home_header_line,
+                        categories.firstOrNull { it.key == selected }?.label ?: stringResource(R.string.home_cat_all_channels),
+                        pluralStringResource(R.plurals.common_channel_count, total, total),
+                    ),
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     style = textStyle(14.sp, if (movingName != null) FontWeight.SemiBold else FontWeight.Normal),
                     color = if (movingName != null) c.acc else c.t3,
                 )
@@ -440,8 +449,17 @@ private fun WideHome(
         if (tv) {
             Spacer(Modifier.height(8.dp))
             KeyHint(
-                if (movingName != null) listOf("Up / Down" to "move", "OK" to "save", "Back" to "cancel")
-                else listOf("OK" to "watch", "Hold OK" to "options", "Left" to "categories", "0–9" to "channel number")
+                if (movingName != null) listOf(
+                    stringResource(R.string.nav_key_up_down) to stringResource(R.string.nav_hint_move),
+                    stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_save),
+                    stringResource(R.string.nav_key_back) to stringResource(R.string.nav_hint_cancel),
+                )
+                else listOf(
+                    stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_watch),
+                    stringResource(R.string.nav_key_hold_ok) to stringResource(R.string.nav_hint_options),
+                    stringResource(R.string.nav_key_left) to stringResource(R.string.nav_hint_categories),
+                    stringResource(R.string.nav_key_digits) to stringResource(R.string.nav_hint_channel_number),
+                )
             )
         }
     }
@@ -467,9 +485,9 @@ private fun PhoneHome(
     Column(Modifier.fillMaxSize()) {
         // Compact header: the status bar already shows the time on phones.
         Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Live TV", style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+            Text(stringResource(R.string.home_title), style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
             Spacer(Modifier.width(10.dp))
-            Text("$count channels", style = textStyle(14.sp), color = c.t3)
+            Text(pluralStringResource(R.plurals.common_channel_count, count, count), style = textStyle(14.sp), color = c.t3, maxLines = 1)
         }
         LazyRow(
             state = chipState,
@@ -477,7 +495,7 @@ private fun PhoneHome(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(categories, key = { it.key }) { cat ->
-                CategoryChip(if (cat.key == MainViewModel.GROUP_ALL) "All" else cat.label, cat.count, cat.key == selected) { onSelect(cat.key) }
+                CategoryChip(if (cat.key == MainViewModel.GROUP_ALL) stringResource(R.string.home_cat_all) else cat.label, cat.count, cat.key == selected) { onSelect(cat.key) }
             }
         }
         Box(Modifier.weight(1f).padding(horizontal = 6.dp)) { list() }
@@ -518,10 +536,14 @@ private fun PreviewPane(
         if (p != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.clip(RoundedCornerShape(4.dp)).background(c.s2).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                    Text("Now", style = textStyle(13.sp, FontWeight.SemiBold), color = c.tx)
+                    Text(stringResource(R.string.home_now), style = textStyle(13.sp, FontWeight.SemiBold), color = c.tx, maxLines = 1)
                 }
                 Spacer(Modifier.width(10.dp))
-                Text("${formatTime(p.startMs)} – ${formatTime(p.stopMs)} · ${p.minutesLeft(now)} min left", style = textStyle(14.sp), color = c.t2, maxLines = 1)
+                Text(
+                    stringResource(R.string.home_time_range_left, formatTime(p.startMs), formatTime(p.stopMs),
+                        pluralStringResource(R.plurals.home_min_left, p.minutesLeft(now), p.minutesLeft(now))),
+                    style = textStyle(14.sp), color = c.t2, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
             }
             Spacer(Modifier.height(6.dp))
             Text(p.title, style = textStyle(if (tv) 20.sp else 22.sp, FontWeight.Bold), color = c.tx, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -539,11 +561,11 @@ private fun PreviewPane(
                 }
             }
         } else {
-            Text(ch.group, style = textStyle(16.sp, FontWeight.SemiBold), color = c.tx)
-            Text(ch.language, style = textStyle(15.sp), color = c.t2)
+            Text(groupLabel(ch.group), style = textStyle(16.sp, FontWeight.SemiBold), color = c.tx)
+            Text(languageLabel(ch.language), style = textStyle(15.sp), color = c.t2)
             if (programs == null) {
                 Spacer(Modifier.height(8.dp))
-                Text("Turn on the programme guide in Settings to see what's on.", style = textStyle(14.sp), color = c.t3, maxLines = 3)
+                Text(stringResource(R.string.home_guide_off_hint), style = textStyle(14.sp), color = c.t3, maxLines = 3)
             }
         }
         Spacer(Modifier.weight(1f))
@@ -554,9 +576,9 @@ private fun PreviewPane(
             val miniShowing = com.fenyx.jtv.LocalMiniBarInset.current.value > 0.dp
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                JtvButton("Watch", onWatch, Modifier.weight(1f), icon = Icons.Filled.PlayArrow, primary = true, fontSize = 15.sp, minHeight = 44.dp)
+                JtvButton(stringResource(R.string.home_watch), onWatch, Modifier.weight(1f), icon = Icons.Filled.PlayArrow, primary = true, fontSize = 15.sp, minHeight = 44.dp)
                 JtvButton(
-                    if (isFavorite) "Saved" else "Favourite", onFavorite, Modifier.weight(1f),
+                    if (isFavorite) stringResource(R.string.home_saved) else stringResource(R.string.home_favourite), onFavorite, Modifier.weight(1f),
                     icon = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star, fontSize = 15.sp, minHeight = 44.dp,
                 )
             }

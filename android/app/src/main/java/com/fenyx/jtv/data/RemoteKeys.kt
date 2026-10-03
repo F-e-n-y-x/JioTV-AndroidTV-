@@ -1,6 +1,9 @@
 package com.fenyx.jtv.data
 
 import android.view.KeyEvent
+import androidx.annotation.StringRes
+import com.fenyx.jtv.R
+import com.fenyx.jtv.i18n.UiText
 
 /**
  * Custom remote buttons (docs/v2/INTERACTION.md §6). Pure Kotlin (only KeyEvent's compile-time
@@ -13,23 +16,23 @@ import android.view.KeyEvent
  * Locked: Back never takes an action (so nobody gets stuck). OK and the arrows keep their tap meaning;
  * only their hold slot can be given an action. System keys (Home, power, volume) are never recorded.
  */
-enum class RemoteAction(val id: String, val label: String) {
-    QuickMenu("quick_menu", "Quick menu"),
-    Options("options", "Player options"),
-    Favourite("favourite", "Favourite on or off"),
-    Guide("guide", "Programme guide"),
-    ChannelList("channel_list", "Channel list"),
-    PreviousChannel("previous_channel", "Previous channel"),
-    PlayPause("play_pause", "Pause or play"),
-    Language("language", "Sound language"),
-    Quality("quality", "Picture quality"),
-    Aspect("aspect", "Picture size"),
-    VoiceBoost("voice_boost", "Voice boost (next level)"),
-    Sleep("sleep", "Sleep timer"),
-    Mute("mute", "Sound off or on"),
-    Search("search", "Search"),
-    GoLive("go_live", "Go live"),
-    NumberEntry("number_entry", "Type a channel number");
+enum class RemoteAction(val id: String, @StringRes val labelRes: Int) {
+    QuickMenu("quick_menu", R.string.remote_action_quick_menu),
+    Options("options", R.string.remote_action_options),
+    Favourite("favourite", R.string.remote_action_favourite),
+    Guide("guide", R.string.remote_action_guide),
+    ChannelList("channel_list", R.string.remote_action_channel_list),
+    PreviousChannel("previous_channel", R.string.remote_action_previous_channel),
+    PlayPause("play_pause", R.string.remote_action_play_pause),
+    Language("language", R.string.remote_action_language),
+    Quality("quality", R.string.remote_action_quality),
+    Aspect("aspect", R.string.remote_action_aspect),
+    VoiceBoost("voice_boost", R.string.remote_action_voice_boost),
+    Sleep("sleep", R.string.remote_action_sleep),
+    Mute("mute", R.string.remote_action_mute),
+    Search("search", R.string.remote_action_search),
+    GoLive("go_live", R.string.remote_action_go_live),
+    NumberEntry("number_entry", R.string.remote_action_number_entry);
 
     companion object {
         fun byId(id: String): RemoteAction? = entries.firstOrNull { it.id == id }
@@ -45,7 +48,7 @@ data class KeySpec(val code: Int, val scan: Int = 0, val hold: Boolean = false) 
         if (code != KeyEvent.KEYCODE_UNKNOWN || o.code != KeyEvent.KEYCODE_UNKNOWN) code == o.code
         else scan != 0 && scan == o.scan
 
-    val label: String get() = (if (hold) "Hold " else "") + RemoteKeys.buttonLabel(code, scan)
+    val label: UiText get() = RemoteKeys.buttonLabel(code, scan).let { if (hold) UiText.of(R.string.remote_hold, it) else it }
 
     companion object {
         /**
@@ -57,11 +60,11 @@ data class KeySpec(val code: Int, val scan: Int = 0, val hold: Boolean = false) 
     }
 }
 
-enum class RemoteProfile(val id: String, val label: String, val description: String) {
-    Standard("standard", "Standard Android TV remote", "Colour buttons, Guide, Menu and Last channel"),
-    FireTv("fire_tv", "Fire TV remote", "Menu, rewind and fast-forward buttons"),
-    Basic("basic", "Basic remote", "Only arrows, OK and Back. Hold OK for the quick menu"),
-    AirMouse("air_mouse", "Air mouse", "Pointer remote with a small keyboard");
+enum class RemoteProfile(val id: String, @StringRes val labelRes: Int, @StringRes val descriptionRes: Int) {
+    Standard("standard", R.string.remote_profile_standard, R.string.remote_profile_standard_desc),
+    FireTv("fire_tv", R.string.remote_profile_fire_tv, R.string.remote_profile_fire_tv_desc),
+    Basic("basic", R.string.remote_profile_basic, R.string.remote_profile_basic_desc),
+    AirMouse("air_mouse", R.string.remote_profile_air_mouse, R.string.remote_profile_air_mouse_desc);
 
     companion object {
         fun byId(id: String?): RemoteProfile? = entries.firstOrNull { it.id == id }
@@ -195,53 +198,53 @@ object RemoteKeys {
     /** A slot that can never take an action: Back (tap or hold), or a tap on OK / an arrow. */
     fun isLockedSlot(spec: KeySpec) = isBack(spec.code) || (!spec.hold && isLockedTap(spec.code))
 
-    fun buttonLabel(code: Int, scan: Int = 0): String =
+    fun buttonLabel(code: Int, scan: Int = 0): UiText =
         when (code) {
-            KeyEvent.KEYCODE_UNKNOWN -> if (scan != 0) "Button $scan" else "Unknown button"
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> "OK"
-            KeyEvent.KEYCODE_DPAD_UP -> "Up arrow"
-            KeyEvent.KEYCODE_DPAD_DOWN -> "Down arrow"
-            KeyEvent.KEYCODE_DPAD_LEFT -> "Left arrow"
-            KeyEvent.KEYCODE_DPAD_RIGHT -> "Right arrow"
-            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> "Back"
-            KeyEvent.KEYCODE_MENU -> "Menu"
-            KeyEvent.KEYCODE_GUIDE -> "Guide"
-            KeyEvent.KEYCODE_INFO -> "Info"
-            KeyEvent.KEYCODE_PROG_RED -> "Red button"
-            KeyEvent.KEYCODE_PROG_GREEN -> "Green button"
-            KeyEvent.KEYCODE_PROG_YELLOW -> "Yellow button"
-            KeyEvent.KEYCODE_PROG_BLUE -> "Blue button"
-            KeyEvent.KEYCODE_CHANNEL_UP -> "Channel up"
-            KeyEvent.KEYCODE_CHANNEL_DOWN -> "Channel down"
-            KeyEvent.KEYCODE_LAST_CHANNEL -> "Last channel"
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "Play/Pause"
-            KeyEvent.KEYCODE_MEDIA_PLAY -> "Play"
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> "Pause"
-            KeyEvent.KEYCODE_MEDIA_STOP -> "Stop"
-            KeyEvent.KEYCODE_MEDIA_REWIND -> "Rewind"
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "Fast forward"
-            KeyEvent.KEYCODE_MEDIA_NEXT -> "Next"
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "Previous"
-            KeyEvent.KEYCODE_MEDIA_RECORD -> "Record"
-            KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> "Audio"
-            KeyEvent.KEYCODE_CAPTIONS -> "Subtitles"
-            KeyEvent.KEYCODE_SEARCH -> "Search"
-            KeyEvent.KEYCODE_BOOKMARK -> "Bookmark"
-            KeyEvent.KEYCODE_TV -> "TV"
-            KeyEvent.KEYCODE_DVR -> "Recordings"
-            KeyEvent.KEYCODE_SETTINGS -> "Settings"
-            KeyEvent.KEYCODE_TV_INPUT -> "Input"
-            KeyEvent.KEYCODE_WINDOW -> "Window"
-            KeyEvent.KEYCODE_SPACE -> "Space"
-            KeyEvent.KEYCODE_PAGE_UP -> "Page up"
-            KeyEvent.KEYCODE_PAGE_DOWN -> "Page down"
-            KeyEvent.KEYCODE_DEL -> "Backspace"
-            in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> "Number ${code - KeyEvent.KEYCODE_0}"
-            in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> "Number ${code - KeyEvent.KEYCODE_NUMPAD_0}"
-            in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z -> "Key ${'A' + (code - KeyEvent.KEYCODE_A)}"
-            in KeyEvent.KEYCODE_F1..KeyEvent.KEYCODE_F12 -> "F${code - KeyEvent.KEYCODE_F1 + 1}"
-            in KeyEvent.KEYCODE_BUTTON_1..KeyEvent.KEYCODE_BUTTON_16 -> "Button ${code - KeyEvent.KEYCODE_BUTTON_1 + 1}"
-            else -> "Button $code"
+            KeyEvent.KEYCODE_UNKNOWN -> if (scan != 0) UiText.of(R.string.remote_key_button, scan) else UiText.of(R.string.remote_key_unknown)
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> UiText.of(R.string.remote_key_ok)
+            KeyEvent.KEYCODE_DPAD_UP -> UiText.of(R.string.remote_key_up)
+            KeyEvent.KEYCODE_DPAD_DOWN -> UiText.of(R.string.remote_key_down)
+            KeyEvent.KEYCODE_DPAD_LEFT -> UiText.of(R.string.remote_key_left)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> UiText.of(R.string.remote_key_right)
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> UiText.of(R.string.remote_key_back)
+            KeyEvent.KEYCODE_MENU -> UiText.of(R.string.remote_key_menu)
+            KeyEvent.KEYCODE_GUIDE -> UiText.of(R.string.remote_key_guide)
+            KeyEvent.KEYCODE_INFO -> UiText.of(R.string.remote_key_info)
+            KeyEvent.KEYCODE_PROG_RED -> UiText.of(R.string.remote_key_red)
+            KeyEvent.KEYCODE_PROG_GREEN -> UiText.of(R.string.remote_key_green)
+            KeyEvent.KEYCODE_PROG_YELLOW -> UiText.of(R.string.remote_key_yellow)
+            KeyEvent.KEYCODE_PROG_BLUE -> UiText.of(R.string.remote_key_blue)
+            KeyEvent.KEYCODE_CHANNEL_UP -> UiText.of(R.string.remote_key_channel_up)
+            KeyEvent.KEYCODE_CHANNEL_DOWN -> UiText.of(R.string.remote_key_channel_down)
+            KeyEvent.KEYCODE_LAST_CHANNEL -> UiText.of(R.string.remote_key_last_channel)
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> UiText.of(R.string.remote_key_play_pause)
+            KeyEvent.KEYCODE_MEDIA_PLAY -> UiText.of(R.string.remote_key_play)
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> UiText.of(R.string.remote_key_pause)
+            KeyEvent.KEYCODE_MEDIA_STOP -> UiText.of(R.string.remote_key_stop)
+            KeyEvent.KEYCODE_MEDIA_REWIND -> UiText.of(R.string.remote_key_rewind)
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> UiText.of(R.string.remote_key_fast_forward)
+            KeyEvent.KEYCODE_MEDIA_NEXT -> UiText.of(R.string.remote_key_next)
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> UiText.of(R.string.remote_key_previous)
+            KeyEvent.KEYCODE_MEDIA_RECORD -> UiText.of(R.string.remote_key_record)
+            KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> UiText.of(R.string.remote_key_audio)
+            KeyEvent.KEYCODE_CAPTIONS -> UiText.of(R.string.remote_key_subtitles)
+            KeyEvent.KEYCODE_SEARCH -> UiText.of(R.string.remote_key_search)
+            KeyEvent.KEYCODE_BOOKMARK -> UiText.of(R.string.remote_key_bookmark)
+            KeyEvent.KEYCODE_TV -> UiText.of(R.string.remote_key_tv)
+            KeyEvent.KEYCODE_DVR -> UiText.of(R.string.remote_key_recordings)
+            KeyEvent.KEYCODE_SETTINGS -> UiText.of(R.string.remote_key_settings)
+            KeyEvent.KEYCODE_TV_INPUT -> UiText.of(R.string.remote_key_input)
+            KeyEvent.KEYCODE_WINDOW -> UiText.of(R.string.remote_key_window)
+            KeyEvent.KEYCODE_SPACE -> UiText.of(R.string.remote_key_space)
+            KeyEvent.KEYCODE_PAGE_UP -> UiText.of(R.string.remote_key_page_up)
+            KeyEvent.KEYCODE_PAGE_DOWN -> UiText.of(R.string.remote_key_page_down)
+            KeyEvent.KEYCODE_DEL -> UiText.of(R.string.remote_key_backspace)
+            in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> UiText.of(R.string.remote_key_number, code - KeyEvent.KEYCODE_0)
+            in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> UiText.of(R.string.remote_key_number, code - KeyEvent.KEYCODE_NUMPAD_0)
+            in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z -> UiText.of(R.string.remote_key_letter, ('A' + (code - KeyEvent.KEYCODE_A)).toString())
+            in KeyEvent.KEYCODE_F1..KeyEvent.KEYCODE_F12 -> UiText.raw("F${code - KeyEvent.KEYCODE_F1 + 1}")
+            in KeyEvent.KEYCODE_BUTTON_1..KeyEvent.KEYCODE_BUTTON_16 -> UiText.of(R.string.remote_key_button, code - KeyEvent.KEYCODE_BUTTON_1 + 1)
+            else -> UiText.of(R.string.remote_key_button, code)
         }
 
     private fun tap(code: Int) = KeySpec(code)

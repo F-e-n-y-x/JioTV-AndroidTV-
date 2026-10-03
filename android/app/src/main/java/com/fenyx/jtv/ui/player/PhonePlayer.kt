@@ -1,5 +1,8 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -157,7 +160,7 @@ internal fun LazyListScope.nowSection(
         ActionRow(d.model, onFavourite = { act.toggleFavourite() }, onOpen = { ui.openOptions(it) })
     }
     if (later.isNotEmpty()) {
-        item(key = "next-h", contentType = "header") { SectionHeader("Next on ${playing.name}") }
+        item(key = "next-h", contentType = "header") { SectionHeader(stringResource(R.string.player_next_on, playing.name)) }
         items(later, key = { "next:${it.startMs}" }, contentType = { "next" }) { NextRow(it) }
     }
 }
@@ -174,7 +177,7 @@ internal fun LazyListScope.channelsSection(
     val playingId = d.playing?.id
     stickyHeader(key = "channels-h", contentType = "chips") {
         Column(Modifier.fillMaxWidth().background(Jtv.colors.bg)) {
-            SectionHeader("Channels")
+            SectionHeader(stringResource(R.string.player_channels))
             CategoryChips(
                 d.browseGroups, bGroup, onPick = { ui.browseGroup = it },
                 modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
@@ -290,11 +293,11 @@ internal fun PhoneVideo(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (act.canMinimize) OverVideoIcon(PlayerIcons.ExpandMore, "Minimise player", { act.minimize() }, iconSize = 30.dp)
-                    else OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() })
+                    if (act.canMinimize) OverVideoIcon(PlayerIcons.ExpandMore, stringResource(R.string.player_minimise), { act.minimize() }, iconSize = 30.dp)
+                    else OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.common_back), { act.leave() })
                     ControlsTitle(playing, 15.sp, 420.dp)
                     Spacer(Modifier.weight(1f))
-                    OverVideoIcon(Icons.Filled.Settings, "Settings", { ui.openOptions() })
+                    OverVideoIcon(Icons.Filled.Settings, stringResource(R.string.common_settings), { ui.openOptions() })
                 }
                 // ── Centre: previous · play/pause · next ──
                 CentreControls(
@@ -307,7 +310,7 @@ internal fun PhoneVideo(
                     d.timeshift, act, onInteract = { ui.bannerToken++ },
                     modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 4.dp, bottom = 2.dp),
                 ) {
-                    OverVideoIcon(PlayerIcons.Fullscreen, "Full screen", { act.fullScreen(true) })
+                    OverVideoIcon(PlayerIcons.Fullscreen, stringResource(R.string.player_full_screen), { act.fullScreen(true) })
                 }
             }
         }
@@ -330,7 +333,7 @@ internal fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
             var noGuide by remember(ch.id) { mutableStateOf(false) }
             LaunchedEffect(ch.id) { delay(2_500); noGuide = true }
             if (noGuide) {
-                JText("No programme details for this channel.", 16.sp, color = c.t2, maxLines = 2,
+                JText(stringResource(R.string.player_no_details), 16.sp, color = c.t2, maxLines = 2,
                     modifier = Modifier.padding(top = 8.dp))
             }
             return@Column
@@ -349,7 +352,7 @@ internal fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
                 val left = cur.minutesLeft(now)
                 Spacer(Modifier.width(8.dp))
                 if (left <= 10) EndsSoonPill(cur.stopMs, fontSize = 14.sp)
-                else JText("· $left min left", 14.sp, color = c.t2)
+                else JText("· " + pluralStringResource(R.plurals.player_min_left, left, left), 14.sp, color = c.t2)
             }
             JtvProgress(cur.progress(now), Modifier.padding(top = 8.dp))
         }
@@ -373,9 +376,9 @@ internal fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
         if (expanded) {
             val t2 = c.t2
             extraEpisode?.let { JText(it, 16.sp, maxLines = Int.MAX_VALUE, modifier = Modifier.padding(top = 8.dp)) }
-            cur.episodeNum?.let { JText("Episode $it", 14.sp, color = t2, modifier = Modifier.padding(top = 8.dp)) }
-            cur.cast?.let { JText("Cast: $it", 14.sp, color = t2, maxLines = 3, modifier = Modifier.padding(top = 6.dp)) }
-            cur.director?.let { JText("Director: $it", 14.sp, color = t2, maxLines = 2, modifier = Modifier.padding(top = 6.dp)) }
+            cur.episodeNum?.let { JText(stringResource(R.string.player_episode, it.toString()), 14.sp, color = t2, modifier = Modifier.padding(top = 8.dp)) }
+            cur.cast?.let { JText(stringResource(R.string.player_cast, it), 14.sp, color = t2, maxLines = 3, modifier = Modifier.padding(top = 6.dp)) }
+            cur.director?.let { JText(stringResource(R.string.player_director, it), 14.sp, color = t2, maxLines = 2, modifier = Modifier.padding(top = 6.dp)) }
         }
         if (clipped || hasExtras || expanded) {
             JtvClickable(
@@ -383,7 +386,7 @@ internal fun NowCard(ch: Channel, cur: EpgProgram?, language: String?) {
                 modifier = Modifier.heightIn(min = 48.dp).widthIn(min = 64.dp),
             ) { focused ->
                 JText(
-                    if (expanded) "Less" else "More", 16.sp,
+                    stringResource(if (expanded) R.string.player_less else R.string.player_more), 16.sp,
                     color = if (focused) c.invTx else c.acc, weight = FontWeight.SemiBold,
                     modifier = Modifier.align(Alignment.CenterStart),
                 )
@@ -405,16 +408,16 @@ internal fun ActionRow(m: OptionsModel, onFavourite: () -> Unit, onOpen: (Option
         val fav = m.favourite
         ActionIcon(
             if (fav) Icons.Filled.Star else PlayerIcons.StarBorder,
-            if (fav) "Saved" else "Favourite",
+            stringResource(if (fav) R.string.player_favourite_saved else R.string.player_favourite),
             tint = if (fav) c.acc else c.tx, onClick = onFavourite,
         )
-        if (m.langChoices.size > 1) ActionIcon(PlayerIcons.Translate, "Language", onClick = { onOpen(OptionsPage.Language) })
-        ActionIcon(PlayerIcons.Hd, "Quality", onClick = { onOpen(OptionsPage.Quality) })
+        if (m.langChoices.size > 1) ActionIcon(PlayerIcons.Translate, stringResource(R.string.player_language), onClick = { onOpen(OptionsPage.Language) })
+        ActionIcon(PlayerIcons.Hd, stringResource(R.string.player_quality_short), onClick = { onOpen(OptionsPage.Quality) })
         ActionIcon(
-            PlayerIcons.Timer, if (m.sleep > 0) sleepLabel(m.sleep) else "Sleep",
+            PlayerIcons.Timer, if (m.sleep > 0) sleepLabel(m.sleep) else stringResource(R.string.player_sleep),
             tint = if (m.sleep > 0) c.acc else c.tx, onClick = { onOpen(OptionsPage.Sleep) },
         )
-        ActionIcon(Icons.Filled.MoreVert, "More", onClick = { onOpen(OptionsPage.Main) })
+        ActionIcon(Icons.Filled.MoreVert, stringResource(R.string.player_more), onClick = { onOpen(OptionsPage.Main) })
     }
 }
 
@@ -506,7 +509,7 @@ internal fun PhoneChannelRow(ch: Channel, playing: Boolean, epg: EpgSource, onCl
             }
             if (playing) {
                 Spacer(Modifier.width(8.dp))
-                JText("Playing", 14.sp, color = if (focused) c.invTx else c.acc, weight = FontWeight.SemiBold)
+                JText(stringResource(R.string.player_playing), 14.sp, color = if (focused) c.invTx else c.acc, weight = FontWeight.SemiBold)
             }
         }
     }

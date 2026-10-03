@@ -46,14 +46,14 @@ val JtvLight = JtvColors(
     acc = Color(0xFFE28E0B), accTx = Color(0xFF141414), plate = Color(0xFF1B1B1F), error = Color(0xFFC4332B),
 )
 
-/** Accent choices: (key, label, dark-theme colour, light-theme colour). Light values are deeper for contrast. */
+/** Accent choices: (key, label string resource, dark-theme colour, light-theme colour). Light values are deeper for contrast. */
 val ACCENTS = listOf(
-    Triple("amber", "Amber", Color(0xFFF0A12E) to Color(0xFFE28E0B)),
-    Triple("purple", "Purple", Color(0xFFB48CFF) to Color(0xFF7C3AED)),
-    Triple("blue", "Blue", Color(0xFF6CA8FF) to Color(0xFF2563EB)),
-    Triple("green", "Green", Color(0xFF5FCB86) to Color(0xFF15803D)),
-    Triple("rose", "Rose", Color(0xFFFF7A90) to Color(0xFFE11D48)),
-    Triple("teal", "Teal", Color(0xFF3CC8C0) to Color(0xFF0F766E)),
+    Triple("amber", R.string.accent_amber, Color(0xFFF0A12E) to Color(0xFFE28E0B)),
+    Triple("purple", R.string.accent_purple, Color(0xFFB48CFF) to Color(0xFF7C3AED)),
+    Triple("blue", R.string.accent_blue, Color(0xFF6CA8FF) to Color(0xFF2563EB)),
+    Triple("green", R.string.accent_green, Color(0xFF5FCB86) to Color(0xFF15803D)),
+    Triple("rose", R.string.accent_rose, Color(0xFFFF7A90) to Color(0xFFE11D48)),
+    Triple("teal", R.string.accent_teal, Color(0xFF3CC8C0) to Color(0xFF0F766E)),
 )
 
 /** [base] with the chosen accent; text on the accent is dark or white, whichever reads better. */
@@ -64,7 +64,12 @@ fun JtvColors.withAccent(key: String?): JtvColors {
     return copy(acc = acc, accTx = if (lum > 0.45f) Color(0xFF141414) else Color(0xFFFFFFFF))
 }
 
-/** Anek Latin, subset to Latin + punctuation (≈48 KB per weight). `wide` is the extended cut for numbers. */
+/**
+ * Anek: each text weight is one file holding Anek Latin (Latin + punctuation) and Anek Devanagari (Hindi letters),
+ * merged (third_party/fonts/build_devanagari.py). Compose picks a font per weight, not per character, so the two
+ * scripts must share a file for Hindi to use Anek too; any other script falls back to the system font.
+ * `wide` is the extended Latin cut for numbers.
+ */
 object JtvFonts {
     val text = FontFamily(
         Font(R.font.jtv_anek_regular, FontWeight.Normal),

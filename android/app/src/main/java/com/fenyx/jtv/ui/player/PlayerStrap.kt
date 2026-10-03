@@ -1,5 +1,8 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -177,7 +180,7 @@ internal fun InfoStrap(
                     Spacer(Modifier.width(12.dp))
                     val left = cur.minutesLeft(now)
                     if (left <= 10) EndsSoonPill(cur.stopMs, fontSize = s.metaSize)
-                    else JText("$left min left", s.metaSize, color = c.t2)
+                    else JText(pluralStringResource(R.plurals.player_min_left, left, left), s.metaSize, color = c.t2)
                 }
             } else {
                 JText(channel.name, s.titleSize, weight = FontWeight.Bold)
@@ -194,7 +197,7 @@ internal fun InfoStrap(
                 Modifier.width(s.nextW).fillMaxHeight().padding(horizontal = 18.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
             ) {
-                SectionLabel("NEXT")
+                SectionLabel(stringResource(R.string.player_next_label))
                 later.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -320,7 +323,7 @@ internal fun BrowseHeader(label: String, count: Int, prev: String?, next: String
                     modifier = Modifier.padding(bottom = 3.dp))
             }
             if (prev != null && next != null && prev != label) {
-                JText("Up: $prev  ·  Down: $next", 14.sp, color = c.t2, modifier = Modifier.padding(top = 2.dp))
+                JText(stringResource(R.string.player_up_down_groups, prev, next), 14.sp, color = c.t2, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }
@@ -340,7 +343,7 @@ internal fun NumberEntry(digits: String, match: Channel?, miss: String?, modifie
         }
         val line = when {
             miss != null -> miss
-            digits.isNotEmpty() -> match?.name ?: "No channel $digits"
+            digits.isNotEmpty() -> match?.name ?: stringResource(R.string.player_no_channel, digits)
             else -> null
         }
         if (line != null) {
@@ -358,7 +361,7 @@ internal fun BufferingIndicator(name: String?, modifier: Modifier = Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         CircularProgressIndicator(color = c.acc, strokeWidth = 3.dp)
         Spacer(Modifier.height(12.dp))
-        Plaque { JText(name ?: "Loading", 16.sp, weight = FontWeight.SemiBold) }
+        Plaque { JText(name ?: stringResource(R.string.player_loading), 16.sp, weight = FontWeight.SemiBold) }
     }
 }
 
@@ -369,22 +372,23 @@ internal fun PausedBadge(touch: Boolean, onPlay: () -> Unit, modifier: Modifier 
         modifier.clip(RoundedCornerShape(8.dp)).background(StrapBg).padding(horizontal = 28.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        JText("Paused", 22.sp, weight = FontWeight.Bold)
+        JText(stringResource(R.string.player_paused), 22.sp, weight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         if (touch) {
-            JtvButton("Play", onPlay, primary = true, minHeight = 56.dp, fontSize = 18.sp)
+            JtvButton(stringResource(R.string.player_play), onPlay, primary = true, minHeight = 56.dp, fontSize = 18.sp)
         } else {
-            JText("Press OK to continue", 16.sp, color = c.t2)
+            JText(stringResource(R.string.player_press_ok), 16.sp, color = c.t2, maxLines = 2)
         }
     }
 }
 
-internal fun errorActionLabel(a: ErrorAction) = when (a) {
-    ErrorAction.Retry -> "Try again"
-    ErrorAction.NextChannel -> "Next channel"
-    ErrorAction.Settings -> "Open settings"
-    ErrorAction.GoLive -> "Go live"
-}
+@Composable
+internal fun errorActionLabel(a: ErrorAction) = stringResource(when (a) {
+    ErrorAction.Retry -> R.string.common_try_again
+    ErrorAction.NextChannel -> R.string.player_next_channel
+    ErrorAction.Settings -> R.string.player_open_settings
+    ErrorAction.GoLive -> R.string.player_go_live
+})
 
 /** One sentence and one or two buttons; focus lands on the first button. */
 @Composable
@@ -403,7 +407,7 @@ internal fun ErrorPanel(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            error.message, style = textStyle(22.sp, FontWeight.SemiBold), color = c.tx, textAlign = TextAlign.Center,
+            stringResource(error.message), style = textStyle(22.sp, FontWeight.SemiBold), color = c.tx, textAlign = TextAlign.Center,
         )
         if (channel != null) {
             Spacer(Modifier.height(6.dp))

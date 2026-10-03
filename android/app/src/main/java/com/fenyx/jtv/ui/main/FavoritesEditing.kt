@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.main
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -75,7 +77,7 @@ fun ChannelActionsDialog(channel: Channel, actions: List<ChannelAction>, startWi
                         listOfNotNull(channel.channelNumber.takeIf { it > 0 }?.toString(), channel.name).joinToString("  "),
                         style = textStyle(20.sp, FontWeight.Bold), color = c.tx, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
-                    Text(channel.group, style = textStyle(14.sp), color = c.t2, maxLines = 1)
+                    Text(groupLabel(channel.group), style = textStyle(14.sp), color = c.t2, maxLines = 1)
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -84,8 +86,8 @@ fun ChannelActionsDialog(channel: Channel, actions: List<ChannelAction>, startWi
                 Text(ask.confirm ?: "", style = textStyle(17.sp), color = c.tx)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    JtvButton("Yes, remove", { onDismiss(); ask.run() }, Modifier.focusRequester(firstFocus), primary = true)
-                    JtvButton("Cancel", { if (startWith != null) onDismiss() else confirming = null })
+                    JtvButton(stringResource(R.string.home_yes_remove), { onDismiss(); ask.run() }, Modifier.focusRequester(firstFocus), primary = true)
+                    JtvButton(stringResource(R.string.common_cancel), { if (startWith != null) onDismiss() else confirming = null })
                 }
             } else {
                 actions.forEachIndexed { i, action ->

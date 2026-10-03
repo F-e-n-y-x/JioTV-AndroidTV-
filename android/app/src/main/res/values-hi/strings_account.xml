@@ -1,0 +1,72 @@
+<resources>
+    <string name="setup_welcome">JTV में आपका स्वागत है</string>
+    <string name="setup_how_sign_in">आप कैसे लॉग इन करना चाहते हैं?</string>
+    <string name="setup_code_title">कोड से जुड़ें</string>
+    <string name="setup_code_card_subtitle">आपको जो एक्सेस कोड मिला है, वह लिखें। वेब पता नहीं चाहिए।</string>
+    <string name="setup_phone_title">Jio नंबर से लॉग इन करें</string>
+    <string name="setup_phone_card_subtitle">अपने Jio मोबाइल नंबर पर एक बार का कोड पाएँ।</string>
+    <string name="setup_own_server_title">अपना सर्वर इस्तेमाल करें</string>
+    <string name="setup_hint_left_right">बाएँ / दाएँ</string>
+    <string name="setup_hint_choose">चुनें</string>
+    <string name="setup_hint_continue">आगे बढ़ें</string>
+
+    <string name="setup_server_title">अपने सर्वर से जुड़ें</string>
+    <string name="setup_code_subtitle">अपना एक्सेस कोड लिखें। सर्वर का पता पहले से भरा है।</string>
+    <string name="setup_server_subtitle">अपने सर्वर का पता और एक्सेस कोड लिखें।</string>
+    <string name="setup_server_address">सर्वर का पता</string>
+    <string name="setup_access_code">एक्सेस कोड</string>
+    <string name="setup_access_code_hint">जैसे 7XK2Q9</string>
+    <string name="setup_connect">जुड़ें</string>
+    <string name="setup_connecting">जुड़ रहा है…</string>
+    <string name="setup_error_enter_url">सर्वर का पता लिखें।</string>
+    <string name="setup_error_enter_code">अपना एक्सेस कोड लिखें।</string>
+    <string name="setup_error_connection_failed">जुड़ नहीं पाया। फिर से कोशिश करें।</string>
+
+    <string name="error_no_server_url">सर्वर का पता नहीं भरा गया है।</string>
+    <string name="error_server_access_denied">सर्वर ने यह एक्सेस कोड नहीं माना। कोड देखकर फिर से कोशिश करें।</string>
+    <string name="error_server_outdated">सर्वर पुराना है। सर्वर को अपडेट करें।</string>
+    <string name="error_server_http">सर्वर से गड़बड़ी आई (%d)।</string>
+    <string name="error_server_no_login">सर्वर पर अभी लॉग इन नहीं हुआ है। पहले सर्वर पर लॉग इन करें।</string>
+    <string name="error_server_unreachable">सर्वर तक नहीं पहुँच पाए। पता और इंटरनेट देखें।</string>
+
+    <string name="login_title_number">अपने Jio नंबर से लॉग इन करें</string>
+    <string name="login_title_code">कोड लिखें</string>
+    <string name="login_subtitle_number">हम इस नंबर पर एक बार का कोड भेजेंगे।</string>
+    <string name="login_subtitle_code">हमने %s पर SMS से कोड भेजा है।</string>
+    <string name="login_mobile_number">मोबाइल नंबर</string>
+    <string name="login_mobile_number_hint">10 अंकों का नंबर</string>
+    <string name="login_code">कोड</string>
+    <string name="login_code_hint">SMS में आया कोड</string>
+    <string name="login_send_code">कोड भेजें</string>
+    <string name="login_sending">भेज रहे हैं…</string>
+    <string name="login_sign_in">लॉग इन करें</string>
+    <string name="login_checking">जाँच रहे हैं…</string>
+    <string name="login_change_number">नंबर बदलें</string>
+    <string name="login_other_method">दूसरे तरीके से लॉग इन करें</string>
+    <string name="login_key_delete">मिटाएँ</string>
+    <string name="login_error_send_failed">कोड नहीं भेज पाए। फिर से कोशिश करें।</string>
+    <string name="login_error_number_digits">मोबाइल नंबर के पूरे 10 अंक लिखें।</string>
+    <string name="login_error_code_wrong">यह कोड सही नहीं है। देखकर फिर से कोशिश करें।</string>
+    <string name="login_error_enter_code">SMS में आया कोड लिखें।</string>
+    <string name="login_hint_number_keys">नंबर बटन</string>
+    <string name="login_hint_type">लिखें</string>
+    <string name="login_hint_press_key">बटन दबाएँ</string>
+    <string name="login_hint_go_back">वापस जाएँ</string>
+
+    <plurals name="backup_restore_restored">
+        <item quantity="one">%d फ़ेवरेट वापस आ गया।</item>
+        <item quantity="other">%d फ़ेवरेट वापस आ गए।</item>
+    </plurals>
+    <string name="backup_restore_already_match">आपके फ़ेवरेट पहले से बैकअप जैसे ही हैं।</string>
+    <string name="backup_restore_not_backup">यह फ़ाइल JTV फ़ेवरेट का बैकअप नहीं है।</string>
+
+    <string name="sync_a_device">एक डिवाइस</string>
+    <string name="sync_the_tv">TV</string>
+    <string name="sync_syncing">सिंक हो रहा है…</string>
+    <string name="sync_no_paired">कोई डिवाइस जुड़ा नहीं है</string>
+    <string name="sync_none_in_reach">जुड़ा हुआ कोई डिवाइस पास में नहीं है</string>
+    <string name="sync_failed">सिंक नहीं हो पाया, फिर से कोशिश करें</string>
+    <string name="sync_done">सिंक हो गया</string>
+    <string name="sync_playing_on">%s पर चल रहा है</string>
+    <string name="sync_could_not_reach">%s तक नहीं पहुँच पाए</string>
+</resources>

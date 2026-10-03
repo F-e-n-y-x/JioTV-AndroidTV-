@@ -118,9 +118,9 @@ object Pip {
             return RemoteAction(Icon.createWithResource(activity, icon), title, title, pi)
         }
         return listOf(
-            action(PREV, R.drawable.ic_pip_previous, "Previous channel"),
-            if (playing) action(TOGGLE, R.drawable.ic_pip_pause, "Pause") else action(TOGGLE, R.drawable.ic_pip_play, "Play"),
-            action(NEXT, R.drawable.ic_pip_next, "Next channel"),
+            action(PREV, R.drawable.ic_pip_previous, activity.getString(R.string.player_previous_channel)),
+            if (playing) action(TOGGLE, R.drawable.ic_pip_pause, activity.getString(R.string.player_pause)) else action(TOGGLE, R.drawable.ic_pip_play, activity.getString(R.string.player_play)),
+            action(NEXT, R.drawable.ic_pip_next, activity.getString(R.string.player_next_channel)),
         )
     }
 

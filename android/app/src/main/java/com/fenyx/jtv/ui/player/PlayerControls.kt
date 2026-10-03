@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -238,13 +240,6 @@ internal fun formatBehind(ms: Long): String {
     return if (h > 0) "−%d:%02d:%02d".format(h, m, sec) else "−%02d:%02d".format(m, sec)
 }
 
-private fun spokenBehind(ms: Long): String {
-    val s = ms / 1000
-    val m = s / 60
-    val sec = s % 60
-    return if (m > 0) "$m minutes $sec seconds behind live" else "$sec seconds behind live"
-}
-
 // ───────────────────────── Seek bar ─────────────────────────
 
 /**
@@ -264,6 +259,8 @@ internal fun LiveSeekBar(
 ) {
     val c = Jtv.colors
     val tv = Jtv.isTv
+    val seekDescription = stringResource(R.string.player_seek_bar_description)
+    val liveLabel = stringResource(R.string.common_live)
     var focused by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     val widthPx = remember { intArrayOf(1) }
@@ -277,7 +274,7 @@ internal fun LiveSeekBar(
             .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
             .onFocusChanged { focused = it.isFocused; onFocus(it.isFocused) }
             .focusable(enabled = tv)
-            .semantics { contentDescription = "Seek bar. The right end is live."; role = Role.Button }
+            .semantics { contentDescription = seekDescription; role = Role.Button }
             .pointerInput(ts) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -338,7 +335,7 @@ internal fun LiveSeekBar(
             val span = ts.spanMs.coerceAtLeast(1L)
             val label = when {
                 ts.vod -> formatClock(scrub)
-                span - scrub < LiveToleranceMs -> "Live"
+                span - scrub < LiveToleranceMs -> liveLabel
                 else -> formatBehind(span - scrub)
             }
             val labelW = remember { intArrayOf(0) }
@@ -387,7 +384,7 @@ internal fun BehindLiveTag(ts: Timeshift, size: androidx.compose.ui.unit.TextUni
         Row(modifier, verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).border(1.5.dp, c.acc, CircleShape))
             Spacer(Modifier.width(6.dp))
-            JText("Behind live ${formatBehind(secs * 1000)}", size, color = c.tx, weight = FontWeight.SemiBold)
+            JText(stringResource(R.string.player_behind_live, formatBehind(secs * 1000)), size, color = c.tx, weight = FontWeight.SemiBold)
         }
     }
 }
@@ -403,19 +400,24 @@ internal fun LiveButton(ts: Timeshift, onClick: () -> Unit, modifier: Modifier =
     val vod = ts.vod
     val replay = ts.replay
     val label = when {
-        replay -> "Go live"
-        vod -> "Back to schedule"
-        else -> "Live"
+        replay -> stringResource(R.string.player_go_live)
+        vod -> stringResource(R.string.player_back_to_schedule)
+        else -> stringResource(R.string.common_live)
     }
+    val descGoLive = stringResource(R.string.player_go_live_description)
+    val descOnSchedule = stringResource(R.string.player_on_schedule)
+    val descBackToSchedule = stringResource(R.string.player_back_to_schedule)
+    val descLive = stringResource(R.string.player_live_description)
+    val descGoToLive = stringResource(R.string.player_go_to_live)
     JtvClickable(
         onClick = onClick,
         modifier = modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
             .semantics {
                 contentDescription = when {
-                    replay -> "Go live. Leave the replay and watch the channel live"
-                    vod -> if (atLive) "On schedule" else "Back to schedule"
-                    atLive -> "Live. Playing live"
-                    else -> "Go to live"
+                    replay -> descGoLive
+                    vod -> if (atLive) descOnSchedule else descBackToSchedule
+                    atLive -> descLive
+                    else -> descGoToLive
                 }
                 role = Role.Button
             },
@@ -520,12 +522,12 @@ internal fun CentreControls(
         downFocus?.let { down = it }
     } else Modifier
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
-        OverVideoIcon(PlayerIcons.SkipPrevious, "Previous channel", { actions.zap(-1) }, vert,
+        OverVideoIcon(PlayerIcons.SkipPrevious, stringResource(R.string.player_previous_channel), { actions.zap(-1) }, vert,
             size = side, iconSize = side * 0.54f)
         Box(contentAlignment = Alignment.Center) {
             if (buffering) CircularProgressIndicator(color = c.acc, strokeWidth = 3.dp, modifier = Modifier.size(main + 6.dp))
             OverVideoIcon(
-                if (paused) Icons.Filled.PlayArrow else PlayerIcons.Pause, if (paused) "Play" else "Pause",
+                if (paused) Icons.Filled.PlayArrow else PlayerIcons.Pause, stringResource(if (paused) R.string.player_play else R.string.player_pause),
                 { actions.togglePause() },
                 Modifier
                     .then(if (playFocus != null) Modifier.focusRequester(playFocus) else Modifier)
@@ -534,7 +536,7 @@ internal fun CentreControls(
                 size = main, iconSize = main * 0.53f,
             )
         }
-        OverVideoIcon(PlayerIcons.SkipNext, "Next channel", { actions.zap(1) }, vert,
+        OverVideoIcon(PlayerIcons.SkipNext, stringResource(R.string.player_next_channel), { actions.zap(1) }, vert,
             size = side, iconSize = side * 0.54f)
     }
 }

@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.fenyx.jtv.R
 import com.fenyx.jtv.theme.FormFactor
 import com.fenyx.jtv.theme.Jtv
 import com.fenyx.jtv.ui.components.JtvClickable
@@ -46,9 +48,9 @@ fun SetupScreen(
     LaunchedEffect(Unit) { runCatching { firstCard.requestFocus() } }
 
     val options = listOf(
-        Triple("Connect with a code", "Type the access code you were given. No web address needed.", Icons.Default.Lock) to onChooseJtv,
-        Triple("Sign in with Jio number", "Get a one-time code on your Jio mobile number.", Icons.Default.Phone) to onChoosePhone,
-        Triple("Use your own server", "Type your server's address and access code.", Icons.Default.Build) to onChooseServer,
+        Triple(stringResource(R.string.setup_code_title), stringResource(R.string.setup_code_card_subtitle), Icons.Default.Lock) to onChooseJtv,
+        Triple(stringResource(R.string.setup_phone_title), stringResource(R.string.setup_phone_card_subtitle), Icons.Default.Phone) to onChoosePhone,
+        Triple(stringResource(R.string.setup_own_server_title), stringResource(R.string.setup_server_subtitle), Icons.Default.Build) to onChooseServer,
     )
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
@@ -60,9 +62,9 @@ fun SetupScreen(
             horizontalAlignment = if (isPhone) Alignment.Start else Alignment.CenterHorizontally,
             verticalArrangement = if (isPhone) Arrangement.Top else Arrangement.Center
         ) {
-            Text("Welcome to JTV", style = textStyle(if (isPhone) 30.sp else 36.sp, FontWeight.Bold), color = c.tx)
+            Text(stringResource(R.string.setup_welcome), style = textStyle(if (isPhone) 30.sp else 36.sp, FontWeight.Bold), color = c.tx)
             Spacer(Modifier.height(8.dp))
-            Text("How do you want to sign in?", style = textStyle(20.sp), color = c.t2)
+            Text(stringResource(R.string.setup_how_sign_in), style = textStyle(20.sp), color = c.t2)
             Spacer(Modifier.height(if (isPhone) 24.dp else 32.dp))
 
             if (isPhone) {
@@ -84,7 +86,7 @@ fun SetupScreen(
             }
             if (isTv) {
                 Spacer(Modifier.height(32.dp))
-                KeyHint(listOf("Left / Right" to "choose", "OK" to "continue"))
+                KeyHint(listOf(stringResource(R.string.setup_hint_left_right) to stringResource(R.string.setup_hint_choose), stringResource(R.string.common_ok) to stringResource(R.string.setup_hint_continue)))
             }
         }
     }
@@ -116,8 +118,8 @@ private fun SetupCard(
             ) {
                 Icon(icon, contentDescription = null, tint = if (focused) c.invTx else c.acc, modifier = Modifier.size(32.dp))
                 Column {
-                    Text(title, style = textStyle(20.sp, FontWeight.SemiBold), color = fg)
-                    Text(subtitle, style = textStyle(16.sp), color = fg2)
+                    Text(title, style = textStyle(20.sp, FontWeight.SemiBold), color = fg, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(subtitle, style = textStyle(16.sp), color = fg2, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 }
             }
         } else {

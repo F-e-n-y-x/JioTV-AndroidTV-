@@ -25,6 +25,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.tv.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.fenyx.jtv.R
+import com.fenyx.jtv.i18n.UiText
+import com.fenyx.jtv.i18n.text
+import com.fenyx.jtv.data.userText
 import com.fenyx.jtv.theme.FormFactor
 import com.fenyx.jtv.theme.Jtv
 import com.fenyx.jtv.ui.components.JtvButton
@@ -55,7 +60,7 @@ fun ServerSetupScreen(
     var serverUrl by remember { mutableStateOf("") }
     var token by remember { mutableStateOf("") }
     var isConnecting by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<UiText?>(null) }
 
     // Prefill from any previously saved config (e.g. re-connecting from Settings). In JTV mode the URL
     // is hardcoded, so we only prefill the code.
@@ -72,8 +77,8 @@ fun ServerSetupScreen(
     LaunchedEffect(Unit) { runCatching { (if (jtvMode) tokenFocus else urlFocus).requestFocus() } }
 
     fun connect() {
-        if (!jtvMode && serverUrl.isBlank()) { error = "Enter the server URL."; return }
-        if (token.isBlank()) { error = "Enter your access code."; return }
+        if (!jtvMode && serverUrl.isBlank()) { error = UiText.of(R.string.setup_error_enter_url); return }
+        if (token.isBlank()) { error = UiText.of(R.string.setup_error_enter_code); return }
         isConnecting = true
         error = null
         scope.launch {
@@ -92,7 +97,7 @@ fun ServerSetupScreen(
                     settingsManager.setSetupMode("server")
                 }
                 settingsManager.saveAuthData(authData) // flips Navigation into the app
-            }.onFailure { error = it.message ?: "Connection failed." }
+            }.onFailure { error = it.userText(UiText.of(R.string.setup_error_connection_failed)) }
         }
     }
 
@@ -117,28 +122,27 @@ fun ServerSetupScreen(
         ) {
             Spacer(Modifier.height(if (isPhone) 8.dp else 24.dp))
             Text(
-                if (jtvMode) "Connect with a code" else "Connect to your own server",
+                stringResource(if (jtvMode) R.string.setup_code_title else R.string.setup_server_title),
                 style = textStyle(if (isPhone) 28.sp else 32.sp, FontWeight.Bold),
                 color = c.tx
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                if (jtvMode) "Type your access code. The server address is built in."
-                else "Type your server's address and access code.",
+                stringResource(if (jtvMode) R.string.setup_code_subtitle else R.string.setup_server_subtitle),
                 style = textStyle(18.sp),
                 color = c.t2
             )
             Spacer(Modifier.height(24.dp))
 
             error?.let {
-                Text(it, color = c.error, style = textStyle(18.sp, FontWeight.SemiBold))
+                Text(it.text(), color = c.error, style = textStyle(18.sp, FontWeight.SemiBold))
                 Spacer(Modifier.height(12.dp))
             }
 
             // Self-hosted mode shows the URL field; JTV mode hides it (URL is hardcoded).
             if (!jtvMode) {
                 TvField(
-                    label = "Server address",
+                    label = stringResource(R.string.setup_server_address),
                     value = serverUrl,
                     onValueChange = { serverUrl = it },
                     placeholder = "http://192.168.1.10:8080",
@@ -150,11 +154,11 @@ fun ServerSetupScreen(
                 Spacer(Modifier.height(16.dp))
             }
             TvField(
-                label = "Access code",
+                label = stringResource(R.string.setup_access_code),
                 value = token,
                 onValueChange = { token = it },
                 // Purely illustrative placeholder — must NOT resemble any real/active code.
-                placeholder = "e.g. 7XK2Q9",
+                placeholder = stringResource(R.string.setup_access_code_hint),
                 keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Done,
                 keyboardActions = KeyboardActions(onDone = { runCatching { connectFocus.requestFocus() } }),
@@ -163,9 +167,9 @@ fun ServerSetupScreen(
             Spacer(Modifier.height(28.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                JtvButton("Back", { onBack() }, fontSize = 18.sp, minHeight = if (isTv) 48.dp else 56.dp)
+                JtvButton(stringResource(R.string.common_back), { onBack() }, fontSize = 18.sp, minHeight = if (isTv) 48.dp else 56.dp)
                 JtvButton(
-                    if (isConnecting) "Connecting…" else "Connect",
+                    stringResource(if (isConnecting) R.string.setup_connecting else R.string.setup_connect),
                     { if (!isConnecting) connect() },
                     Modifier.focusRequester(connectFocus),
                     primary = true,
@@ -195,7 +199,7 @@ private fun TvField(
     var focused by remember { mutableStateOf(false) }
     val c = Jtv.colors
     Column(modifier = if (Jtv.form == FormFactor.Phone) Modifier.fillMaxWidth() else Modifier.width(560.dp)) {
-        Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
+        Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
@@ -237,7 +241,7 @@ private fun TvField(
                         }
                     },
                 decorationBox = { inner ->
-                    if (value.isEmpty()) Text(placeholder, color = c.t2, style = textStyle(20.sp))
+                    if (value.isEmpty()) Text(placeholder, color = c.t2, style = textStyle(20.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     inner()
                 }
             )
