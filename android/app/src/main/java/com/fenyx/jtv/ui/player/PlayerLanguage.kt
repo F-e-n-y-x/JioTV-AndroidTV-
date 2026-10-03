@@ -58,6 +58,16 @@ internal fun languageName(code: String): String {
 }
 
 /**
+ * [languageName] in [appLanguage]: "hi" → "Hindi" in English, "हिन्दी" in Hindi (the system's own
+ * language names), falling back to the English name.
+ */
+internal fun languageName(code: String, appLanguage: Locale): String {
+    if (appLanguage.language == "en" || appLanguage.language.isEmpty()) return languageName(code)
+    val loc = runCatching { Locale.forLanguageTag(code).getDisplayLanguage(appLanguage) }.getOrNull()
+    return if (!loc.isNullOrBlank() && !loc.equals(code, ignoreCase = true)) loc else languageName(code)
+}
+
+/**
  * Builds the one Language list from the stream's audio tracks and the channel's sibling-language feeds.
  *
  * - HD masters list the same language once per quality group (two "Hindi" renditions): tracks are
@@ -72,6 +82,12 @@ internal fun buildLanguageChoices(
     playingId: String?,
     playingLang: String?,
     fallbackLabel: String,
+    /** The label of a single unnamed track (translated by the caller). */
+    originalSound: String = "Original sound",
+    /** "Sound 1", "Sound 2" for several unnamed tracks (translated by the caller). */
+    soundN: (Int) -> String = { "Sound $it" },
+    /** Display name for a language code, in the app language. */
+    nameOf: (String) -> String = ::languageName,
 ): LanguageChoices {
     val opts = ArrayList<Pair<String, String>>()
     val codes = HashSet<String>()
@@ -97,7 +113,7 @@ internal fun buildLanguageChoices(
         val code = normalizeLang(t.language)
         val value = if (code != null) key else LANG_TRACK + t.index
         val label = t.name?.trim()?.takeIf { it.isNotEmpty() && !it.equals(t.language, ignoreCase = true) }
-            ?: languageName(code!!)
+            ?: nameOf(code!!)
         if (code != null) codes.add(code)
         opts.add(value to label)
         if (key in selectedKeys && current == null) current = value
@@ -106,11 +122,11 @@ internal fun buildLanguageChoices(
         val t = unnamed[0]
         val lang = normalizeLang(playingLang)?.takeIf { it !in codes && firstByKey.isEmpty() }
         if (lang != null) codes.add(lang)
-        opts.add(LANG_TRACK + t.index to (lang?.let(::languageName) ?: "Original sound"))
+        opts.add(LANG_TRACK + t.index to (lang?.let(nameOf) ?: originalSound))
         if (t.selected && current == null) current = LANG_TRACK + t.index
     } else {
         unnamed.forEachIndexed { n, t ->
-            opts.add(LANG_TRACK + t.index to "Sound ${n + 1}")
+            opts.add(LANG_TRACK + t.index to soundN(n + 1))
             if (t.selected && current == null) current = LANG_TRACK + t.index
         }
     }
@@ -123,7 +139,7 @@ internal fun buildLanguageChoices(
         if (isPlaying && haveStream) continue // the stream's own options already cover it
         if (code != null && !codes.add(code)) continue
         val value = LANG_CHANNEL + v.channel.id
-        opts.add(value to ChannelLanguage.displayName(v.langCode))
+        opts.add(value to (normalizeLang(v.langCode)?.let(nameOf) ?: ChannelLanguage.displayName(v.langCode)))
         if (isPlaying && current == null) current = value
     }
 

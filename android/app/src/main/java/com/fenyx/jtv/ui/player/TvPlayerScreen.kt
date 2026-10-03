@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import android.annotation.SuppressLint
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -452,7 +454,7 @@ fun TvPlayerScreen(
                     // Auto-recovery exhausted: stop the spinner and show an actionable message
                     // instead of an indefinite black screen.
                     isBuffering = false
-                    playbackError = PlayerError("The picture stopped.", ErrorAction.Retry, ErrorAction.NextChannel)
+                    playbackError = PlayerError(R.string.player_err_picture_stopped, ErrorAction.Retry, ErrorAction.NextChannel)
                 }
             }
         }
@@ -503,7 +505,7 @@ fun TvPlayerScreen(
                 android.util.Log.e("TvPlayer", "Missing auth data")
                 persistLastChannel()
                 isBuffering = false
-                playbackError = PlayerError("You aren't signed in to Jio.", ErrorAction.Settings)
+                playbackError = PlayerError(R.string.player_err_not_signed_in, ErrorAction.Settings)
                 return@LaunchedEffect
             }
             
@@ -583,18 +585,18 @@ fun TvPlayerScreen(
                     (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException || retryCount.intValue >= 2)) {
                     // Catch-up: Jio won't hand out this show (any more). Say so; live is one press away.
                     isBuffering = false
-                    playbackError = PlayerError("This show can't be replayed right now.", ErrorAction.GoLive, ErrorAction.Retry)
+                    playbackError = PlayerError(R.string.player_err_no_replay, ErrorAction.GoLive, ErrorAction.Retry)
                 } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.SessionExpiredException) {
                     isBuffering = false
                     playbackError = if (playerSetupMode == "server" || playerSetupMode == "jtv")
-                        PlayerError("The Jio sign-in on your JTV server has expired.", ErrorAction.Retry)
-                    else PlayerError("Your Jio sign-in has expired.", ErrorAction.Settings, ErrorAction.Retry)
+                        PlayerError(R.string.player_err_server_sign_in_expired, ErrorAction.Retry)
+                    else PlayerError(R.string.player_err_sign_in_expired, ErrorAction.Settings, ErrorAction.Retry)
                 } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException) {
                     isBuffering = false
-                    playbackError = PlayerError("Jio isn't providing this channel right now.", ErrorAction.NextChannel, ErrorAction.Retry)
+                    playbackError = PlayerError(R.string.player_err_not_provided, ErrorAction.NextChannel, ErrorAction.Retry)
                 } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
                     isBuffering = false
-                    playbackError = PlayerError("This channel is offline at Jio right now.", ErrorAction.Retry, ErrorAction.NextChannel)
+                    playbackError = PlayerError(R.string.player_err_offline, ErrorAction.Retry, ErrorAction.NextChannel)
                 // Let the auto-recovery budget retry transient fetch failures; only show the error
                 // once it's exhausted, so a one-off hiccup doesn't flash a message.
                 } else if (retryCount.intValue >= 5) {
@@ -605,9 +607,9 @@ fun TvPlayerScreen(
                     val authExpired = fetchErr.contains("401") || fetchErr.contains("403")
                     playbackError = when {
                         authExpired && (playerSetupMode == "server" || playerSetupMode == "jtv") ->
-                            PlayerError("The Jio sign-in on your JTV server has expired.", ErrorAction.Retry)
-                        authExpired -> PlayerError("Your Jio sign-in has expired.", ErrorAction.Settings, ErrorAction.Retry)
-                        else -> PlayerError("This channel didn't load.", ErrorAction.Retry, ErrorAction.NextChannel)
+                            PlayerError(R.string.player_err_server_sign_in_expired, ErrorAction.Retry)
+                        authExpired -> PlayerError(R.string.player_err_sign_in_expired, ErrorAction.Settings, ErrorAction.Retry)
+                        else -> PlayerError(R.string.player_err_did_not_load, ErrorAction.Retry, ErrorAction.NextChannel)
                     }
                 } else {
                     retryCount.intValue++
@@ -645,7 +647,7 @@ fun TvPlayerScreen(
                     }
                     else -> {
                         isBuffering = false
-                        playbackError = PlayerError("The picture stopped.", ErrorAction.Retry, ErrorAction.NextChannel)
+                        playbackError = PlayerError(R.string.player_err_picture_stopped, ErrorAction.Retry, ErrorAction.NextChannel)
                     }
                 }
             }
@@ -1066,7 +1068,7 @@ fun TvPlayerScreen(
         if (hit != null) {
             doTune(hit.first, hit.second)
         } else {
-            ui.numberMiss = "No channel $num"
+            ui.numberMiss = context.getString(R.string.player_no_channel, num.toString())
             scope.launch { delay(2_000); if (ui.number.isEmpty()) ui.numberMiss = null }
         }
     }
@@ -1239,7 +1241,7 @@ fun TvPlayerScreen(
             com.fenyx.jtv.data.RemoteAction.Options -> ui.openOptions()
             com.fenyx.jtv.data.RemoteAction.Favourite -> {
                 val id = currentChannel?.id ?: return
-                flash(if (id in favoriteChannels) "Removed from favourites" else "Added to favourites")
+                flash(context.getString(if (id in favoriteChannels) R.string.player_fav_removed else R.string.player_fav_added))
                 actions.toggleFavourite()
             }
             // The full guide when it is on; otherwise the channel list (what the Guide key did before).
@@ -1248,7 +1250,7 @@ fun TvPlayerScreen(
             com.fenyx.jtv.data.RemoteAction.ChannelList -> if (ov != PlayerOverlay.Browse) openBrowse()
             com.fenyx.jtv.data.RemoteAction.PreviousChannel -> {
                 val p = tunedBefore
-                if (p == null) flash("No previous channel yet") else doTune(p.first, p.second)
+                if (p == null) flash(context.getString(R.string.player_no_previous)) else doTune(p.first, p.second)
             }
             com.fenyx.jtv.data.RemoteAction.PlayPause -> {
                 setPaused(!userPaused)
@@ -1261,11 +1263,11 @@ fun TvPlayerScreen(
             com.fenyx.jtv.data.RemoteAction.VoiceBoost -> {
                 val next = (voiceBoost + 1) % VOICE_OPTIONS.size
                 actions.pickVoice(next)
-                flash("Voice boost: ${voiceLabel(next)}")
+                flash(context.getString(R.string.player_voice_boost_is, context.getString(voiceLabelRes(next))))
             }
-            com.fenyx.jtv.data.RemoteAction.Mute -> { muted = !muted; flash(if (muted) "Sound off" else "Sound on") }
+            com.fenyx.jtv.data.RemoteAction.Mute -> { muted = !muted; flash(context.getString(if (muted) R.string.player_sound_off else R.string.player_sound_on)) }
             com.fenyx.jtv.data.RemoteAction.Search -> onRemoteScreen(a)
-            com.fenyx.jtv.data.RemoteAction.GoLive -> if (ts.seekable) { doGoLive(); flash("Live") }
+            com.fenyx.jtv.data.RemoteAction.GoLive -> if (ts.seekable) { doGoLive(); flash(context.getString(R.string.common_live)) }
             com.fenyx.jtv.data.RemoteAction.NumberEntry -> {
                 if (ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu || ov == PlayerOverlay.Browse) ui.overlay = PlayerOverlay.None
                 ui.numberMiss = null
@@ -1291,14 +1293,20 @@ fun TvPlayerScreen(
     )
     // ─────────── end picture-in-picture ───────────
 
-    val langChoices = remember(audioTracks, currentVariants, playingChannel) {
+    val originalSound = stringResource(R.string.player_original_sound)
+    val soundNFormat = stringResource(R.string.player_sound_n)
+    val appLanguage = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val langChoices = remember(audioTracks, currentVariants, playingChannel, appLanguage) {
         val pid = playingChannel?.id
         buildLanguageChoices(
             tracks = audioTracks.mapIndexed { i, t -> StreamAudio(i, t.language, t.name, t.selected) },
             variants = currentVariants,
             playingId = pid,
             playingLang = currentVariants.firstOrNull { it.channel.id == pid }?.langCode,
-            fallbackLabel = playingChannel?.language?.takeIf { it.isNotBlank() } ?: "Original sound",
+            fallbackLabel = playingChannel?.language?.takeIf { it.isNotBlank() } ?: originalSound,
+            originalSound = originalSound,
+            soundN = { n -> String.format(appLanguage, soundNFormat, n) },
+            nameOf = { code -> languageName(code, appLanguage) },
         )
     }
     val model = OptionsModel(
@@ -1653,7 +1661,7 @@ fun TvPlayerScreen(
                     epg = epg,
                     paused = userPaused,
                     buffering = buffering,
-                    error = playbackError?.takeIf { !isBuffering }?.message,
+                    error = playbackError?.takeIf { !isBuffering }?.let { stringResource(it.message) },
                     drag = miniDrag,
                     onExpand = onExpand,
                     onTogglePause = { setPaused(!userPaused) },

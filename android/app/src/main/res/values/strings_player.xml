@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Player: groups in the channel browser -->
+    <string name="player_group_all">All channels</string>
+    <string name="player_group_recent">Recent</string>
+
+    <!-- Player options: values -->
+    <string name="player_quality_auto">Auto (recommended)</string>
+    <string name="player_quality_high">Best picture</string>
+    <string name="player_quality_medium">Good picture</string>
+    <string name="player_quality_low">Data saver</string>
+    <string name="player_aspect_fit">Fit</string>
+    <string name="player_aspect_stretch">Stretch</string>
+    <string name="player_aspect_zoom">Zoom</string>
+    <string name="player_voice_low">Low</string>
+    <string name="player_voice_medium">Medium</string>
+    <string name="player_voice_high">High</string>
+    <string name="player_voice_most">Most</string>
+    <string name="player_sleep_1h">1 hour</string>
+    <string name="player_sleep_1h30">1 hour 30 min</string>
+    <string name="player_sleep_2h">2 hours</string>
+    <plurals name="player_minutes">
+        <item quantity="one">%d min</item>
+        <item quantity="other">%d min</item>
+    </plurals>
+
+    <!-- Player options: page titles and rows -->
+    <string name="player_options">Options</string>
+    <string name="player_language">Language</string>
+    <string name="player_quality">Picture quality</string>
+    <string name="player_quality_short">Quality</string>
+    <string name="player_aspect">Aspect</string>
+    <string name="player_voice_boost">Voice boost</string>
+    <string name="player_voice_boost_hint">Makes speech clearer over music and noise</string>
+    <string name="player_auto_volume">Auto volume</string>
+    <string name="player_sleep_timer">Sleep timer</string>
+    <string name="player_sleep">Sleep</string>
+    <string name="player_favourite">Favourite</string>
+    <string name="player_favourite_saved">Saved</string>
+    <string name="player_refresh_sign_in">Refresh sign-in</string>
+    <string name="player_refresh">Refresh</string>
+    <string name="player_refreshing">Refreshing</string>
+    <string name="player_play_on">Play on %s</string>
+    <string name="player_current">Current</string>
+    <string name="player_channel_list">Channel list</string>
+    <string name="player_more">More</string>
+    <string name="player_less">Less</string>
+
+    <!-- Player: sound languages -->
+    <string name="player_original_sound">Original sound</string>
+    <string name="player_sound_n">Sound %d</string>
+
+    <!-- Player: buttons over the video -->
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_previous_channel">Previous channel</string>
+    <string name="player_next_channel">Next channel</string>
+    <string name="player_channels">Channels</string>
+    <string name="player_hide_channels">Hide channels</string>
+    <string name="player_minimise">Minimise player</string>
+    <string name="player_full_screen">Full screen</string>
+    <string name="player_exit_full_screen">Exit full screen</string>
+    <string name="player_close_player">Close player</string>
+    <string name="player_mini_description">Mini player. Tap to open the player</string>
+    <string name="player_open_player">Open the player</string>
+
+    <!-- Player: remote key hints (key, then what it does) -->
+    <string name="player_key_up_down">Up / Down</string>
+    <string name="player_key_left_right">Left / Right</string>
+    <string name="player_key_left">Left</string>
+    <string name="player_key_right">Right</string>
+    <string name="player_key_hold_ok">Hold OK</string>
+    <string name="player_key_hold">Hold</string>
+    <string name="player_key_ok">OK</string>
+    <string name="player_key_back">Back</string>
+    <string name="player_key_digits">0–9</string>
+    <string name="player_hint_change_channel">change channel</string>
+    <string name="player_hint_channel_list">channel list</string>
+    <string name="player_hint_options">options</string>
+    <string name="player_hint_menu">menu</string>
+    <string name="player_hint_move">move</string>
+    <string name="player_hint_row">row</string>
+    <string name="player_hint_select">select</string>
+    <string name="player_hint_hide">hide</string>
+    <string name="player_hint_rewind_forward">rewind / forward</string>
+    <string name="player_hint_faster">faster</string>
+    <string name="player_hint_play">play</string>
+    <string name="player_hint_browse">browse</string>
+    <string name="player_hint_watch">watch</string>
+    <string name="player_hint_category">category</string>
+    <string name="player_hint_channel_number">channel number</string>
+
+    <!-- Player: info strap, browse, number entry -->
+    <string name="player_next_label">NEXT</string>
+    <string name="player_next_on">Next on %s</string>
+    <plurals name="player_min_left">
+        <item quantity="one">%d min left</item>
+        <item quantity="other">%d min left</item>
+    </plurals>
+    <string name="player_up_down_groups">Up: %1$s  ·  Down: %2$s</string>
+    <string name="player_no_channel">No channel %s</string>
+    <string name="player_loading">Loading</string>
+    <string name="player_paused">Paused</string>
+    <string name="player_press_ok">Press OK to continue</string>
+    <string name="player_playing">Playing</string>
+    <string name="player_no_details">No programme details for this channel.</string>
+    <string name="player_episode">Episode %s</string>
+    <string name="player_cast">Cast: %s</string>
+    <string name="player_director">Director: %s</string>
+
+    <!-- Player: flash messages -->
+    <string name="player_fav_added">Added to favourites</string>
+    <string name="player_fav_removed">Removed from favourites</string>
+    <string name="player_no_previous">No previous channel yet</string>
+    <string name="player_voice_boost_is">Voice boost: %s</string>
+    <string name="player_sound_off">Sound off</string>
+    <string name="player_sound_on">Sound on</string>
+
+    <!-- Player: errors and their buttons -->
+    <string name="player_err_picture_stopped">The picture stopped.</string>
+    <string name="player_err_not_signed_in">You aren\'t signed in to Jio.</string>
+    <string name="player_err_no_replay">This show can\'t be replayed right now.</string>
+    <string name="player_err_server_sign_in_expired">The Jio sign-in on your JTV server has expired.</string>
+    <string name="player_err_sign_in_expired">Your Jio sign-in has expired.</string>
+    <string name="player_err_not_provided">Jio isn\'t providing this channel right now.</string>
+    <string name="player_err_offline">This channel is offline at Jio right now.</string>
+    <string name="player_err_did_not_load">This channel didn\'t load.</string>
+    <string name="player_open_settings">Open settings</string>
+    <string name="player_go_live">Go live</string>
+
+    <!-- Player: live, timeshift and replay -->
+    <string name="player_back_to_schedule">Back to schedule</string>
+    <string name="player_on_schedule">On schedule</string>
+    <string name="player_go_live_description">Go live. Leave the replay and watch the channel live</string>
+    <string name="player_live_description">Live. Playing live</string>
+    <string name="player_go_to_live">Go to live</string>
+    <string name="player_seek_bar_description">Seek bar. The right end is live.</string>
+    <string name="player_behind_live">Behind live %s</string>
+    <string name="player_replay_status">Replay · %s</string>
+    <string name="player_replay_line">Replay · %1$s · %2$s · %3$s</string>
+    <string name="player_replay_ended">%s has ended.</string>
+    <string name="player_replay_next">Next: %1$s · %2$s</string>
+    <string name="player_watch_next">Watch next programme</string>
+</resources>

@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -110,6 +112,8 @@ internal fun MiniPlayerContent(
     onClose: () -> Unit,
 ) {
     val now = rememberMinuteClock()
+    val miniDescription = stringResource(R.string.player_mini_description)
+    val openLabel = stringResource(R.string.player_open_player)
     CompositionLocalProvider(LocalJtvColors provides appColors, LocalNow provides now) {
         val c = appColors
         val expand by rememberUpdatedState(onExpand)
@@ -137,8 +141,8 @@ internal fun MiniPlayerContent(
                 }
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { expand() }
                 .semantics(mergeDescendants = false) {
-                    contentDescription = "Mini player. Tap to open the player"
-                    onClick(label = "Open the player") { expand(); true }
+                    contentDescription = miniDescription
+                    onClick(label = openLabel) { expand(); true }
                 },
         ) {
             // Card (tablet): the video fills the 16:9 area on top.
@@ -162,9 +166,9 @@ internal fun MiniPlayerContent(
                 }
                 MiniIcon(
                     if (paused) Icons.Filled.PlayArrow else PlayerIcons.Pause,
-                    if (paused) "Play" else "Pause", c, onTogglePause,
+                    stringResource(if (paused) R.string.player_play else R.string.player_pause), c, onTogglePause,
                 )
-                MiniIcon(Icons.Filled.Close, "Close player", c, onClose)
+                MiniIcon(Icons.Filled.Close, stringResource(R.string.player_close_player), c, onClose)
                 Spacer(Modifier.width(4.dp))
             }
             // The show's progress (2dp); an empty line keeps the bar height steady without a guide.

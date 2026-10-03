@@ -72,6 +72,15 @@ class PlayerLanguageTest {
         assertEquals("Hindi", r.label)
     }
 
+    @Test fun labelsComeFromTheCaller() {
+        val r = buildLanguageChoices(
+            listOf(StreamAudio(0, "hin", null, true), StreamAudio(1, null, null, false), StreamAudio(2, null, null, false)),
+            emptyList(), "1", null, "x",
+            originalSound = "असली आवाज़", soundN = { "आवाज़ $it" }, nameOf = { if (it == "hi") "हिन्दी" else it },
+        )
+        assertEquals(listOf("a:hi" to "हिन्दी", "t:1" to "आवाज़ 1", "t:2" to "आवाज़ 2"), r.options)
+    }
+
     @Test fun castIsShortAndRoleless() {
         assertEquals(
             "Dilip Joshi, Nitish Bhaluni, Amit Bhatt, Sachin Shroff",

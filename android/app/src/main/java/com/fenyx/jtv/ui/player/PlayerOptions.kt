@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -132,12 +134,12 @@ internal fun OptionsPanel(
 
     Column(modifier.verticalScroll(rememberScrollState())) {
         val title = when (page) {
-            OptionsPage.Main -> "Options"
-            OptionsPage.Language -> "Language"
-            OptionsPage.Quality -> "Picture quality"
-            OptionsPage.Aspect -> "Aspect"
-            OptionsPage.Voice -> "Voice boost"
-            OptionsPage.Sleep -> "Sleep timer"
+            OptionsPage.Main -> stringResource(R.string.player_options)
+            OptionsPage.Language -> stringResource(R.string.player_language)
+            OptionsPage.Quality -> stringResource(R.string.player_quality)
+            OptionsPage.Aspect -> stringResource(R.string.player_aspect)
+            OptionsPage.Voice -> stringResource(R.string.player_voice_boost)
+            OptionsPage.Sleep -> stringResource(R.string.player_sleep_timer)
         }
         JText(title, 22.sp, weight = FontWeight.Bold)
         if (channel != null) {
@@ -147,7 +149,7 @@ internal fun OptionsPanel(
             )
         }
         if (page == OptionsPage.Voice) {
-            JText("Makes speech clearer over music and noise", 14.sp, color = Jtv.colors.t2, maxLines = 2,
+            JText(stringResource(R.string.player_voice_boost_hint), 14.sp, color = Jtv.colors.t2, maxLines = 2,
                 modifier = Modifier.padding(top = 6.dp))
         }
         Spacer(Modifier.height(16.dp))
@@ -157,42 +159,42 @@ internal fun OptionsPanel(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val pickable = model.langChoices.size > 1
                     if (pickable) {
-                        OptionRow("Language", model.langLabel, rowH, Modifier.focusRequester(first).focusRequester(subFocus.getValue(OptionsPage.Language))) { open(OptionsPage.Language) }
+                        OptionRow(stringResource(R.string.player_language), model.langLabel, rowH, Modifier.focusRequester(first).focusRequester(subFocus.getValue(OptionsPage.Language))) { open(OptionsPage.Language) }
                     } else {
-                        InfoRow("Language", model.langLabel, rowH)
+                        InfoRow(stringResource(R.string.player_language), model.langLabel, rowH)
                     }
                     OptionRow(
-                        "Picture quality", qualityLabel(model.quality), rowH,
+                        stringResource(R.string.player_quality), qualityLabel(model.quality), rowH,
                         (if (pickable) Modifier else Modifier.focusRequester(first)).focusRequester(subFocus.getValue(OptionsPage.Quality)),
                     ) { open(OptionsPage.Quality) }
-                    OptionRow("Aspect", aspectLabel(model.aspect), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Aspect))) { open(OptionsPage.Aspect) }
-                    OptionRow("Voice boost", voiceLabel(model.voice), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Voice))) { open(OptionsPage.Voice) }
-                    OptionRow("Auto volume", if (model.autoVolume) "On" else "Off", rowH) { actions.toggleAutoVolume() }
-                    OptionRow("Sleep timer", sleepLabel(model.sleep), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Sleep))) { open(OptionsPage.Sleep) }
-                    OptionRow("Favourite", if (model.favourite) "On" else "Off", rowH) { actions.toggleFavourite() }
+                    OptionRow(stringResource(R.string.player_aspect), aspectLabel(model.aspect), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Aspect))) { open(OptionsPage.Aspect) }
+                    OptionRow(stringResource(R.string.player_voice_boost), voiceLabel(model.voice), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Voice))) { open(OptionsPage.Voice) }
+                    OptionRow(stringResource(R.string.player_auto_volume), onOff(model.autoVolume), rowH) { actions.toggleAutoVolume() }
+                    OptionRow(stringResource(R.string.player_sleep_timer), sleepLabel(model.sleep), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Sleep))) { open(OptionsPage.Sleep) }
+                    OptionRow(stringResource(R.string.player_favourite), onOff(model.favourite), rowH) { actions.toggleFavourite() }
                     if (model.showRefresh) {
-                        OptionRow("Refresh sign-in", if (model.refreshing) "Refreshing" else "Refresh", rowH) { actions.refreshLogin() }
+                        OptionRow(stringResource(R.string.player_refresh_sign_in), stringResource(if (model.refreshing) R.string.player_refreshing else R.string.player_refresh), rowH) { actions.refreshLogin() }
                     }
-                    OptionRow("Settings", "", rowH) { actions.openSettings() }
+                    OptionRow(stringResource(R.string.common_settings), "", rowH) { actions.openSettings() }
                     // LAN sync: send this channel to a paired TV on the same Wi-Fi (phone/tablet only).
                     if (touch && channel != null) {
                         val tvs by com.fenyx.jtv.sync.LanSync.playTargets.collectAsState()
                         tvs.forEach { tv ->
-                            OptionRow("Play on ${tv.name}", "", rowH) {
+                            OptionRow(stringResource(R.string.player_play_on, tv.name), "", rowH) {
                                 com.fenyx.jtv.sync.LanSync.playOn(tv.id, channel.id); onClose()
                             }
                         }
                     }
-                    if (touch) OptionRow("Close", "", rowH) { onClose() }
+                    if (touch) OptionRow(stringResource(R.string.common_close), "", rowH) { onClose() }
                 }
             }
             else -> {
                 val (choices, cur) = when (page) {
                     OptionsPage.Language -> model.langChoices to model.langCurrent
-                    OptionsPage.Quality -> QUALITY_OPTIONS to model.quality
-                    OptionsPage.Aspect -> ASPECT_OPTIONS.map { it.first.toString() to it.second } to model.aspect.toString()
-                    OptionsPage.Voice -> VOICE_OPTIONS.map { it.first.toString() to it.second } to model.voice.toString()
-                    OptionsPage.Sleep -> SLEEP_OPTIONS.map { it.first.toString() to it.second } to model.sleep.toString()
+                    OptionsPage.Quality -> QUALITY_OPTIONS.map { it.first to stringResource(it.second) } to model.quality
+                    OptionsPage.Aspect -> ASPECT_OPTIONS.map { it.first.toString() to stringResource(it.second) } to model.aspect.toString()
+                    OptionsPage.Voice -> VOICE_OPTIONS.map { it.first.toString() to stringResource(it.second) } to model.voice.toString()
+                    OptionsPage.Sleep -> SLEEP_OPTIONS.map { it.toString() to sleepLabel(it) } to model.sleep.toString()
                     OptionsPage.Main -> emptyList<Pair<String, String>>() to ""
                 }
                 val curIndex = choices.indexOfFirst { it.first == cur }.coerceAtLeast(0)
@@ -213,7 +215,7 @@ internal fun OptionsPanel(
                             done()
                         }
                     }
-                    if (touch) OptionRow("Back", "", rowH) { done() }
+                    if (touch) OptionRow(stringResource(R.string.common_back), "", rowH) { done() }
                 }
             }
         }
@@ -251,7 +253,7 @@ private fun ChoiceRow(label: String, selected: Boolean, h: Dp, modifier: Modifie
             if (selected) {
                 Icon(Icons.Default.Check, contentDescription = null, tint = if (focused) c.invTx else c.acc, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
-                JText("Current", 14.sp, color = if (focused) c.invTx else c.t2)
+                JText(stringResource(R.string.player_current), 14.sp, color = if (focused) c.invTx else c.t2)
             }
         }
     }
@@ -287,14 +289,17 @@ internal fun QuickMenu(
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            OptionRow("Favourite", if (model.favourite) "On" else "Off", rowH, Modifier.focusRequester(first)) { actions.toggleFavourite() }
-            if (model.langChoices.size > 1) OptionRow("Language", model.langLabel, rowH) { onOpenPage(OptionsPage.Language) }
-            OptionRow("Picture quality", qualityLabel(model.quality), rowH) { onOpenPage(OptionsPage.Quality) }
-            OptionRow("Aspect", aspectLabel(model.aspect), rowH) { onOpenPage(OptionsPage.Aspect) }
-            OptionRow(if (model.paused) "Play" else "Pause", "", rowH) { actions.togglePause(); onClose() }
-            OptionRow("Channel list", "", rowH) { actions.openChannelList() }
-            OptionRow("Settings", "", rowH) { actions.openSettings() }
-            if (touch) OptionRow("Close", "", rowH) { onClose() }
+            OptionRow(stringResource(R.string.player_favourite), onOff(model.favourite), rowH, Modifier.focusRequester(first)) { actions.toggleFavourite() }
+            if (model.langChoices.size > 1) OptionRow(stringResource(R.string.player_language), model.langLabel, rowH) { onOpenPage(OptionsPage.Language) }
+            OptionRow(stringResource(R.string.player_quality), qualityLabel(model.quality), rowH) { onOpenPage(OptionsPage.Quality) }
+            OptionRow(stringResource(R.string.player_aspect), aspectLabel(model.aspect), rowH) { onOpenPage(OptionsPage.Aspect) }
+            OptionRow(stringResource(if (model.paused) R.string.player_play else R.string.player_pause), "", rowH) { actions.togglePause(); onClose() }
+            OptionRow(stringResource(R.string.player_channel_list), "", rowH) { actions.openChannelList() }
+            OptionRow(stringResource(R.string.common_settings), "", rowH) { actions.openSettings() }
+            if (touch) OptionRow(stringResource(R.string.common_close), "", rowH) { onClose() }
         }
     }
 }
+
+@Composable
+private fun onOff(on: Boolean) = stringResource(if (on) R.string.common_on else R.string.common_off)

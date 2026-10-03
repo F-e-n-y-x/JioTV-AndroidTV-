@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_group_all">सभी चैनल</string>
+    <string name="player_group_recent">हाल में देखे</string>
+
+    <string name="player_quality_auto">ऑटो (सुझाया गया)</string>
+    <string name="player_quality_high">सबसे अच्छी पिक्चर</string>
+    <string name="player_quality_medium">अच्छी पिक्चर</string>
+    <string name="player_quality_low">कम डेटा</string>
+    <string name="player_aspect_fit">पूरा दिखाएँ</string>
+    <string name="player_aspect_stretch">खींचें</string>
+    <string name="player_aspect_zoom">ज़ूम</string>
+    <string name="player_voice_low">थोड़ा</string>
+    <string name="player_voice_medium">मध्यम</string>
+    <string name="player_voice_high">ज़्यादा</string>
+    <string name="player_voice_most">सबसे ज़्यादा</string>
+    <string name="player_sleep_1h">1 घंटा</string>
+    <string name="player_sleep_1h30">1 घंटा 30 मिनट</string>
+    <string name="player_sleep_2h">2 घंटे</string>
+    <plurals name="player_minutes">
+        <item quantity="one">%d मिनट</item>
+        <item quantity="other">%d मिनट</item>
+    </plurals>
+
+    <string name="player_options">विकल्प</string>
+    <string name="player_language">भाषा</string>
+    <string name="player_quality">पिक्चर क्वालिटी</string>
+    <string name="player_quality_short">क्वालिटी</string>
+    <string name="player_aspect">पिक्चर साइज़</string>
+    <string name="player_voice_boost">आवाज़ साफ़ करें</string>
+    <string name="player_voice_boost_hint">गाने और शोर के बीच बातें साफ़ सुनाई देती हैं</string>
+    <string name="player_auto_volume">ऑटो आवाज़</string>
+    <string name="player_sleep_timer">स्लीप टाइमर</string>
+    <string name="player_sleep">स्लीप</string>
+    <string name="player_favourite">फ़ेवरेट</string>
+    <string name="player_favourite_saved">सेव है</string>
+    <string name="player_refresh_sign_in">लॉग इन ताज़ा करें</string>
+    <string name="player_refresh">ताज़ा करें</string>
+    <string name="player_refreshing">ताज़ा हो रहा है</string>
+    <string name="player_play_on">%s पर चलाएँ</string>
+    <string name="player_current">अभी चालू</string>
+    <string name="player_channel_list">चैनल लिस्ट</string>
+    <string name="player_more">और</string>
+    <string name="player_less">कम</string>
+
+    <string name="player_original_sound">असली आवाज़</string>
+    <string name="player_sound_n">आवाज़ %d</string>
+
+    <string name="player_play">चलाएँ</string>
+    <string name="player_pause">रोकें</string>
+    <string name="player_previous_channel">पिछला चैनल</string>
+    <string name="player_next_channel">अगला चैनल</string>
+    <string name="player_channels">चैनल</string>
+    <string name="player_hide_channels">चैनल छिपाएँ</string>
+    <string name="player_minimise">प्लेयर छोटा करें</string>
+    <string name="player_full_screen">पूरी स्क्रीन</string>
+    <string name="player_exit_full_screen">पूरी स्क्रीन से बाहर</string>
+    <string name="player_close_player">प्लेयर बंद करें</string>
+    <string name="player_mini_description">छोटा प्लेयर। प्लेयर खोलने के लिए छुएँ</string>
+    <string name="player_open_player">प्लेयर खोलें</string>
+
+    <string name="player_key_up_down">ऊपर / नीचे</string>
+    <string name="player_key_left_right">बाएँ / दाएँ</string>
+    <string name="player_key_left">बाएँ</string>
+    <string name="player_key_right">दाएँ</string>
+    <string name="player_key_hold_ok">OK दबाए रखें</string>
+    <string name="player_key_hold">दबाए रखें</string>
+    <string name="player_key_ok">OK</string>
+    <string name="player_key_back">वापस</string>
+    <string name="player_key_digits">0–9</string>
+    <string name="player_hint_change_channel">चैनल बदलें</string>
+    <string name="player_hint_channel_list">चैनल लिस्ट</string>
+    <string name="player_hint_options">विकल्प</string>
+    <string name="player_hint_menu">मेन्यू</string>
+    <string name="player_hint_move">हिलाएँ</string>
+    <string name="player_hint_row">लाइन</string>
+    <string name="player_hint_select">चुनें</string>
+    <string name="player_hint_hide">छिपाएँ</string>
+    <string name="player_hint_rewind_forward">पीछे / आगे</string>
+    <string name="player_hint_faster">तेज़</string>
+    <string name="player_hint_play">चलाएँ</string>
+    <string name="player_hint_browse">देखें</string>
+    <string name="player_hint_watch">चलाएँ</string>
+    <string name="player_hint_category">कैटेगरी</string>
+    <string name="player_hint_channel_number">चैनल नंबर</string>
+
+    <string name="player_next_label">इसके बाद</string>
+    <string name="player_next_on">%s पर इसके बाद</string>
+    <plurals name="player_min_left">
+        <item quantity="one">%d मिनट बाकी</item>
+        <item quantity="other">%d मिनट बाकी</item>
+    </plurals>
+    <string name="player_up_down_groups">ऊपर: %1$s  ·  नीचे: %2$s</string>
+    <string name="player_no_channel">चैनल %s नहीं मिला</string>
+    <string name="player_loading">लोड हो रहा है</string>
+    <string name="player_paused">रुका हुआ है</string>
+    <string name="player_press_ok">आगे देखने के लिए OK दबाएँ</string>
+    <string name="player_playing">चल रहा है</string>
+    <string name="player_no_details">इस चैनल के प्रोग्राम की जानकारी नहीं है।</string>
+    <string name="player_episode">एपिसोड %s</string>
+    <string name="player_cast">कलाकार: %s</string>
+    <string name="player_director">डायरेक्टर: %s</string>
+
+    <string name="player_fav_added">फ़ेवरेट में जोड़ा</string>
+    <string name="player_fav_removed">फ़ेवरेट से हटाया</string>
+    <string name="player_no_previous">अभी कोई पिछला चैनल नहीं है</string>
+    <string name="player_voice_boost_is">आवाज़ साफ़ करें: %s</string>
+    <string name="player_sound_off">आवाज़ बंद</string>
+    <string name="player_sound_on">आवाज़ चालू</string>
+
+    <string name="player_err_picture_stopped">पिक्चर रुक गई।</string>
+    <string name="player_err_not_signed_in">आपने Jio में लॉग इन नहीं किया है।</string>
+    <string name="player_err_no_replay">यह शो अभी दोबारा नहीं देखा जा सकता।</string>
+    <string name="player_err_server_sign_in_expired">आपके JTV सर्वर पर Jio लॉग इन की अवधि खत्म हो गई है।</string>
+    <string name="player_err_sign_in_expired">आपके Jio लॉग इन की अवधि खत्म हो गई है।</string>
+    <string name="player_err_not_provided">Jio अभी यह चैनल नहीं दे रहा है।</string>
+    <string name="player_err_offline">यह चैनल अभी Jio पर बंद है।</string>
+    <string name="player_err_did_not_load">यह चैनल नहीं चला।</string>
+    <string name="player_open_settings">सेटिंग्स खोलें</string>
+    <string name="player_go_live">लाइव देखें</string>
+
+    <string name="player_back_to_schedule">समय पर वापस जाएँ</string>
+    <string name="player_on_schedule">समय पर है</string>
+    <string name="player_go_live_description">लाइव देखें। रीप्ले छोड़कर चैनल लाइव देखें</string>
+    <string name="player_live_description">लाइव। लाइव चल रहा है</string>
+    <string name="player_go_to_live">लाइव पर जाएँ</string>
+    <string name="player_seek_bar_description">सीक बार। दाईं ओर का सिरा लाइव है।</string>
+    <string name="player_behind_live">लाइव से पीछे %s</string>
+    <string name="player_replay_status">रीप्ले · %s</string>
+    <string name="player_replay_line">रीप्ले · %1$s · %2$s · %3$s</string>
+    <string name="player_replay_ended">%s खत्म हो गया।</string>
+    <string name="player_replay_next">इसके बाद: %1$s · %2$s</string>
+    <string name="player_watch_next">अगला प्रोग्राम देखें</string>
+</resources>

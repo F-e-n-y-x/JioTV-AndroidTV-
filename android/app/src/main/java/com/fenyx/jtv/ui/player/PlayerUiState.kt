@@ -1,5 +1,8 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -23,7 +26,7 @@ enum class OptionsPage { Main, Language, Quality, Aspect, Voice, Sleep }
 enum class ErrorAction { Retry, NextChannel, Settings, GoLive }
 
 @Immutable
-data class PlayerError(val message: String, val primary: ErrorAction, val secondary: ErrorAction? = null)
+data class PlayerError(@androidx.annotation.StringRes val message: Int, val primary: ErrorAction, val secondary: ErrorAction? = null)
 
 /**
  * Overlay state, kept apart from playback state so only the small overlay composables that read a field
@@ -96,21 +99,45 @@ class PlayerUi(initial: PlayerOverlay) {
 /** The one solid strap colour (approved mockups). Everything else uses Jtv.colors tokens. */
 internal val StrapBg = Color(0xFF141416)
 
+@Composable
 internal fun groupLabel(group: String?): String = when (group) {
-    null, MainViewModel.GROUP_ALL -> "All channels"
-    MainViewModel.GROUP_FAVORITES -> "Favourites"
-    MainViewModel.GROUP_RECENT -> "Recent"
+    null, MainViewModel.GROUP_ALL -> stringResource(R.string.player_group_all)
+    MainViewModel.GROUP_FAVORITES -> stringResource(R.string.common_favourites)
+    MainViewModel.GROUP_RECENT -> stringResource(R.string.player_group_recent)
     else -> group
 }
 
 internal val QUALITY_OPTIONS = listOf(
-    "auto" to "Auto (recommended)", "high" to "Best picture", "medium" to "Good picture", "low" to "Data saver",
+    "auto" to R.string.player_quality_auto, "high" to R.string.player_quality_high,
+    "medium" to R.string.player_quality_medium, "low" to R.string.player_quality_low,
 )
-internal val ASPECT_OPTIONS = listOf(0 to "Fit", 3 to "Stretch", 4 to "Zoom")
-internal val VOICE_OPTIONS = listOf(0 to "Off", 1 to "Low", 2 to "Medium", 3 to "High", 4 to "Most")
-internal val SLEEP_OPTIONS = listOf(0 to "Off", 15 to "15 min", 30 to "30 min", 60 to "1 hour", 90 to "1 hour 30 min", 120 to "2 hours")
+internal val ASPECT_OPTIONS = listOf(0 to R.string.player_aspect_fit, 3 to R.string.player_aspect_stretch, 4 to R.string.player_aspect_zoom)
+internal val VOICE_OPTIONS = listOf(
+    0 to R.string.common_off, 1 to R.string.player_voice_low, 2 to R.string.player_voice_medium,
+    3 to R.string.player_voice_high, 4 to R.string.player_voice_most,
+)
+/** Sleep timer choices in minutes (0 = off). */
+internal val SLEEP_OPTIONS = listOf(0, 15, 30, 60, 90, 120)
 
-internal fun qualityLabel(q: String) = QUALITY_OPTIONS.firstOrNull { it.first == q }?.second ?: "Auto (recommended)"
-internal fun aspectLabel(m: Int) = ASPECT_OPTIONS.firstOrNull { it.first == m }?.second ?: "Fit"
-internal fun voiceLabel(v: Int) = VOICE_OPTIONS.firstOrNull { it.first == v }?.second ?: "Off"
-internal fun sleepLabel(m: Int) = if (m == 0) "Off" else SLEEP_OPTIONS.firstOrNull { it.first == m }?.second ?: "$m min"
+internal fun voiceLabelRes(v: Int) = VOICE_OPTIONS.firstOrNull { it.first == v }?.second ?: R.string.common_off
+
+@Composable
+internal fun qualityLabel(q: String) = stringResource(QUALITY_OPTIONS.firstOrNull { it.first == q }?.second ?: R.string.player_quality_auto)
+@Composable
+internal fun aspectLabel(m: Int) = stringResource(ASPECT_OPTIONS.firstOrNull { it.first == m }?.second ?: R.string.player_aspect_fit)
+@Composable
+internal fun voiceLabel(v: Int) = stringResource(voiceLabelRes(v))
+
+internal fun sleepLabel(res: android.content.res.Resources, m: Int): String = when (m) {
+    0 -> res.getString(R.string.common_off)
+    60 -> res.getString(R.string.player_sleep_1h)
+    90 -> res.getString(R.string.player_sleep_1h30)
+    120 -> res.getString(R.string.player_sleep_2h)
+    else -> res.getQuantityString(R.plurals.player_minutes, m, m)
+}
+
+@Composable
+internal fun sleepLabel(m: Int): String {
+    androidx.compose.ui.platform.LocalConfiguration.current // re-read when the language changes
+    return sleepLabel(androidx.compose.ui.platform.LocalContext.current.resources, m)
+}

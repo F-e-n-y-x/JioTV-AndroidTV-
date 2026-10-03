@@ -1,5 +1,8 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.automirrored.filled.List
@@ -84,17 +87,27 @@ private val fadeInFast = fadeIn(tween(150))
 private val fadeOutFast = fadeOut(tween(120))
 
 private val BannerHint = listOf(
-    "Up / Down" to "change channel", "Left" to "channel list", "Right" to "options", "Hold OK" to "menu",
+    R.string.player_key_up_down to R.string.player_hint_change_channel, R.string.player_key_left to R.string.player_hint_channel_list,
+    R.string.player_key_right to R.string.player_hint_options, R.string.player_key_hold_ok to R.string.player_hint_menu,
 )
 private val ControlsHint = listOf(
-    "Left / Right" to "move", "Up / Down" to "row", "OK" to "select", "Back" to "hide",
+    R.string.player_key_left_right to R.string.player_hint_move, R.string.player_key_up_down to R.string.player_hint_row,
+    R.string.player_key_ok to R.string.player_hint_select, R.string.player_key_back to R.string.player_hint_hide,
 )
 private val ControlsPausedHint = listOf(
-    "Left / Right" to "rewind / forward", "Hold" to "faster", "OK" to "play", "Back" to "hide",
+    R.string.player_key_left_right to R.string.player_hint_rewind_forward, R.string.player_key_hold to R.string.player_hint_faster,
+    R.string.player_key_ok to R.string.player_hint_play, R.string.player_key_back to R.string.player_hint_hide,
 )
 private val BrowseHint = listOf(
-    "Left / Right" to "browse", "OK" to "watch", "Up / Down" to "category", "0–9" to "channel number", "Back" to "hide",
+    R.string.player_key_left_right to R.string.player_hint_browse, R.string.player_key_ok to R.string.player_hint_watch,
+    R.string.player_key_up_down to R.string.player_hint_category, R.string.player_key_digits to R.string.player_hint_channel_number,
+    R.string.player_key_back to R.string.player_hint_hide,
 )
+
+/** A key-hint list from (key, action) string resources, in the app language. */
+@Composable
+private fun hints(items: List<Pair<Int, Int>>): List<Pair<String, String>> =
+    items.map { (k, a) -> stringResource(k) to stringResource(a) }
 
 /**
  * Hides the banner / touch controls (and the TV controls layer) after [ms] unless something restarts
@@ -131,6 +144,7 @@ internal class OverlayData(
     val buffering: Boolean = false,
 )
 
+@Composable
 private fun neighbours(groups: List<String>, g: String?): Pair<String?, String?> {
     if (groups.size < 2) return null to null
     val i = groups.indexOf(g ?: MainViewModel.GROUP_ALL).coerceAtLeast(0)
@@ -205,7 +219,7 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                     }
                     Spacer(Modifier.height(8.dp))
                     Plaque(Modifier.padding(0.dp)) {
-                        KeyHint(if (browsing) BrowseHint else BannerHint, keyColor = c.t2, color = c.t3)
+                        KeyHint(hints(if (browsing) BrowseHint else BannerHint), keyColor = c.t2, color = c.t3)
                     }
                 }
             }
@@ -250,12 +264,12 @@ private fun TvControls(ui: PlayerUi, d: OverlayData) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val toCentre = Modifier.focusProperties { down = playFr }
-            if (ui.pointerChrome) OverVideoButton("Back", { act.leave() }, icon = Icons.AutoMirrored.Filled.ArrowBack, modifier = toCentre)
+            if (ui.pointerChrome) OverVideoButton(stringResource(R.string.common_back), { act.leave() }, icon = Icons.AutoMirrored.Filled.ArrowBack, modifier = toCentre)
             ControlsTitle(d.playing, 18.sp, 520.dp)
             Spacer(Modifier.weight(1f))
-            OverVideoButton("Channels", { act.openChannelList() }, icon = Icons.AutoMirrored.Filled.List, modifier = toCentre)
+            OverVideoButton(stringResource(R.string.player_channels), { act.openChannelList() }, icon = Icons.AutoMirrored.Filled.List, modifier = toCentre)
             OverVideoButton(
-                "Settings", { ui.openOptions() }, icon = Icons.Filled.Settings,
+                stringResource(R.string.common_settings), { ui.openOptions() }, icon = Icons.Filled.Settings,
                 modifier = toCentre.focusRequester(settingsFr),
             )
             Plaque { JtvClock(LocalNow.current, size = 28.sp, dateColor = c.t2) }
@@ -283,7 +297,7 @@ private fun TvControls(ui: PlayerUi, d: OverlayData) {
             Spacer(Modifier.height(10.dp))
             d.playing?.let { MiniInfoLine(it, d.epg, null, Modifier.widthIn(max = 900.dp)) }
             Spacer(Modifier.height(8.dp))
-            Plaque { KeyHint(if (paused && ts.seekable) ControlsPausedHint else ControlsHint, keyColor = c.t2, color = c.t3) }
+            Plaque { KeyHint(hints(if (paused && ts.seekable) ControlsPausedHint else ControlsHint), keyColor = c.t2, color = c.t3) }
         }
     }
 }
@@ -291,7 +305,7 @@ private fun TvControls(ui: PlayerUi, d: OverlayData) {
 @Composable
 private fun PointerTopBar(playing: Channel?, onBack: () -> Unit, onOptions: () -> Unit, modifier: Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        OverVideoButton("Back", onBack, icon = Icons.AutoMirrored.Filled.ArrowBack)
+        OverVideoButton(stringResource(R.string.common_back), onBack, icon = Icons.AutoMirrored.Filled.ArrowBack)
         if (playing != null) {
             Plaque {
                 JText(
@@ -300,7 +314,7 @@ private fun PointerTopBar(playing: Channel?, onBack: () -> Unit, onOptions: () -
                 )
             }
         }
-        OverVideoButton("Options", onOptions)
+        OverVideoButton(stringResource(R.string.player_options), onOptions)
     }
 }
 
@@ -469,15 +483,15 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (act.canMinimize) OverVideoIcon(PlayerIcons.ExpandMore, "Minimise player", { act.minimize() }, iconSize = 30.dp)
-                        else OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back", { act.leave() })
+                        if (act.canMinimize) OverVideoIcon(PlayerIcons.ExpandMore, stringResource(R.string.player_minimise), { act.minimize() }, iconSize = 30.dp)
+                        else OverVideoIcon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.common_back), { act.leave() })
                         ControlsTitle(d.playing, 16.sp, 360.dp)
                         Spacer(Modifier.weight(1f))
-                        OverVideoIcon(Icons.AutoMirrored.Filled.List, if (showChannels) "Hide channels" else "Channels", {
+                        OverVideoIcon(Icons.AutoMirrored.Filled.List, stringResource(if (showChannels) R.string.player_hide_channels else R.string.player_channels), {
                             showChannels = !showChannels; ui.bannerToken++
                         })
-                        OverVideoIcon(Icons.Filled.Settings, "Settings", { ui.openOptions() })
-                        if (exitFullScreen) OverVideoIcon(PlayerIcons.FullscreenExit, "Exit full screen", { act.fullScreen(false) })
+                        OverVideoIcon(Icons.Filled.Settings, stringResource(R.string.common_settings), { ui.openOptions() })
+                        if (exitFullScreen) OverVideoIcon(PlayerIcons.FullscreenExit, stringResource(R.string.player_exit_full_screen), { act.fullScreen(false) })
                         if (!compact) Plaque { JtvClock(now, size = 24.sp, dateColor = c.t2) }
                     }
                     // ── Centre: previous · play/pause · next ──
@@ -536,7 +550,7 @@ private fun MiniInfoLine(ch: Channel, epg: EpgSource, ts: Timeshift?, modifier: 
                 JText(
                     when {
                         cur != null && replaying -> replayStatus(cur)
-                        cur != null -> "${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)} · ${cur.minutesLeft(now)} min left"
+                        cur != null -> "${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)} · " + cur.minutesLeft(now).let { pluralStringResource(R.plurals.player_min_left, it, it) }
                         else -> listOfNotNull(ch.group, ch.language).joinToString(" · ")
                     },
                     14.sp, color = c.t2,
