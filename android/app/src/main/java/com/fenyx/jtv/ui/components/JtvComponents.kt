@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.components
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.composed
@@ -87,13 +89,19 @@ val LocalNow = staticCompositionLocalOf { 0L }
 private val hhmm = ThreadLocal.withInitial { SimpleDateFormat("h:mm a", Locale.US) }
 private val hm12 = ThreadLocal.withInitial { SimpleDateFormat("h:mm", Locale.US) }
 private val ampm = ThreadLocal.withInitial { SimpleDateFormat("a", Locale.US) }
-private val dayFmt = ThreadLocal.withInitial { SimpleDateFormat("EEE, d MMM", Locale.UK) }
+// Day and month names follow the app language ("Fri, 3 Oct" / "शुक्र, 3 अक्टू॰"); re-made when it changes.
+private val dayFmt = ThreadLocal<Pair<Locale, SimpleDateFormat>>()
+private fun dayFormat(): SimpleDateFormat {
+    val loc = Locale.getDefault().let { if (it.language == "en") Locale.UK else it }
+    dayFmt.get()?.let { (l, f) -> if (l == loc) return f }
+    return SimpleDateFormat("EEE, d MMM", loc).also { dayFmt.set(loc to it) }
+}
 
 fun formatTime(ms: Long): String = hhmm.get()!!.format(Date(ms))
 /** "2:45" without the AM/PM, for tight columns where the day part is shown once nearby. */
 fun formatTimeShort(ms: Long): String = hm12.get()!!.format(Date(ms))
 fun formatAmPm(ms: Long): String = ampm.get()!!.format(Date(ms))
-fun formatDay(ms: Long): String = dayFmt.get()!!.format(Date(ms))
+fun formatDay(ms: Long): String = dayFormat().format(Date(ms))
 
 /** Now / next / later for one channel's guide at [now]. */
 @Immutable
@@ -229,7 +237,7 @@ fun JtvProgress(
 @Composable
 fun EndsSoonPill(stopMs: Long, modifier: Modifier = Modifier, fontSize: TextUnit = 13.sp) {
     Box(modifier.clip(RoundedCornerShape(4.dp)).background(Jtv.colors.acc).padding(horizontal = 8.dp, vertical = 2.dp)) {
-        Text("Ends ${formatTime(stopMs)}", style = textStyle(fontSize, FontWeight.SemiBold), color = Jtv.colors.accTx, maxLines = 1)
+        Text(stringResource(R.string.time_ends_at, formatTime(stopMs)), style = textStyle(fontSize, FontWeight.SemiBold), color = Jtv.colors.accTx, maxLines = 1)
     }
 }
 
@@ -294,7 +302,7 @@ fun JtvButton(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (icon != null) Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size((fontSize.value + 4).dp))
-            Text(text, style = textStyle(fontSize, FontWeight.SemiBold), color = fg, maxLines = 1)
+            Text(text, style = textStyle(fontSize, FontWeight.SemiBold), color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

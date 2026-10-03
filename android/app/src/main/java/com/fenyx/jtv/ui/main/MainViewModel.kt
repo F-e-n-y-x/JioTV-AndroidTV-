@@ -1,5 +1,8 @@
 package com.fenyx.jtv.ui.main
 
+import com.fenyx.jtv.R
+import com.fenyx.jtv.data.userText
+import com.fenyx.jtv.i18n.UiText
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -19,6 +22,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+
+    /** A user-visible message in the app language (the application resources follow it; see AppLocale). */
+    private fun str(@androidx.annotation.StringRes id: Int, vararg args: Any): String =
+        getApplication<Application>().getString(id, *args)
+
 
     companion object {
         // Sentinel category values for the Home sidebar. Real Jio categories never collide with these.
@@ -205,9 +213,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val app = getApplication<Application>()
                     val result = JioApiClient.getMobileChannelList(app, forceNetwork = true)
                     result.getOrNull()?.takeIf { it.isNotEmpty() }?.let { publishChannels(it) }
-                    _serverRefreshMsg.value = "Refreshed"
+                    _serverRefreshMsg.value = str(R.string.home_refreshed)
                 }
-                .onFailure { _serverRefreshMsg.value = it.message ?: "Refresh failed" }
+                .onFailure { _serverRefreshMsg.value = it.userText(UiText.of(R.string.home_refresh_failed)).resolve(getApplication()) }
             _serverRefreshing.value = false
             kotlinx.coroutines.delay(4000)
             _serverRefreshMsg.value = null
@@ -321,10 +329,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (parsedChannels.isNotEmpty()) {
                         publishChannels(parsedChannels)
                     } else if (cached == null) {
-                        _error.value = "No channels found."
+                        _error.value = str(R.string.home_no_channels_found)
                     }
                 } else if (cached == null) {
-                    _error.value = "Error: ${result.exceptionOrNull()?.message}"
+                    _error.value = result.exceptionOrNull().userText(UiText.of(R.string.home_error_with_detail, result.exceptionOrNull()?.message.orEmpty())).resolve(getApplication())
                 }
             }
 
@@ -437,20 +445,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isCheckingUpdate.value = true
             _updateError.value = null
-            if (manual) _updateStatusMessage.value = "Checking for updates..."
+            if (manual) _updateStatusMessage.value = str(R.string.home_update_checking)
             val app = getApplication<Application>()
             val result = com.fenyx.jtv.data.AppUpdateManager.checkForUpdate(app)
             result.onSuccess { info ->
                 _updateInfo.value = info
                 if (info != null && info.isUpdateAvailable) {
-                    _updateStatusMessage.value = "Update v${info.versionName} available"
+                    _updateStatusMessage.value = str(R.string.home_update_available, info.versionName)
                 } else if (manual) {
-                    _updateStatusMessage.value = "App is up to date"
+                    _updateStatusMessage.value = str(R.string.home_update_up_to_date)
                 }
             }.onFailure { err ->
                 if (manual) {
-                    _updateError.value = err.message ?: "Failed to check update"
-                    _updateStatusMessage.value = "Failed to check update"
+                    _updateError.value = str(R.string.home_update_check_failed)
+                    _updateStatusMessage.value = str(R.string.home_update_check_failed)
                 }
             }
             _isCheckingUpdate.value = false
@@ -474,7 +482,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _updateDownloadProgress.value = 0f
             _updateDownloadedBytes.value = 0L
             _updateTotalBytes.value = info.apkSize
-            _updateStatusMessage.value = "Downloading update..."
+            _updateStatusMessage.value = str(R.string.home_update_downloading)
 
             val result = com.fenyx.jtv.data.AppUpdateManager.downloadApk(
                 context = context,
@@ -489,12 +497,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             result.onSuccess { file ->
                 _downloadedApkFile.value = file
                 _isDownloadingUpdate.value = false
-                _updateStatusMessage.value = "Download complete"
+                _updateStatusMessage.value = str(R.string.home_update_downloaded)
                 com.fenyx.jtv.data.AppUpdateManager.installApk(context, file)
             }.onFailure { err ->
                 _isDownloadingUpdate.value = false
-                _updateError.value = err.message ?: "Download failed"
-                _updateStatusMessage.value = "Download failed"
+                _updateError.value = str(R.string.home_update_download_failed)
+                _updateStatusMessage.value = str(R.string.home_update_download_failed)
             }
         }
     }

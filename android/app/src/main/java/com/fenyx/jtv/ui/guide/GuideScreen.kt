@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.guide
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
@@ -197,9 +199,9 @@ fun GuideScreen(
         // ── Header: title · day · category · clock ──
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                JText("Guide", if (isTv) 28.sp else 24.sp, weight = FontWeight.Bold)
+                JText(stringResource(R.string.guide_title), if (isTv) 28.sp else 24.sp, weight = FontWeight.Bold)
                 JText(
-                    "${dayLabel(viewStart + HALF_HOUR, now)} · ${categoryLabel(category)}",
+                    stringResource(R.string.guide_header_line, dayLabel(viewStart + HALF_HOUR, now), categoryLabel(category)),
                     if (isTv) 16.sp else 14.sp, color = c.t2,
                 )
             }
@@ -315,7 +317,7 @@ fun GuideScreen(
                 if (channels.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         JText(
-                            if (isLoading || allChannels.isEmpty()) "Loading channels…" else "No channels in this category.",
+                            if (isLoading || allChannels.isEmpty()) stringResource(R.string.guide_loading_channels) else stringResource(R.string.guide_no_channels_in_category),
                             20.sp, color = c.t2,
                         )
                     }
@@ -492,7 +494,12 @@ fun GuideScreen(
                 if (isTv) {
                     Spacer(Modifier.height(6.dp))
                     KeyHint(
-                        listOf("OK" to "watch", "Hold OK" to "details", "Up" to "categories", "Back" to "close guide"),
+                        listOf(
+                            stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_watch),
+                            stringResource(R.string.nav_key_hold_ok) to stringResource(R.string.nav_hint_details),
+                            stringResource(R.string.nav_key_up) to stringResource(R.string.nav_hint_categories),
+                            stringResource(R.string.nav_key_back) to stringResource(R.string.nav_hint_close_guide),
+                        ),
                     )
                 }
 
@@ -551,12 +558,13 @@ private fun windowSpan(timeline: Dp, isTv: Boolean): Long {
     return (minutes - minutes % 15) * MIN
 }
 
+@Composable
 private fun dayLabel(t: Long, now: Long): String {
     fun dayNo(ms: Long) = Calendar.getInstance().run { timeInMillis = ms; get(Calendar.YEAR) * 400 + get(Calendar.DAY_OF_YEAR) }
     return when (dayNo(t) - dayNo(now)) {
-        0 -> "Today"
-        1 -> "Tomorrow"
-        -1 -> "Yesterday"
+        0 -> stringResource(R.string.time_today)
+        1 -> stringResource(R.string.time_tomorrow)
+        -1 -> stringResource(R.string.time_yesterday)
         else -> formatDay(t)
     }
 }
@@ -564,12 +572,10 @@ private fun dayLabel(t: Long, now: Long): String {
 /** Guide-only pseudo category: channels with Jio catch-up. */
 private const val GROUP_REPLAY = "__REPLAY__"
 
+@Composable
 private fun categoryLabel(group: String): String = when (group) {
-    MainViewModel.GROUP_ALL -> "All channels"
-    GROUP_REPLAY -> "Replay"
-    MainViewModel.GROUP_FAVORITES -> "Favourites"
-    MainViewModel.GROUP_RECENT -> "Recent"
-    else -> group
+    GROUP_REPLAY -> stringResource(R.string.guide_cat_replay)
+    else -> com.fenyx.jtv.ui.main.groupLabel(group)
 }
 
 // ───────────────────────── Pieces ─────────────────────────
@@ -581,7 +587,7 @@ private fun GuideOff(onTurnOn: () -> Unit, onOpenSettings: () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(max = 560.dp)) {
             Text(
-                "Programme guide is off. Turn it on to see what's on later.",
+                stringResource(R.string.guide_off_message),
                 style = textStyle(22.sp, FontWeight.SemiBold),
                 color = Jtv.colors.tx,
                 textAlign = TextAlign.Center,
@@ -590,12 +596,12 @@ private fun GuideOff(onTurnOn: () -> Unit, onOpenSettings: () -> Unit) {
             if (Jtv.form == com.fenyx.jtv.theme.FormFactor.Phone) {
                 // Narrow screen: stack full-width so neither label is cut off.
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    JtvButton("Turn on programme guide", onTurnOn, Modifier.fillMaxWidth().focusRequester(first), primary = true, fontSize = 18.sp)
-                    JtvButton("Open settings", onOpenSettings, Modifier.fillMaxWidth(), fontSize = 18.sp)
+                    JtvButton(stringResource(R.string.guide_turn_on), onTurnOn, Modifier.fillMaxWidth().focusRequester(first), primary = true, fontSize = 18.sp)
+                    JtvButton(stringResource(R.string.guide_open_settings), onOpenSettings, Modifier.fillMaxWidth(), fontSize = 18.sp)
                 }
             } else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                JtvButton("Turn on programme guide", onTurnOn, Modifier.focusRequester(first), primary = true, fontSize = 18.sp)
-                JtvButton("Open settings", onOpenSettings, fontSize = 18.sp)
+                JtvButton(stringResource(R.string.guide_turn_on), onTurnOn, Modifier.focusRequester(first), primary = true, fontSize = 18.sp)
+                JtvButton(stringResource(R.string.guide_open_settings), onOpenSettings, fontSize = 18.sp)
             }
         }
     }
@@ -656,6 +662,9 @@ private fun FocusLine(
 ) {
     val c = Jtv.colors
     val isPhone = Jtv.form == FormFactor.Phone
+    val okToReplay = stringResource(R.string.guide_ok_to_replay)
+    val notReplayable = stringResource(R.string.guide_not_replayable)
+    val noGuide = stringResource(R.string.guide_no_guide_for_channel)
     val meta = buildString {
         if (channel != null) {
             if (channel.channelNumber > 0) append("${channel.channelNumber} ")
@@ -664,19 +673,19 @@ private fun FocusLine(
         if (prog != null) {
             append(" · ${formatTime(prog.startMs)} – ${formatTime(prog.stopMs)}")
             if (channel != null && prog.stopMs <= now) {
-                append(if (Catchup.isReplayable(channel, prog, now)) " · OK to replay" else " · Not available to replay")
+                append(" · "); append(if (Catchup.isReplayable(channel, prog, now)) okToReplay else notReplayable)
             }
         }
     }
-    val title = prog?.title ?: if (channel != null) "No guide for this channel" else ""
+    val title = prog?.title ?: if (channel != null) noGuide else ""
     if (isPhone) {
         Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
             JText(title, 20.sp, weight = FontWeight.Bold)
             JText(meta, 16.sp, color = c.t2)
             if (showButtons) {
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    JtvButton("Watch", onWatch, primary = true)
-                    JtvButton("Details", onDetails)
+                    JtvButton(stringResource(R.string.guide_watch), onWatch, primary = true)
+                    JtvButton(stringResource(R.string.guide_details), onDetails)
                 }
             }
         }
@@ -692,8 +701,8 @@ private fun FocusLine(
                 JText(meta, 16.sp, color = c.t2)
             }
             if (showButtons) {
-                JtvButton("Watch", onWatch, primary = true)
-                JtvButton("Details", onDetails)
+                JtvButton(stringResource(R.string.guide_watch), onWatch, primary = true)
+                JtvButton(stringResource(R.string.guide_details), onDetails)
             }
         }
     }
@@ -702,9 +711,9 @@ private fun FocusLine(
 @Composable
 private fun TimeButtons(onEarlier: () -> Unit, onNow: () -> Unit, onLater: () -> Unit) {
     Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        JtvButton("Earlier", onEarlier, minHeight = 56.dp)
-        JtvButton("Now", onNow, minHeight = 56.dp)
-        JtvButton("Later", onLater, minHeight = 56.dp)
+        JtvButton(stringResource(R.string.guide_earlier), onEarlier, minHeight = 56.dp)
+        JtvButton(stringResource(R.string.guide_now), onNow, minHeight = 56.dp)
+        JtvButton(stringResource(R.string.guide_later), onLater, minHeight = 56.dp)
     }
 }
 
@@ -797,7 +806,7 @@ private fun GuideRow(
                     modifier = Modifier.weight(1f, fill = false))
                 // Channels Jio lets you replay carry the replay mark, so it's clear where catch-up exists.
                 if (channel.isCatchup) androidx.tv.material3.Icon(
-                    com.fenyx.jtv.ui.player.PlayerIcons.Replay, contentDescription = "Replay available",
+                    com.fenyx.jtv.ui.player.PlayerIcons.Replay, contentDescription = stringResource(R.string.guide_replay_available),
                     tint = c.acc, modifier = Modifier.padding(start = 4.dp).size(14.dp),
                 )
             }
@@ -820,7 +829,7 @@ private fun GuideRow(
             if (visible.isEmpty()) {
                 val focused = focusedStart != null
                 Cell(
-                    title = if (programs.isNullOrEmpty()) "No guide for this channel" else "Nothing scheduled",
+                    title = if (programs.isNullOrEmpty()) stringResource(R.string.guide_no_guide_for_channel) else stringResource(R.string.guide_nothing_scheduled),
                     time = null,
                     xDp = 0.dp,
                     widthDp = with(density) { (span * pxPerMs).toDp() },
@@ -841,7 +850,7 @@ private fun GuideRow(
                     Cell(
                         title = p.title,
                         // The focused finished show that can't be replayed says so (dimmed cells don't).
-                        time = if (isFocused && past && !replayable) "Not available to replay" else formatTime(p.startMs),
+                        time = if (isFocused && past && !replayable) stringResource(R.string.guide_not_replayable) else formatTime(p.startMs),
                         xDp = x,
                         widthDp = w,
                         focused = isFocused,
@@ -897,7 +906,7 @@ private fun Cell(
                     val tc = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2
                     if (replay) Row(verticalAlignment = Alignment.CenterVertically) {
                         androidx.tv.material3.Icon(
-                            com.fenyx.jtv.ui.player.PlayerIcons.Replay, contentDescription = "Can be replayed",
+                            com.fenyx.jtv.ui.player.PlayerIcons.Replay, contentDescription = stringResource(R.string.guide_can_be_replayed),
                             tint = if (focused) c.invTx else c.acc,
                             modifier = Modifier.padding(end = 4.dp).size(16.dp),
                         )
@@ -960,13 +969,13 @@ private fun GuideDetails(
                 JText(chLine, 18.sp, color = c.t2)
                 if (prog != null) {
                     val state = when {
-                        prog.stopMs <= now && onWatchFromStart == null -> "Not available to replay"
-                        prog.stopMs <= now -> "Already shown"
-                        prog.startMs <= now -> "On now"
-                        else -> "Starts at ${formatTime(prog.startMs)}"
+                        prog.stopMs <= now && onWatchFromStart == null -> stringResource(R.string.guide_not_replayable)
+                        prog.stopMs <= now -> stringResource(R.string.guide_already_shown)
+                        prog.startMs <= now -> stringResource(R.string.guide_on_now)
+                        else -> stringResource(R.string.time_starts_at, formatTime(prog.startMs))
                     }
                     JText(
-                        "${dayLabel(prog.startMs, now)} · ${formatTime(prog.startMs)} – ${formatTime(prog.stopMs)} · $state",
+                        stringResource(R.string.guide_detail_line, dayLabel(prog.startMs, now), formatTime(prog.startMs), formatTime(prog.stopMs), state),
                         18.sp, color = c.t2,
                     )
                     if (prog.description.isNotBlank()) {
@@ -976,7 +985,7 @@ private fun GuideDetails(
                         }
                     }
                 } else {
-                    JText("No programme information.", 18.sp, color = c.t2)
+                    JText(stringResource(R.string.guide_no_programme_info), 18.sp, color = c.t2)
                 }
                 Spacer(Modifier.height(22.dp))
                 val onNow = prog != null && prog.startMs <= now && now < prog.stopMs
@@ -985,17 +994,17 @@ private fun GuideDetails(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    val live = if (onNow || prog == null) "Watch" else "Watch channel live"
+                    val live = if (onNow || prog == null) stringResource(R.string.guide_watch) else stringResource(R.string.guide_watch_live)
                     if (past && onWatchFromStart != null) {
                         // A finished show: replaying it is the point of opening it.
-                        JtvButton("Watch from start", onWatchFromStart, Modifier.focusRequester(watchFocus), primary = true, fontSize = 18.sp)
+                        JtvButton(stringResource(R.string.guide_watch_from_start), onWatchFromStart, Modifier.focusRequester(watchFocus), primary = true, fontSize = 18.sp)
                         JtvButton(live, onWatch, fontSize = 18.sp)
                     } else {
                         JtvButton(live, onWatch, Modifier.focusRequester(watchFocus), primary = true, fontSize = 18.sp)
                         // The show on now, from its beginning (when Jio offers catch-up for it).
-                        if (onWatchFromStart != null) JtvButton("Watch from start", onWatchFromStart, fontSize = 18.sp)
+                        if (onWatchFromStart != null) JtvButton(stringResource(R.string.guide_watch_from_start), onWatchFromStart, fontSize = 18.sp)
                     }
-                    JtvButton("Close", onClose, fontSize = 18.sp)
+                    JtvButton(stringResource(R.string.guide_close), onClose, fontSize = 18.sp)
                 }
             }
         }

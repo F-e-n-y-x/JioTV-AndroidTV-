@@ -1,0 +1,157 @@
+<resources>
+    <!-- Navigation: bottom bar, tablet rail, TV tabs and remote key hints -->
+    <string name="nav_live_tv">Live TV</string>
+    <string name="nav_guide">Guide</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_key_ok" translatable="false">OK</string>
+    <string name="nav_key_hold_ok">Hold OK</string>
+    <string name="nav_key_up">Up</string>
+    <string name="nav_key_down">Down</string>
+    <string name="nav_key_left">Left</string>
+    <string name="nav_key_up_down">Up / Down</string>
+    <string name="nav_key_back">Back</string>
+    <string name="nav_key_digits" translatable="false">0–9</string>
+    <string name="nav_hint_watch">watch</string>
+    <string name="nav_hint_options">options</string>
+    <string name="nav_hint_details">details</string>
+    <string name="nav_hint_categories">categories</string>
+    <string name="nav_hint_channel_number">channel number</string>
+    <string name="nav_hint_move">move</string>
+    <string name="nav_hint_save">save</string>
+    <string name="nav_hint_cancel">cancel</string>
+    <string name="nav_hint_results">results</string>
+    <string name="nav_hint_close_search">close search</string>
+    <string name="nav_hint_close_guide">close guide</string>
+
+    <!-- Home (Live TV) -->
+    <string name="home_title">Live TV</string>
+    <string name="home_cat_favourites">Favourites</string>
+    <string name="home_cat_recent">Recent</string>
+    <string name="home_cat_all_channels">All channels</string>
+    <string name="home_cat_all">All</string>
+    <string name="home_header_line">%1$s · %2$s</string>
+    <string name="home_moving">Moving %1$s · %2$d of %3$d</string>
+    <string name="home_loading_channels">Loading channels…</string>
+    <string name="home_no_channels_in_category">No channels in this category</string>
+    <string name="home_now">Now</string>
+    <plurals name="home_min_left">
+        <item quantity="one">%d min left</item>
+        <item quantity="other">%d min left</item>
+    </plurals>
+    <string name="home_time_range_left">%1$s – %2$s · %3$s</string>
+    <string name="home_guide_off_hint">Turn on the programme guide in Settings to see what\'s on.</string>
+    <string name="home_watch">Watch</string>
+    <string name="home_saved">Saved</string>
+    <string name="home_favourite">Favourite</string>
+    <string name="home_options_for">Options for %s</string>
+    <string name="home_action_replay_earlier">Replay earlier shows</string>
+    <string name="home_action_replay_earlier_note">Shows from the last 7 days</string>
+    <string name="home_action_remove_favourite">Remove from favourites</string>
+    <string name="home_action_remove">Remove</string>
+    <string name="home_confirm_remove_favourite">Remove %s from favourites?</string>
+    <string name="home_action_add_favourite">Add to favourites</string>
+    <string name="home_action_play_on">Play on %s</string>
+    <string name="home_action_move">Move</string>
+    <string name="home_action_move_note">Use up and down to place it, then press OK</string>
+    <string name="home_action_move_top">Move to top</string>
+    <string name="home_action_move_bottom">Move to bottom</string>
+    <string name="home_action_group_by_category">Group favourites by category</string>
+    <string name="home_action_group_by_category_note">Categories keep the order they first appear in</string>
+    <string name="home_yes_remove">Yes, remove</string>
+    <string name="home_refreshed">Refreshed</string>
+    <string name="home_refresh_failed">Refresh failed</string>
+    <string name="home_no_channels_found">No channels found.</string>
+    <string name="home_error_with_detail">Error: %s</string>
+    <string name="home_update_checking">Checking for updates…</string>
+    <string name="home_update_available">Update v%s available</string>
+    <string name="home_update_up_to_date">App is up to date</string>
+    <string name="home_update_check_failed">Failed to check update</string>
+    <string name="home_update_downloading">Downloading update…</string>
+    <string name="home_update_downloaded">Download complete</string>
+    <string name="home_update_download_failed">Download failed</string>
+
+    <!-- Jio channel categories (shown as category names; unknown ones stay as Jio sends them) -->
+    <string name="home_group_entertainment">Entertainment</string>
+    <string name="home_group_movies">Movies</string>
+    <string name="home_group_kids">Kids</string>
+    <string name="home_group_sports">Sports</string>
+    <string name="home_group_lifestyle">Lifestyle</string>
+    <string name="home_group_infotainment">Infotainment</string>
+    <string name="home_group_news">News</string>
+    <string name="home_group_music">Music</string>
+    <string name="home_group_devotional">Devotional</string>
+    <string name="home_group_business">Business</string>
+    <string name="home_group_educational">Educational</string>
+    <string name="home_group_shopping">Shopping</string>
+
+    <!-- Channel languages -->
+    <string name="lang_hindi">Hindi</string>
+    <string name="lang_english">English</string>
+    <string name="lang_tamil">Tamil</string>
+    <string name="lang_telugu">Telugu</string>
+    <string name="lang_kannada">Kannada</string>
+    <string name="lang_malayalam">Malayalam</string>
+    <string name="lang_bengali">Bengali</string>
+    <string name="lang_marathi">Marathi</string>
+    <string name="lang_gujarati">Gujarati</string>
+    <string name="lang_punjabi">Punjabi</string>
+    <string name="lang_odia">Odia</string>
+    <string name="lang_assamese">Assamese</string>
+    <string name="lang_bhojpuri">Bhojpuri</string>
+    <string name="lang_urdu">Urdu</string>
+    <string name="lang_nepali">Nepali</string>
+    <string name="lang_konkani">Konkani</string>
+    <string name="lang_sindhi">Sindhi</string>
+    <string name="lang_french">French</string>
+    <string name="lang_other">Other</string>
+    <string name="lang_default">Default</string>
+
+    <!-- Time words -->
+    <string name="time_today">Today</string>
+    <string name="time_tomorrow">Tomorrow</string>
+    <string name="time_yesterday">Yesterday</string>
+    <string name="time_ends_at">Ends %s</string>
+    <string name="time_starts_at">Starts at %s</string>
+
+    <!-- Guide -->
+    <string name="guide_title">Guide</string>
+    <string name="guide_header_line">%1$s · %2$s</string>
+    <string name="guide_cat_replay">Replay</string>
+    <string name="guide_loading_channels">Loading channels…</string>
+    <string name="guide_no_channels_in_category">No channels in this category.</string>
+    <string name="guide_off_message">Programme guide is off. Turn it on to see what\'s on later.</string>
+    <string name="guide_turn_on">Turn on programme guide</string>
+    <string name="guide_open_settings">Open settings</string>
+    <string name="guide_ok_to_replay">OK to replay</string>
+    <string name="guide_not_replayable">Not available to replay</string>
+    <string name="guide_no_guide_for_channel">No guide for this channel</string>
+    <string name="guide_nothing_scheduled">Nothing scheduled</string>
+    <string name="guide_watch">Watch</string>
+    <string name="guide_details">Details</string>
+    <string name="guide_earlier">Earlier</string>
+    <string name="guide_now">Now</string>
+    <string name="guide_later">Later</string>
+    <string name="guide_replay_available">Replay available</string>
+    <string name="guide_can_be_replayed">Can be replayed</string>
+    <string name="guide_already_shown">Already shown</string>
+    <string name="guide_on_now">On now</string>
+    <string name="guide_detail_line">%1$s · %2$s – %3$s · %4$s</string>
+    <string name="guide_no_programme_info">No programme information.</string>
+    <string name="guide_watch_live">Watch channel live</string>
+    <string name="guide_watch_from_start">Watch from start</string>
+    <string name="guide_close">Close</string>
+
+    <!-- Search -->
+    <string name="search_title">Search</string>
+    <string name="search_field_label">Channel name</string>
+    <string name="search_placeholder">Search channels</string>
+    <string name="search_no_match">No channels match “%s”.</string>
+    <string name="search_type_hint">Type a channel name. Results appear as you type.</string>
+    <plurals name="search_results">
+        <item quantity="one">%d result</item>
+        <item quantity="other">%d results</item>
+    </plurals>
+    <string name="search_recently_watched">Recently watched</string>
+    <string name="search_favourites">Favourites</string>
+</resources>

@@ -1,5 +1,7 @@
 package com.fenyx.jtv.ui.search
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -93,8 +95,8 @@ fun SearchScreen(
     var menuChannel by remember { mutableStateOf<Channel?>(null) }
     menuChannel?.let { ch ->
         val actions = buildList {
-            add(com.fenyx.jtv.ui.main.ChannelAction("Watch") { onChannelClick(indexMap[ch.id] ?: 0, null) })
-            if (ch.isCatchup && onTab != null) add(com.fenyx.jtv.ui.main.ChannelAction("Replay earlier shows", "Shows from the last 7 days") {
+            add(com.fenyx.jtv.ui.main.ChannelAction(context.getString(R.string.home_watch)) { onChannelClick(indexMap[ch.id] ?: 0, null) })
+            if (ch.isCatchup && onTab != null) add(com.fenyx.jtv.ui.main.ChannelAction(context.getString(R.string.home_action_replay_earlier), context.getString(R.string.home_action_replay_earlier_note)) {
                 viewModel.requestGuideFocus(ch.id)
                 onTab(com.fenyx.jtv.ui.main.PhoneTab.Guide)
             })
@@ -113,7 +115,7 @@ fun SearchScreen(
     ) {
         // ─── Title ───
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            JText("Search", if (isTv) 28.sp else 24.sp, modifier = Modifier.weight(1f), weight = FontWeight.Bold)
+            JText(stringResource(R.string.search_title), if (isTv) 28.sp else 24.sp, modifier = Modifier.weight(1f), weight = FontWeight.Bold)
             if (isTv && onTab != null) com.fenyx.jtv.ui.main.TvTabs(com.fenyx.jtv.ui.main.PhoneTab.Search, onTab, Modifier.padding(end = 20.dp, top = 2.dp))
             if (isTv) JtvClock(now, dateColor = c.t2)
         }
@@ -121,7 +123,7 @@ fun SearchScreen(
 
         // ─── Search field (visible label above it) ───
         if (!isPhone) {
-            Text("Channel name", style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
+            Text(stringResource(R.string.search_field_label), style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2)
             Spacer(Modifier.height(6.dp))
         }
         Row(
@@ -138,7 +140,7 @@ fun SearchScreen(
             Spacer(modifier = Modifier.width(12.dp))
             Box(modifier = Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Text("Search channels", style = textStyle(if (isPhone) 17.sp else 20.sp), color = c.t2, maxLines = 1)
+                    Text(stringResource(R.string.search_placeholder), style = textStyle(if (isPhone) 17.sp else 20.sp), color = c.t2, maxLines = 1)
                 }
                 BasicTextField(
                     value = query,
@@ -166,9 +168,9 @@ fun SearchScreen(
         // One list, in the owner's order: search results, then Recently watched, then Favourites.
         val q = query.trim()
         if (q.isNotEmpty() && results.isEmpty() && recents.isEmpty() && favourites.isEmpty()) {
-            CenterNote("No channels match “$q”.", Modifier.weight(1f))
+            CenterNote(stringResource(R.string.search_no_match, q), Modifier.weight(1f))
         } else if (q.isEmpty() && recents.isEmpty() && favourites.isEmpty()) {
-            CenterNote("Type a channel name. Results appear as you type.", Modifier.weight(1f))
+            CenterNote(stringResource(R.string.search_type_hint), Modifier.weight(1f))
         } else {
             val firstId = (if (q.isNotEmpty()) results else emptyList()).firstOrNull()?.id
                 ?: recents.firstOrNull()?.id ?: favourites.firstOrNull()?.id
@@ -200,20 +202,25 @@ fun SearchScreen(
                 var first = true
                 if (q.isNotEmpty()) {
                     if (results.isEmpty()) item(key = "none", contentType = "note") {
-                        Text("No channels match “$q”.", style = textStyle(16.sp), color = c.t2, modifier = Modifier.padding(12.dp))
+                        Text(context.getString(R.string.search_no_match, q), style = textStyle(16.sp), color = c.t2, modifier = Modifier.padding(12.dp))
                     }
-                    section("r", if (results.size == 1) "1 result" else "${results.size} results", results, first)
+                    section("r", context.resources.getQuantityString(R.plurals.search_results, results.size, results.size), results, first)
                     first = results.isEmpty()
                 }
-                section("w", "Recently watched", recents, first && recents.isNotEmpty())
+                section("w", context.getString(R.string.search_recently_watched), recents, first && recents.isNotEmpty())
                 if (recents.isNotEmpty()) first = false
-                section("f", "Favourites", favourites, first)
+                section("f", context.getString(R.string.search_favourites), favourites, first)
             }
         }
 
         if (isTv) {
             Spacer(Modifier.height(6.dp))
-            KeyHint(listOf("OK" to "watch", "Hold OK" to "options", "Down" to "results", "Back" to "close search"))
+            KeyHint(listOf(
+                stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_watch),
+                stringResource(R.string.nav_key_hold_ok) to stringResource(R.string.nav_hint_options),
+                stringResource(R.string.nav_key_down) to stringResource(R.string.nav_hint_results),
+                stringResource(R.string.nav_key_back) to stringResource(R.string.nav_hint_close_search),
+            ))
         }
     }
 }
