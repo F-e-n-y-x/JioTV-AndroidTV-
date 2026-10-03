@@ -10,7 +10,15 @@ export interface EpgProgram {
   showId?: string;
   showtime?: string;
   catchup?: boolean;
+  /** Episode poster URL (Jio `episodePoster`), when the EPG has one. */
+  poster?: string;
+  /** Episode number (Jio `episode_num`, only when > 0). */
+  episodeNum?: number;
+  /** Parental rating (Jio `pcr`, e.g. "U", "UA"). */
+  rating?: string;
 }
+
+const POSTER_BASE = "https://jiotv.catchup.cdn.jio.com/dare_images/shows/";
 
 // Offsets: offset 0 is today, negative offsets (-1..-7) are past days (catch-up), positive (1..2) are forward.
 const DEFAULT_OFFSETS = [-2, -1, 0, 1];
@@ -41,6 +49,9 @@ export async function fetchOffset(channelId: string, offset: number): Promise<Ep
       showId: o.showId ?? undefined,
       showtime: o.showtime ?? undefined,
       catchup: !!o.isCatchupAvailable,
+      poster: typeof o.episodePoster === "string" && o.episodePoster ? POSTER_BASE + o.episodePoster : undefined,
+      episodeNum: Number(o.episode_num) > 0 ? Number(o.episode_num) : undefined,
+      rating: typeof o.pcr === "string" && o.pcr.trim() ? o.pcr.trim() : undefined,
     })).filter((p: EpgProgram) => p.title && p.startMs > 0 && p.stopMs > 0);
   } catch {
     return [];

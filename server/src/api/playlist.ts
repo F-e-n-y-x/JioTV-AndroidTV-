@@ -1,11 +1,13 @@
-import { getNativeXmltv } from "../jio/nativeXmltv";
+import fs from "node:fs";
+import { getNativeXmltvFile } from "../jio/nativeXmltv";
 import zlib from "node:zlib";
 import { Readable } from "node:stream";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { getChannels, type Channel } from "../jio/channels";
 import { getNativeEpg } from "../jio/epg";
 import { getPlaybackInfo, proxyUpstream, rewriteManifest } from "../proxy/streamProxy";
-import { getFavorites, hasCode } from "../store/db";
+import { getFavorites, hasCode, getDrmOnlyChannelIds } from "../store/db";
+import { filterPlaylistChannels } from "./playlistFilter";
 import { isAuthEnabled, envServerToken, getEpgConfig } from "../store/settings";
 import { baseUrl } from "../util/baseUrl";
 
@@ -60,12 +62,9 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
 
     const all = await getChannels();
     const favs = onlyFav ? new Set(getFavorites()) : null;
-    const channels = all.filter((c) => {
-      if (langs.size && !langs.has(c.language.toLowerCase())) return false;
-      if (groups.size && !groups.has(c.group.toLowerCase())) return false;
-      if (favs && !favs.has(c.id)) return false;
-      if (hideDrm && c.isDrm) return false;
-      return true;
+    const channels = filterPlaylistChannels(all, {
+      langs, groups, favs, hideDrm,
+      drmOnlyIds: hideDrm ? getDrmOnlyChannelIds() : new Set(),
     });
 
     const base = baseUrl(req);
@@ -201,22 +200,49 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
       }
     }
     // Native mode (or a failed XMLTV download): the full guide built in the background from Jio's own
-    // EPG. Until the first build finishes, a channel-only guide so players still map names + logos.
-    const native = getNativeXmltv("xml");
-    return reply.send(native ?? (await channelOnlyXmltv()));
+    // EPG, streamed from its gzip file on disk. Until the first build finishes, a channel-only guide so
+    // players still map names + logos.
+    const file = getNativeXmltvFile();
+    if (!file) return reply.send(await channelOnlyXmltv());
+    reply.header("vary", "accept-encoding");
+    if (acceptsGzip(req.headers["accept-encoding"])) {
+      reply.header("content-encoding", "gzip");
+      return sendFile(reply, file);
+    }
+    return reply.send(fs.createReadStream(file).pipe(zlib.createGunzip()));
   });
 
   // Same guide, gzipped (~10x smaller) — many players accept `epg.xml.gz` directly.
   app.get("/epg.xml.gz", { preHandler: requireCode }, async (_req, reply) => {
-    const cfg = getEpgConfig();
-    let body: Buffer | null = null;
-    if (cfg.mode === "xmltv" && cfg.url) {
-      try { body = zlib.gzipSync(await fetchXmltv(cfg.url)); } catch { /* fall back to native */ }
-    }
-    body ??= (getNativeXmltv("gz") as Buffer | null) ?? zlib.gzipSync(await channelOnlyXmltv());
     reply.header("content-type", "application/gzip");
-    return reply.send(body);
+    const cfg = getEpgConfig();
+    if (cfg.mode === "xmltv" && cfg.url) {
+      try { return reply.send(zlib.gzipSync(await fetchXmltv(cfg.url))); } catch { /* fall back to native */ }
+    }
+    const file = getNativeXmltvFile();
+    if (file) return sendFile(reply, file);
+    return reply.send(zlib.gzipSync(await channelOnlyXmltv()));
   });
+}
+
+/** True unless the client's Accept-Encoding rules gzip out (missing header = identity only). */
+export function acceptsGzip(header: string | string[] | undefined): boolean {
+  const v = (Array.isArray(header) ? header.join(",") : header ?? "").toLowerCase();
+  for (const part of v.split(",")) {
+    const [name, ...params] = part.trim().split(";").map((x) => x.trim());
+    if (name !== "gzip" && name !== "*") continue;
+    const q = params.find((x) => x.startsWith("q="));
+    if (!q || Number(q.slice(2)) > 0) return true;
+  }
+  return false;
+}
+
+/** Streams a file with its length. Opened first, so a rebuild renaming a new file over it mid-send
+ *  can't make the length and the bytes disagree. */
+function sendFile(reply: FastifyReply, file: string) {
+  const fd = fs.openSync(file, "r");
+  reply.header("content-length", fs.fstatSync(fd).size);
+  return reply.send(fs.createReadStream("", { fd }));
 }
 
 function qualityToHeight(q: string): number | undefined {
