@@ -94,4 +94,18 @@ jobs:
           # /releases/latest, so stable installs never auto-update to them.
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ !contains(github.ref_name, '-') }}
-          generate_release_notes: true
+          # Betas use the hand-written notes (current beta + every earlier beta); stable keeps GitHub's.
+          body_path: ${{ contains(github.ref_name, '-') && '.github/BETA_NOTES.md' || '' }}
+          generate_release_notes: ${{ !contains(github.ref_name, '-') }}
+
+      # One beta at a time: delete the older pre-releases (their git tags stay). Stable is never touched.
+      - name: Remove older beta releases
+        if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list -R "$GITHUB_REPOSITORY" -L 100 --json tagName,isPrerelease \
+            -q '.[] | select(.isPrerelease) | .tagName' |
+          while read -r tag; do
+            if [ "$tag" != "${{ github.ref_name }}" ]; then gh release delete "$tag" -R "$GITHUB_REPOSITORY" --yes; fi
+          done
