@@ -123,8 +123,8 @@
     <string name="player_err_server_sign_in_expired">The Jio sign-in on your JTV server has expired.</string>
     <string name="player_err_sign_in_expired">Your Jio sign-in has expired.</string>
     <string name="player_err_not_provided">Jio isn\'t providing this channel right now.</string>
-    <string name="player_err_all_refused">Jio is refusing every channel. Turn off any VPN and use an Indian network, or sign in again in Settings.</string>
-    <string name="player_err_all_refused_server">Jio is refusing every channel from the JTV server. The server needs an Indian network without a VPN, or a fresh Jio sign-in.</string>
+    <string name="player_err_all_refused">Jio is refusing every channel. Check that the Jio number has an active plan with JioTV, turn off any VPN, or sign in again in Settings.</string>
+    <string name="player_err_all_refused_server">Jio is refusing every channel from the JTV server. Check the Jio number has an active plan with JioTV, the server is on an Indian network without a VPN, or sign in to Jio again on the server.</string>
     <string name="player_err_offline">This channel is offline at Jio right now.</string>
     <string name="player_err_did_not_load">This channel didn\'t load.</string>
     <string name="player_open_settings">Open settings</string>

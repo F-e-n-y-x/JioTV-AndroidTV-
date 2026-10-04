@@ -114,8 +114,8 @@
     <string name="player_err_server_sign_in_expired">आपके JTV सर्वर पर Jio लॉग इन की अवधि खत्म हो गई है।</string>
     <string name="player_err_sign_in_expired">आपके Jio लॉग इन की अवधि खत्म हो गई है।</string>
     <string name="player_err_not_provided">Jio अभी यह चैनल नहीं दे रहा है।</string>
-    <string name="player_err_all_refused">Jio कोई भी चैनल नहीं चला रहा। VPN बंद करें और भारत का नेटवर्क इस्तेमाल करें, या सेटिंग्स में फिर से लॉग इन करें।</string>
-    <string name="player_err_all_refused_server">Jio, JTV सर्वर से कोई भी चैनल नहीं चला रहा। सर्वर को बिना VPN के भारत का नेटवर्क या Jio में नया लॉग इन चाहिए।</string>
+    <string name="player_err_all_refused">Jio कोई भी चैनल नहीं चला रहा। देखें कि Jio नंबर पर JioTV वाला प्लान चालू है, VPN बंद करें, या सेटिंग्स में फिर से लॉग इन करें।</string>
+    <string name="player_err_all_refused_server">Jio, JTV सर्वर से कोई भी चैनल नहीं चला रहा। देखें कि Jio नंबर पर JioTV वाला प्लान चालू है, सर्वर बिना VPN के भारत के नेटवर्क पर है, या सर्वर पर Jio में फिर से लॉग इन करें।</string>
     <string name="player_err_offline">यह चैनल अभी Jio पर बंद है।</string>
     <string name="player_err_did_not_load">यह चैनल नहीं चला।</string>
     <string name="player_open_settings">सेटिंग्स खोलें</string>
