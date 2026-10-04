@@ -230,6 +230,11 @@ The **"Everyday"** redesign for TV, phone and tablet:
 - A Recent category.
 - Wi-Fi favourites sync with "Play on TV", plus favourites backup.
 
+### v1.5.10
+- **↑ now goes to the next channel** (1 → 2 → 3), the same as CH+ (suggested by @sant009m in #5).
+- **Choose your own channel buttons.** Settings → Playback has two switches: *Up Arrow = Next Channel*
+  (turn off for the old way) and *Reverse CH+ / CH−*.
+
 ### v1.5.9
 - **Streams no longer stop when Voice Boost is Off** (reported by @sant009m in #3). With Voice Boost
   set to Off, the audio filter crashed on the empty buffer the player sends after every channel change
