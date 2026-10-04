@@ -207,6 +207,8 @@ fun TvPlayerScreen(
     val tunnelingPref by settingsManager.tunnelingFlow.collectAsState(initial = false)
     val hardwareOnlyPref by settingsManager.hardwareDecoderFlow.collectAsState(initial = true)
     val bufferSecPref by settingsManager.playbackBufferSecFlow.collectAsState(initial = 60)
+    val upIsNextChannel by settingsManager.upIsNextChannelFlow.collectAsState(initial = true)
+    val reverseChPlusMinus by settingsManager.reverseChPlusMinusFlow.collectAsState(initial = false)
 
     // Audio enhancement settings + the effect engine.
     val voiceBoost by settingsManager.voiceBoostFlow.collectAsState(initial = 2)
@@ -841,14 +843,16 @@ fun TvPlayerScreen(
                     when (keyEvent.key) {
                         Key.ChannelUp -> {
                             if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                currentIndex = (currentIndex + 1) % currentChannels.size
+                                val step = if (reverseChPlusMinus) -1 else 1
+                                currentIndex = (currentIndex + step + currentChannels.size) % currentChannels.size
                                 showOverlay = true
                             }
                             true
                         }
                         Key.ChannelDown -> {
                             if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                currentIndex = (currentIndex - 1 + currentChannels.size) % currentChannels.size
+                                val step = if (reverseChPlusMinus) 1 else -1
+                                currentIndex = (currentIndex + step + currentChannels.size) % currentChannels.size
                                 showOverlay = true
                             }
                             true
@@ -868,7 +872,8 @@ fun TvPlayerScreen(
                                 true
                             } else {
                                 if (currentChannels.isNotEmpty()) {
-                                    currentIndex = (currentIndex - 1 + currentChannels.size) % currentChannels.size
+                                    val step = if (upIsNextChannel) 1 else -1
+                                    currentIndex = (currentIndex + step + currentChannels.size) % currentChannels.size
                                     showOverlay = true
                                 }
                                 true
@@ -889,7 +894,8 @@ fun TvPlayerScreen(
                                 true
                             } else {
                                 if (currentChannels.isNotEmpty()) {
-                                    currentIndex = (currentIndex + 1) % currentChannels.size
+                                    val step = if (upIsNextChannel) -1 else 1
+                                    currentIndex = (currentIndex + step + currentChannels.size) % currentChannels.size
                                     showOverlay = true
                                 }
                                 true

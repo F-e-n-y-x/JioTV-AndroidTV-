@@ -70,6 +70,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     val epgUrl by settingsManager.epgUrlFlow.collectAsState(initial = "https://avkb.short.gy/epg.xml.gz")
     val epgSyncStatus by mainViewModel.epgSyncStatus.collectAsState()
     val autoplayLastChannel by settingsManager.autoplayLastChannelFlow.collectAsState(initial = false)
+    val upIsNextChannel by settingsManager.upIsNextChannelFlow.collectAsState(initial = true)
+    val reverseChPlusMinus by settingsManager.reverseChPlusMinusFlow.collectAsState(initial = false)
     val groupLanguageVariants by settingsManager.groupLanguageVariantsFlow.collectAsState(initial = true)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
     val serverUrl by settingsManager.serverUrlFlow.collectAsState(initial = "")
@@ -310,6 +312,26 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                         subtitle = "Automatically resume your last watched channel when app opens",
                         isEnabled = autoplayLastChannel,
                         onClick = { scope.launch { settingsManager.setAutoplayLastChannel(!autoplayLastChannel) } }
+                    )
+                }
+
+                item {
+                    SettingsToggle(
+                        title = "Up Arrow = Next Channel",
+                        subtitle = if (upIsNextChannel) "On: Up goes to the next channel (1 → 2 → 3), Down to the previous"
+                                   else "Off: Up goes to the previous channel, Down to the next",
+                        isEnabled = upIsNextChannel,
+                        onClick = { scope.launch { settingsManager.setUpIsNextChannel(!upIsNextChannel) } }
+                    )
+                }
+
+                item {
+                    SettingsToggle(
+                        title = "Reverse CH+ / CH−",
+                        subtitle = if (reverseChPlusMinus) "On: CH+ goes to the previous channel, CH− to the next"
+                                   else "Off: CH+ goes to the next channel (1 → 2 → 3), CH− to the previous",
+                        isEnabled = reverseChPlusMinus,
+                        onClick = { scope.launch { settingsManager.setReverseChPlusMinus(!reverseChPlusMinus) } }
                     )
                 }
 

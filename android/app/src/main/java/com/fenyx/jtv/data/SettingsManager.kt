@@ -44,6 +44,8 @@ class SettingsManager(private val context: Context) {
         private val AUTH_USER_ID = stringPreferencesKey("auth_user_id")
 
         private val AUTOPLAY_LAST_CHANNEL = booleanPreferencesKey("autoplay_last_channel")
+        private val UP_IS_NEXT_CHANNEL = booleanPreferencesKey("up_is_next_channel")
+        private val REVERSE_CH_PLUS_MINUS = booleanPreferencesKey("reverse_ch_plus_minus")
         private val LAST_CHANNEL_ID = stringPreferencesKey("last_channel_id")
         private val LAST_CHANNEL_GROUP = stringPreferencesKey("last_channel_group")
 
@@ -130,6 +132,11 @@ class SettingsManager(private val context: Context) {
 
     val autoplayLastChannelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[AUTOPLAY_LAST_CHANNEL] ?: false
+    }
+
+    /** In the player, Up goes to the next channel number (1 → 2 → 3), like CH+. Off = Up goes to the previous one. */
+    val upIsNextChannelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[UP_IS_NEXT_CHANNEL] ?: true
     }
 
     val lastChannelIdFlow: Flow<String?> = context.dataStore.data.map { preferences ->
@@ -242,6 +249,23 @@ class SettingsManager(private val context: Context) {
     suspend fun setAutoplayLastChannel(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[AUTOPLAY_LAST_CHANNEL] = enabled
+        }
+    }
+
+    /** In the player, CH+ goes to the previous channel number and CH- to the next. Off by default. */
+    val reverseChPlusMinusFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[REVERSE_CH_PLUS_MINUS] ?: false
+    }
+
+    suspend fun setReverseChPlusMinus(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[REVERSE_CH_PLUS_MINUS] = enabled
+        }
+    }
+
+    suspend fun setUpIsNextChannel(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[UP_IS_NEXT_CHANNEL] = enabled
         }
     }
 
