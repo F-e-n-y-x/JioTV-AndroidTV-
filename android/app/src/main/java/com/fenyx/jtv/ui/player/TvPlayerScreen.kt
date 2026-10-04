@@ -579,6 +579,9 @@ fun TvPlayerScreen(
                 val fetchEx = result.exceptionOrNull()
                 val fetchErr = fetchEx?.message ?: ""
                 android.util.Log.e("TvPlayer", "Failed to fetch stream: $fetchErr")
+                // No stream for this channel: drop the old one so its last frame doesn't sit under the
+                // new channel's name and error (issue #4).
+                withContext(kotlinx.coroutines.Dispatchers.Main) { exoPlayer.clearMediaItems() }
                 // Jio refusing the channel, or its stream being gone from the CDN, won't fix itself in
                 // the next few seconds — say so at once instead of retrying 5x and then blaming the login.
                 if (cu != null && fetchEx !is com.fenyx.jtv.data.JioApiClient.SessionExpiredException &&
@@ -591,6 +594,11 @@ fun TvPlayerScreen(
                     playbackError = if (playerSetupMode == "server" || playerSetupMode == "jtv")
                         PlayerError(R.string.player_err_server_sign_in_expired, ErrorAction.Retry)
                     else PlayerError(R.string.player_err_sign_in_expired, ErrorAction.Settings, ErrorAction.Retry)
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.AllChannelsRefusedException) {
+                    isBuffering = false
+                    playbackError = if (playerSetupMode == "server" || playerSetupMode == "jtv")
+                        PlayerError(R.string.player_err_all_refused_server, ErrorAction.Retry)
+                    else PlayerError(R.string.player_err_all_refused, ErrorAction.Retry, ErrorAction.Settings)
                 } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException) {
                     isBuffering = false
                     playbackError = PlayerError(R.string.player_err_not_provided, ErrorAction.NextChannel, ErrorAction.Retry)

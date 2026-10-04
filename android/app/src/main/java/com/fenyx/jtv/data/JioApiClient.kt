@@ -91,6 +91,16 @@ object JioApiClient {
     /** Jio refused this one channel (geturl 403 even with fresh credentials). Not a login problem. */
     class ChannelBlockedException(message: String) : Exception(message)
 
+    /**
+     * Jio refused several different channels in a row, even after a credential refresh: the account or
+     * the network (VPN, IP outside India) is refused, not one channel (issue #4).
+     */
+    class AllChannelsRefusedException(message: String) : Exception(message)
+
+    /** Live channels that got a geturl 403 since the last stream Jio handed out. */
+    private val refusedInARow = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+    private const val REFUSED_CHANNELS_LIMIT = 4
+
     /** Jio handed back stream URLs, but every one of them is dead on its CDN (404 / not a manifest). */
     class ChannelUnavailableException(message: String) : Exception(message)
 
@@ -880,6 +890,21 @@ object JioApiClient {
             // 403 from geturl is per channel: Jio refuses this one (e.g. most Zee Entertainment
             // channels since Jio dropped them). No refresh or retry can fix it.
             if (responseCode == 403) {
+                if (catchup == null) refusedInARow.add(channelId)
+                if (catchup == null && refusedInARow.size >= REFUSED_CHANNELS_LIMIT) {
+                    if (allowRefreshRetry) {
+                        Log.d(TAG, "geturl 403 on ${refusedInARow.size} channels in a row, refreshing credentials once")
+                        if (refreshCredentials(context, failedAuthToken = authData.authToken).isSuccess) {
+                            val newAuthData = com.fenyx.jtv.data.SettingsManager(context).authDataFlow.first()
+                            if (newAuthData != null) {
+                                return@withContext getStreamUrl(context, channelId, newAuthData, allowRefreshRetry = false, catchup = null)
+                            }
+                        }
+                    }
+                    return@withContext Result.failure(AllChannelsRefusedException(
+                        "Jio refused ${refusedInARow.size} different channels in a row (HTTP 403)."
+                    ))
+                }
                 return@withContext Result.failure(ChannelBlockedException(
                     "Jio isn't providing this channel right now (it refused the stream request). " +
                     "This is on Jio's side, not a login problem. Try another channel."
@@ -887,6 +912,7 @@ object JioApiClient {
             }
 
             if (responseCode in 200..299) {
+                refusedInARow.clear()
                 val responseText = readResponseBody(connection, isError = false)
                 val json = JSONObject(responseText)
 
