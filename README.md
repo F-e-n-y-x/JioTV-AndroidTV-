@@ -71,6 +71,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 - 📺 **Play on TV.** From your phone, open a channel's options and choose **Play on <TV name>**. The TV switches channel.
 - 🕘 **Recent.** Your last channels are one tap away, on the home screen and in Search.
 - 💾 **Favourites backup.** Save them to a file and restore them after a fresh install.
+- 🇮🇳 **हिन्दी में भी.** The whole app can be in Hindi: **Settings → App language**. Channel names and show titles stay as Jio sends them.
 - 🎨 **Your colour.** Pick the accent colour (amber, purple, blue, green, rose or teal) in Settings.
 - ⚡ **Fast.** Zapping up and down is near-instant, because the channels around you are fetched ahead of time.
 - 🪶 **Still tiny.** The APK is about **3 MB** and runs smoothly on cheap TV boxes.
@@ -83,7 +84,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 
 1. Download the APK:
    - **Stable:** `JTV-v1.5.x.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
-   - **Beta:** `JTV-v2.0-beta.6.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
+   - **Beta:** `JTV-v2.0-beta.7.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
 2. **Install it on your TV.**
    - The easiest way is to copy it to a USB stick and open it with a file manager such as **X-plore** or **File Commander**.
    - Or use ADB:
