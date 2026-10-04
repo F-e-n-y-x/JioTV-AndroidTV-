@@ -1,18 +1,12 @@
 <p align="center"><img src="https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/screenshot/jtv-mark.svg" width="110" alt="JTV" /></p>
 
-# JTV 2.0 beta 7
+# JTV 2.0 beta 8
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.7.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.8.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 7
-- **हिन्दी में JTV.** The whole app can now be in Hindi: **Settings → General → App language** (Same as device / English / हिन्दी). Menus, buttons, categories, languages, days and months are translated. Channel names and show titles stay as Jio sends them.
-- **Send a problem report.** If the app crashes or freezes, **Settings → About → Send problem report** shares what went wrong. Sign-in details are removed first. With a JTV server, reports are uploaded to it automatically.
-- **Cleaner channel list.** JTV now uses Jio's newer channel list, so about 100 old or dead channels are gone. A few Zee regional channels that are only in the old list are kept.
-- **For server users:**
-  - Lighter TV guide download.
-  - The server remembers each channel's stream type across restarts.
-  - A crash-report inbox in the admin page.
-  - The Docker image now runs as a normal user. **Before updating**, run once: `sudo chown -R 1000:1000 <your data folder>`.
+## New in beta 8
+- **Clearer message when no channel plays.** When Jio refuses every channel, the problem is the connection or the account, not the channels. JTV now refreshes the sign-in once by itself. If Jio still refuses, it tells you what to check: an active Jio plan with JioTV, no VPN (Jio only streams to Indian networks), or signing in again. Before, every channel said "Jio isn't providing this channel" (#4).
+- **No leftover picture.** When a channel can't load, the previous channel's video no longer stays on screen behind the message.
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
@@ -21,6 +15,16 @@
 ---
 
 ## Earlier betas
+
+### Beta 7
+- **हिन्दी में JTV.** The whole app can now be in Hindi: **Settings → General → App language** (Same as device / English / हिन्दी). Menus, buttons, categories, languages, days and months are translated. Channel names and show titles stay as Jio sends them.
+- **Send a problem report.** If the app crashes or freezes, **Settings → About → Send problem report** shares what went wrong. Sign-in details are removed first. With a JTV server, reports are uploaded to it automatically.
+- **Cleaner channel list.** JTV now uses Jio's newer channel list, so about 100 old or dead channels are gone. A few Zee regional channels that are only in the old list are kept.
+- **For server users:**
+  - Lighter TV guide download.
+  - The server remembers each channel's stream type across restarts.
+  - A crash-report inbox in the admin page.
+  - The Docker image now runs as a normal user. **Before updating**, run once: `sudo chown -R 1000:1000 <your data folder>`.
 
 ### Beta 6
 - **Replay category** in the guide: only the channels you can watch again. Each has an amber replay mark, and so does every past show you can replay.
