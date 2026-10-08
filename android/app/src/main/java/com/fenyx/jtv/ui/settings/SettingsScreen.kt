@@ -803,7 +803,7 @@ internal fun releaseNotesText(md: String): String {
     val start = lines.indexOfFirst { it.startsWith("## ") && (it.contains("New", true) || it.contains("What", true)) }
     val section = if (start < 0) lines else lines.drop(start + 1).takeWhile { !it.startsWith("## ") && it.trim() != "---" }
     return section.filterNot { it.trimStart().startsWith("<") }
-        .joinToString("\n").replace(Regex("[*#`]|^> ?", RegexOption.MULTILINE), "").trim()
+        .joinToString("\n").replace(Regex("[*`]|^#+ ?|^> ?", RegexOption.MULTILINE), "").trim()
 }
 
 @Composable
