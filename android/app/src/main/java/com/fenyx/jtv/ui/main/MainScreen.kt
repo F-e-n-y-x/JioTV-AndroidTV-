@@ -114,6 +114,7 @@ fun MainScreen(
     val favoriteChannels by viewModel.favoriteChannels.collectAsState()
     val epgMode by settingsManager.epgModeFlow.collectAsState(initial = false)
     val epgData by viewModel.epgData.collectAsState()
+    com.fenyx.jtv.ui.settings.UpdatePrompt(viewModel)
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
     val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
     // Paired TVs on the same Wi-Fi, for "Play on <TV>" in the channel options.

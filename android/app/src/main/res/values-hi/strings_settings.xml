@@ -142,6 +142,7 @@
     <string name="settings_update_progress">डाउनलोड हो रहा है… %1$d%% (%2$s / %3$s)</string>
     <string name="settings_update_install">डाउनलोड करके इंस्टॉल करें</string>
     <string name="settings_update_later">बाद में</string>
+    <string name="settings_update_ignore">इस वर्ज़न को छोड़ें</string>
     <string name="settings_update_wait">कृपया रुकें। डाउनलोड पूरा होते ही इंस्टॉलर खुल जाएगा।</string>
 
     <!-- Lists, pickers, key hints -->

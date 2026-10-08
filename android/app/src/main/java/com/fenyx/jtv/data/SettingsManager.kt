@@ -48,6 +48,7 @@ class SettingsManager(private val context: Context) {
 
         private val AUTOPLAY_LAST_CHANNEL = booleanPreferencesKey("autoplay_last_channel")
         private val UP_IS_NEXT_CHANNEL = booleanPreferencesKey("up_is_next_channel")
+        private val IGNORED_UPDATE = stringPreferencesKey("ignored_update_version")
         private val LAST_CHANNEL_ID = stringPreferencesKey("last_channel_id")
         private val LAST_CHANNEL_GROUP = stringPreferencesKey("last_channel_group")
 
@@ -163,6 +164,13 @@ class SettingsManager(private val context: Context) {
     /** In the player, Up goes to the next channel number (1 → 2 → 3), like CH+ (issue #5). */
     val upIsNextChannelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[UP_IS_NEXT_CHANNEL] ?: true
+    }
+
+    /** The update version the user chose to ignore: no automatic popup for it (Settings still offers it). */
+    val ignoredUpdateFlow: Flow<String?> = context.dataStore.data.map { it[IGNORED_UPDATE] }
+
+    suspend fun setIgnoredUpdate(version: String) {
+        context.dataStore.edit { it[IGNORED_UPDATE] = version }
     }
 
     suspend fun setUpIsNextChannel(enabled: Boolean) {

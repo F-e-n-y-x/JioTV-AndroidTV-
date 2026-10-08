@@ -760,6 +760,52 @@ private fun EpgUrlDialog(initial: String, onSave: (String) -> Unit, onDismiss: (
     }
 }
 
+/**
+ * Opens by itself (on Home) once per app start when a newer version is out: Install, Later, or Ignore
+ * (no popup for this version again; Settings → About still offers it).
+ */
+@Composable
+internal fun UpdatePrompt(vm: com.fenyx.jtv.ui.main.MainViewModel) {
+    val context = LocalContext.current
+    val settings = remember { SettingsManager(context) }
+    val scope = rememberCoroutineScope()
+    val info by vm.updateInfo.collectAsState()
+    val ignored by settings.ignoredUpdateFlow.collectAsState(initial = "")
+    val downloading by vm.isDownloadingUpdate.collectAsState()
+    val progress by vm.updateDownloadProgress.collectAsState()
+    val done by vm.updateDownloadedBytes.collectAsState()
+    val total by vm.updateTotalBytes.collectAsState()
+    val error by vm.updateError.collectAsState()
+    var closed by rememberSaveable { mutableStateOf(false) }
+    val i = info
+    // ignored == "" while DataStore loads, so an ignored version never flashes up.
+    if (i == null || !i.isUpdateAvailable || closed || ignored == "" || ignored == i.versionName) return
+    Dialog(
+        onDismissRequest = { if (!downloading) closed = true },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        UpdateDialog(
+            updateInfo = i, isDownloading = downloading, downloadProgress = progress,
+            downloadedBytes = done, totalBytes = total, errorMessage = error,
+            onDownloadAndInstall = { vm.downloadAndInstallUpdate(context) },
+            onDismiss = { closed = true },
+            onIgnore = { scope.launch { settings.setIgnoredUpdate(i.versionName) }; closed = true },
+        )
+    }
+}
+
+/**
+ * GitHub release notes → plain text for the dialog: just the "What's new" / "New in …" section when
+ * there is one (not the logo, install blurb or older betas), without markdown marks.
+ */
+internal fun releaseNotesText(md: String): String {
+    val lines = md.lines()
+    val start = lines.indexOfFirst { it.startsWith("## ") && (it.contains("New", true) || it.contains("What", true)) }
+    val section = if (start < 0) lines else lines.drop(start + 1).takeWhile { !it.startsWith("## ") && it.trim() != "---" }
+    return section.filterNot { it.trimStart().startsWith("<") }
+        .joinToString("\n").replace(Regex("[*#`]|^> ?", RegexOption.MULTILINE), "").trim()
+}
+
 @Composable
 private fun UpdateDialog(
     updateInfo: AppUpdateManager.UpdateInfo,
@@ -769,7 +815,8 @@ private fun UpdateDialog(
     totalBytes: Long,
     errorMessage: String?,
     onDownloadAndInstall: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onIgnore: (() -> Unit)? = null,
 ) {
     val c = Jtv.colors
     val isPhone = Jtv.isPhonePortrait
@@ -795,7 +842,7 @@ private fun UpdateDialog(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 60.dp, max = 180.dp)
+                    .heightIn(min = 60.dp, max = if (Jtv.isTv) 120.dp else 180.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(c.bg)
                     .padding(12.dp)
@@ -803,7 +850,8 @@ private fun UpdateDialog(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item {
                         Text(
-                            text = updateInfo.changelog.ifBlank { stringResource(R.string.settings_update_default_notes) },
+                            text = releaseNotesText(updateInfo.changelog)
+                                .ifBlank { stringResource(R.string.settings_update_default_notes) },
                             style = textStyle(16.sp),
                             color = c.t2
                         )
@@ -839,6 +887,7 @@ private fun UpdateDialog(
                 androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     JtvButton(stringResource(R.string.settings_update_install), onDownloadAndInstall, Modifier.focusRequester(initialFocus), primary = true, fontSize = 18.sp)
                     JtvButton(stringResource(R.string.settings_update_later), onDismiss, fontSize = 18.sp)
+                    onIgnore?.let { JtvButton(stringResource(R.string.settings_update_ignore), it, fontSize = 18.sp) }
                 }
             } else {
                 Text(stringResource(R.string.settings_update_wait), style = textStyle(16.sp), color = c.t2)
