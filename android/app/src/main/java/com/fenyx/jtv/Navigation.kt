@@ -453,9 +453,10 @@ private fun PlayerForChannel(
         if (group != null) mainViewModel.getChannelsByGroup(group)
         else allChannels
     }
-    val playerGroups = remember(groups, allChannels) {
-        if (mainViewModel.favoriteOrder.value.isEmpty()) groups
-        else listOf(MainViewModel.GROUP_FAVORITES) + groups
+    val catPrefs by mainViewModel.categoryPrefs.collectAsState()
+    val playerGroups = remember(groups, allChannels, catPrefs) {
+        val base = if (mainViewModel.favoriteOrder.value.isEmpty()) groups else listOf(MainViewModel.GROUP_FAVORITES) + groups
+        catPrefs.arrange(base, MainViewModel.GROUP_ALL)
     }
     val allChannelsByGroup = remember(playerGroups, allChannels) {
         playerGroups.associateWith { g -> mainViewModel.getChannelsByGroup(g) }

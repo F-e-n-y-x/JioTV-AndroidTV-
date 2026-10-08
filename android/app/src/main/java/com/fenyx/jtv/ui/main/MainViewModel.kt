@@ -14,6 +14,7 @@ import com.fenyx.jtv.data.FavoriteOrder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -48,6 +49,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Favorite ids in the user's chosen order (the Favorites category is shown in this order). */
     private val _favoriteOrder = MutableStateFlow<List<String>>(emptyList())
     val favoriteOrder: StateFlow<List<String>> = _favoriteOrder.asStateFlow()
+
+    /** Settings → Categories, applied by every screen that lists categories. */
+    val categoryPrefs: StateFlow<com.fenyx.jtv.data.CategoryPrefs> = settingsManager.categoryPrefsFlow
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, com.fenyx.jtv.data.CategoryPrefs())
 
     private val _allChannels = MutableStateFlow<List<Channel>>(emptyList())
 

@@ -154,14 +154,15 @@ fun GuideScreen(
 
     // ── Categories ──
     var category by rememberSaveable { mutableStateOf(MainViewModel.GROUP_ALL) }
-    val categories = remember(groups, favoriteOrder.isEmpty()) {
+    val catPrefs by viewModel.categoryPrefs.collectAsState()
+    val categories = remember(groups, favoriteOrder.isEmpty(), catPrefs) {
         buildList {
             add(MainViewModel.GROUP_ALL)
             // Only the channels Jio lets you replay (about 6 in 10), so they're easy to find.
             add(GROUP_REPLAY)
             if (favoriteOrder.isNotEmpty()) add(MainViewModel.GROUP_FAVORITES)
             addAll(groups)
-        }
+        }.let { catPrefs.arrange(it, MainViewModel.GROUP_ALL) }
     }
     LaunchedEffect(categories) { if (category !in categories) category = MainViewModel.GROUP_ALL }
     val channels = remember(category, allChannels, favoriteOrder) {

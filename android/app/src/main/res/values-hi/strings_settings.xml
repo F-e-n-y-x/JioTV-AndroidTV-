@@ -332,4 +332,16 @@
     <string name="device_tv">TV</string>
     <string name="device_phone">फ़ोन</string>
     <string name="device_tablet">टैबलेट</string>
+    <string name="settings_categories">कैटेगरी</string>
+    <string name="settings_categories_desc">कौन सी कैटेगरी दिखें और किस क्रम में, यह चुनें</string>
+    <string name="categories_intro">किसी कैटेगरी पर OK दबाकर उसे दिखाएँ, छिपाएँ या खिसकाएँ। सभी चैनल हमेशा दिखेगा।</string>
+    <string name="categories_shown">दिख रही है</string>
+    <string name="categories_hidden">छिपी है</string>
+    <string name="categories_show">दिखाएँ</string>
+    <string name="categories_hide">छिपाएँ</string>
+    <string name="categories_move_up">ऊपर करें</string>
+    <string name="categories_move_down">नीचे करें</string>
+    <string name="categories_move_top">सबसे ऊपर करें</string>
+    <string name="categories_all_shown">सब दिख रही हैं</string>
+    <string name="categories_n_hidden">%d छिपी हैं</string>
 </resources>

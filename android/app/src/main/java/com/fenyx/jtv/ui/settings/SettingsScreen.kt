@@ -105,6 +105,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val showRemote = remoteButtonsAvailable()
     val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
     var remoteScreen by rememberSaveable { mutableStateOf(false) }
+    var categoriesScreen by rememberSaveable { mutableStateOf(false) }
+    val categoryGroups by mainViewModel.groups.collectAsState()
     val remoteRowFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
     val showPip = !isTv && com.fenyx.jtv.ui.player.Pip.supported(context)
@@ -206,6 +208,10 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             description = stringResource(R.string.settings_app_language_desc)) { sheet = Sheet.AppLanguage })
         add(SRow.Item("accent", stringResource(R.string.settings_accent), value = accents.firstOrNull { it.first == accentValue }?.second ?: accents[0].second,
             description = stringResource(R.string.settings_accent_desc)) { sheet = Sheet.Accent })
+        val hiddenCats = mainViewModel.categoryPrefs.collectAsState().value.hidden.count { it in categoryGroups || it.startsWith("__") }
+        add(SRow.Item("categories", stringResource(R.string.settings_categories),
+            value = if (hiddenCats == 0) stringResource(R.string.categories_all_shown) else stringResource(R.string.categories_n_hidden, hiddenCats),
+            description = stringResource(R.string.settings_categories_desc)) { categoriesScreen = true })
         add(SRow.Item("start", stringResource(R.string.settings_start), value = stringResource(if (autoplayLastChannel) R.string.settings_start_last else R.string.settings_start_list),
             description = stringResource(R.string.settings_start_desc)) { sheet = Sheet.StartWith })
 
@@ -334,6 +340,10 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             runCatching { remoteRowFocus.requestFocus() }
             focusRemoteRow = false
         }
+    }
+    if (categoriesScreen) {
+        CategoriesScreen(modifier, categoryGroups, onClose = { categoriesScreen = false })
+        return
     }
     if (remoteScreen) {
         RemoteButtonsScreen(modifier, onClose = { remoteScreen = false; focusRemoteRow = true })

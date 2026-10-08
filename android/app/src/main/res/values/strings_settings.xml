@@ -332,4 +332,16 @@
     <string name="device_tv">TV</string>
     <string name="device_phone">Phone</string>
     <string name="device_tablet">Tablet</string>
+    <string name="settings_categories">Categories</string>
+    <string name="settings_categories_desc">Choose which categories to show, and their order</string>
+    <string name="categories_intro">Press OK on a category to show or hide it, or move it. All channels always stays.</string>
+    <string name="categories_shown">Shown</string>
+    <string name="categories_hidden">Hidden</string>
+    <string name="categories_show">Show</string>
+    <string name="categories_hide">Hide</string>
+    <string name="categories_move_up">Move up</string>
+    <string name="categories_move_down">Move down</string>
+    <string name="categories_move_top">Move to top</string>
+    <string name="categories_all_shown">All shown</string>
+    <string name="categories_n_hidden">%d hidden</string>
 </resources>

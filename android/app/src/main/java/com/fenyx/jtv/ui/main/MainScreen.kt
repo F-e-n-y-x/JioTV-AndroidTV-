@@ -131,13 +131,17 @@ fun MainScreen(
     val recentIds by viewModel.recentIds.collectAsState()
     val recentCount = remember(recentIds, displayChannels) { val ids = displayChannels.mapTo(HashSet()) { it.id }; recentIds.count { it in ids } }
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val categories = remember(displayChannels, groups, favoriteChannels, recentCount, ctx) {
+    val catPrefs by viewModel.categoryPrefs.collectAsState()
+    val categories = remember(displayChannels, groups, favoriteChannels, recentCount, ctx, catPrefs) {
         val counts = displayChannels.groupingBy { it.group }.eachCount()
-        buildList {
+        buildList<Category> {
             if (favoriteChannels.isNotEmpty()) add(Category(MainViewModel.GROUP_FAVORITES, ctx.getString(R.string.home_cat_favourites), favoriteChannels.size))
             if (recentCount > 0) add(Category(MainViewModel.GROUP_RECENT, ctx.getString(R.string.home_cat_recent), recentCount))
             add(Category(MainViewModel.GROUP_ALL, ctx.getString(R.string.home_cat_all_channels), displayChannels.size))
             groups.forEach { add(Category(it, Labels.groupRes(it)?.let(ctx::getString) ?: it, counts[it] ?: 0)) }
+        }.let { list ->
+            val byKey = list.associateBy { it.key }
+            catPrefs.arrange(list.map { it.key }, MainViewModel.GROUP_ALL).mapNotNull { byKey[it] }
         }
     }
     val indexById = remember(displayChannels) { displayChannels.withIndex().associate { (i, ch) -> ch.id to i } }
