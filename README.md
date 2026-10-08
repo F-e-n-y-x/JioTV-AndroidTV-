@@ -234,6 +234,10 @@ The **"Everyday"** redesign for TV, phone and tablet:
 - A Recent category.
 - Wi-Fi favourites sync with "Play on TV", plus favourites backup.
 
+### v1.5.11
+- **New version popup.** When an update is out, JTV offers it once on Home: **Download & Install**, **Later**, or **Ignore this version**.
+- **Mouse fix.** With an air mouse, lists no longer scroll by themselves under a still pointer.
+
 ### v1.5.10
 - **↑ now goes to the next channel** (1 → 2 → 3), the same as CH+ (suggested by @sant009m in #5).
 - **Choose your own channel buttons.** Settings → Playback has two switches: *Up Arrow = Next Channel*

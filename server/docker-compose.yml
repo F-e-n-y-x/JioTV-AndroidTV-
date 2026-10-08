@@ -1,7 +1,7 @@
 services:
   jtv-server:
     build: .
-    image: jtv-server
+    image: jiotv-server
     container_name: jtv-server
     restart: unless-stopped
     env_file: [.env]

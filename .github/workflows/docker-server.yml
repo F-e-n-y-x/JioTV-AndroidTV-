@@ -13,7 +13,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-server
+  # ghcr.io/f-e-n-y-x/jiotv-server (metadata-action lowercases it)
+  IMAGE_NAME: ${{ github.repository_owner }}/jiotv-server
 
 jobs:
   build-and-push:
