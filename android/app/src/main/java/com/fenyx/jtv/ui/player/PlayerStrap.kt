@@ -223,6 +223,8 @@ internal fun ChannelRail(
     onFocused: (Int) -> Unit,
     onClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    /** Favourites: tiles show their position (1, 2, 3…) instead of the Jio number (#7). */
+    positional: Boolean = false,
 ) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (focusIndex - 2).coerceAtLeast(0))
     val target = remember { FocusRequester() }
@@ -244,6 +246,7 @@ internal fun ChannelRail(
         itemsIndexed(channels, key = { _, ch -> ch.id }, contentType = { _, _ -> "tile" }) { i, ch ->
             RailTile(
                 channel = ch,
+                number = if (positional) i + 1 else ch.channelNumber,
                 playing = ch.id == playingId,
                 sizes = sizes,
                 modifier = if (i == focusIndex) Modifier.focusRequester(target) else Modifier,
@@ -257,6 +260,7 @@ internal fun ChannelRail(
 @Composable
 private fun RailTile(
     channel: Channel,
+    number: Int,
     playing: Boolean,
     sizes: TileSizes,
     modifier: Modifier,
@@ -289,7 +293,7 @@ private fun RailTile(
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 6.dp),
                 ) else Text(
-                    if (channel.channelNumber > 0) channel.channelNumber.toString() else "–",
+                    if (number > 0) number.toString() else "–",
                     style = numberStyle(sizes.numSize),
                     color = c.tx,
                     maxLines = 1,

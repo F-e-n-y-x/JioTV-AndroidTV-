@@ -73,7 +73,7 @@ object Pip {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val pm = context.packageManager
         return pm.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) &&
-            !pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+            !com.fenyx.jtv.theme.DeviceKind.isTv(context)
     }
 
     // ── Player side ──

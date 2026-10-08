@@ -136,7 +136,7 @@ object LanSync {
         store = PeerStore(app)
         settings = SettingsManager(app)
         selfKind = when {
-            app.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) -> "tv"
+            com.fenyx.jtv.theme.DeviceKind.isTv(app) -> "tv"
             app.resources.configuration.smallestScreenWidthDp >= 600 -> "tablet"
             else -> "phone"
         }

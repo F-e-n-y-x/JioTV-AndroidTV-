@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         // TV: no system bars at all. Phone/tablet: normal status + navigation bars (the app draws
         // edge-to-edge behind them and pads with safeDrawingPadding); the player hides them itself.
-        if (packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)) {
+        if (com.fenyx.jtv.theme.DeviceKind.isTv(this)) {
             androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
                 hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 systemBarsBehavior =
@@ -97,7 +97,8 @@ class MainActivity : ComponentActivity() {
 
         // No runtime storage-permission request: the app uses only app-scoped storage, so the prompt
         // was unnecessary and awkward to dismiss with a TV remote.
-        val isLeanback = packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+        // First start on a device that isn't certainly Android TV: ask TV / phone / tablet once (#6).
+        val askDevice = com.fenyx.jtv.theme.DeviceKind.chosen(this) == null && !com.fenyx.jtv.theme.DeviceKind.certainTv(this)
         val settings = com.fenyx.jtv.data.SettingsManager(applicationContext)
         setContent {
             // In picture-in-picture the window is tiny: keep the layouts of the full window (the player
@@ -109,11 +110,7 @@ class MainActivity : ComponentActivity() {
                          else liveConfig.also { fullConfig[0] = android.content.res.Configuration(it) }
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalConfiguration provides config) {
             val sw = config.smallestScreenWidthDp
-            val form = when {
-                isLeanback -> com.fenyx.jtv.theme.FormFactor.Tv
-                sw < 600 -> com.fenyx.jtv.theme.FormFactor.Phone
-                else -> com.fenyx.jtv.theme.FormFactor.Tablet
-            }
+            val form = com.fenyx.jtv.theme.DeviceKind.form(this, sw)
             val themeMode by settings.themeModeFlow.collectAsState(initial = null)
             val accent by settings.accentFlow.collectAsState(initial = null)
             JioTVGoTVTheme(form = form, themeMode = themeMode, accent = accent) {
@@ -121,7 +118,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.background)
                 ) {
-                    MainNavigation()
+                    if (askDevice) com.fenyx.jtv.ui.settings.DeviceChooser(onPick = { type ->
+                        com.fenyx.jtv.theme.DeviceKind.set(this@MainActivity, type)
+                        recreate()
+                    }) else MainNavigation()
                     // LAN sync: "Pair with <device>? Code 1234" when another device asks, on any screen.
                     com.fenyx.jtv.ui.settings.PairRequestHost()
                 }

@@ -210,7 +210,9 @@ fun MainScreen(
         delay(1500)
         val n = digits.toIntOrNull()
         digits = ""
-        val target = shown.firstOrNull { it.channelNumber == n } ?: displayChannels.firstOrNull { it.channelNumber == n }
+        // In Favourites the numbers are positions (1, 2, 3…), so 2 is the second favourite (#7).
+        val target = (if (isFavoritesGroup && n != null) shown.getOrNull(n - 1) else null)
+            ?: shown.firstOrNull { it.channelNumber == n } ?: displayChannels.firstOrNull { it.channelNumber == n }
         if (target != null) onChannelClick(indexById[target.id] ?: 0, if (shown.contains(target)) selectedGroup else null)
     }
 
@@ -306,7 +308,7 @@ fun MainScreen(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
-                itemsIndexed(shown, key = { _, ch -> ch.id }, contentType = { _, _ -> "row" }) { _, ch ->
+                itemsIndexed(shown, key = { _, ch -> ch.id }, contentType = { _, _ -> "row" }) { i, ch ->
                     val programs = if (epgMode) epgData[ch.id] else null
                     if (epgMode) LaunchedEffect(ch.id) { if (programs.isNullOrEmpty()) viewModel.fetchNativeEpgIfMissing(ch.id) }
                     val nowProg = programs?.let { p -> p.firstOrNull { it.startMs <= now && now < it.stopMs } }
@@ -314,6 +316,7 @@ fun MainScreen(
                         channel = ch, nowProgram = nowProg, now = now, m = m,
                         isFavorite = !isFavoritesGroup && favoriteChannels.contains(ch.id),
                         isMoving = ch.id == movingId,
+                        number = if (isFavoritesGroup) i + 1 else ch.channelNumber,
                         onClick = { play(ch) },
                         onLongClick = { if (movingId == null) menuChannel = ch },
                         

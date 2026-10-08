@@ -338,7 +338,7 @@ fun MainNavigation() {
                         ctl?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                         ctl?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                         onDispose {
-                            if (!context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)) {
+                            if (!com.fenyx.jtv.theme.DeviceKind.isTv(context)) {
                                 ctl?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                             }
                         }

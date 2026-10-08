@@ -1064,6 +1064,8 @@ fun TvPlayerScreen(
 
     /** Real Jio channel number → (group, index): the current category first, then all channels. */
     fun findByNumber(num: Int): Pair<String?, Int>? {
+        // Favourites are numbered by position (1, 2, 3…), as the lists show them (#7).
+        if (currentGroup == MainViewModel.GROUP_FAVORITES && num in 1..currentChannels.size) return currentGroup to num - 1
         val i = currentChannels.indexOfFirst { it.channelNumber == num }
         if (i >= 0) return currentGroup to i
         val j = resolveGroup(MainViewModel.GROUP_ALL).indexOfFirst { it.channelNumber == num }

@@ -56,7 +56,7 @@ import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.launch
 
 /** Which second-level picker / dialog is open. */
-private enum class Sheet { None, Theme, AppLanguage, Accent, StartWith, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
+private enum class Sheet { None, Theme, DeviceType, AppLanguage, Accent, StartWith, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
 
 /**
  * Settings, v2 "Everyday": a plain two-level list. Section labels, then rows of *label + current
@@ -185,11 +185,22 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val reportNoApp = androidx.compose.ui.res.stringResource(com.fenyx.jtv.R.string.problem_report_no_app)
     var reportMsg by remember { mutableStateOf<String?>(null) }
 
+    val deviceTypeValue = remember { com.fenyx.jtv.theme.DeviceKind.chosen(context) ?: com.fenyx.jtv.theme.DeviceKind.AUTO }
+    val deviceTypes = listOf(
+        com.fenyx.jtv.theme.DeviceKind.AUTO to stringResource(R.string.settings_device_type_auto),
+        com.fenyx.jtv.theme.DeviceKind.TV to stringResource(R.string.device_tv),
+        com.fenyx.jtv.theme.DeviceKind.PHONE to stringResource(R.string.device_phone),
+        com.fenyx.jtv.theme.DeviceKind.TABLET to stringResource(R.string.device_tablet),
+    )
+
     // ─── Rows (built as data so the list stays a flat, keyed LazyColumn) ───
     val backup = rememberFavoritesBackup { id -> mainViewModel.getAllChannels().firstOrNull { it.id == id }?.name }
     val rows: List<SRow> = buildList {
         add(SRow.Section(stringResource(R.string.settings_section_general)))
         add(SRow.Item("theme", stringResource(R.string.settings_appearance), value = themes.first { it.first == themeValue }.second) { sheet = Sheet.Theme })
+        add(SRow.Item("deviceType", stringResource(R.string.settings_device_type),
+            value = deviceTypes.first { it.first == deviceTypeValue }.second,
+            description = stringResource(R.string.settings_device_type_desc)) { sheet = Sheet.DeviceType })
         add(SRow.Item("appLanguage", stringResource(R.string.settings_app_language),
             value = appLanguages.firstOrNull { it.first == appLanguageValue }?.second ?: appLanguages[0].second,
             description = stringResource(R.string.settings_app_language_desc)) { sheet = Sheet.AppLanguage })
@@ -355,7 +366,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .then(if (Jtv.isPhonePortrait) Modifier.fillMaxWidth() else Modifier.widthIn(max = 820.dp).fillMaxWidth())
+                    .fillMaxWidth()
                     .focusRestorer(),
                 state = listState,
                 contentPadding = PaddingValues(bottom = 16.dp),
@@ -386,6 +397,15 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
 
         // ─── Second level ───
         when (sheet) {
+            Sheet.DeviceType -> PickerDialog(stringResource(R.string.settings_device_type), deviceTypes, deviceTypeValue,
+                onSelect = { v ->
+                    sheet = Sheet.None
+                    if (v != deviceTypeValue) {
+                        com.fenyx.jtv.theme.DeviceKind.set(context, v)
+                        context.findActivity()?.recreate() // the whole layout changes
+                    }
+                },
+                onDismiss = { sheet = Sheet.None })
             Sheet.AppLanguage -> PickerDialog(stringResource(R.string.settings_app_language), appLanguages, appLanguageValue,
                 onSelect = { v ->
                     sheet = Sheet.None

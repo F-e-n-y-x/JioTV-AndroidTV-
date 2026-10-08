@@ -81,6 +81,8 @@ fun ChannelRow(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
     onMore: (() -> Unit)? = null,
+    /** The number shown: the Jio number, or the position (1, 2, 3…) in Favourites (#7). */
+    number: Int = channel.channelNumber,
 ) {
     val c = Jtv.colors
     JtvClickable(
@@ -98,7 +100,7 @@ fun ChannelRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                channel.channelNumber.takeIf { it > 0 }?.toString() ?: "",
+                number.takeIf { it > 0 }?.toString() ?: "",
                 style = numberStyle(m.numberSize), color = fg, textAlign = TextAlign.End,
                 modifier = Modifier.width(m.numberWidth), maxLines = 1,
             )

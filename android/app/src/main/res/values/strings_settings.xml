@@ -322,4 +322,12 @@
     <string name="remote_key_backspace">Backspace</string>
     <string name="remote_key_number">Number %d</string>
     <string name="remote_key_letter">Key %s</string>
+    <string name="settings_device_type">Device type</string>
+    <string name="settings_device_type_desc">Pick TV if you use a remote. The layout changes at once.</string>
+    <string name="settings_device_type_auto">Automatic</string>
+    <string name="device_question">What are you watching on?</string>
+    <string name="device_question_desc">This sets the layout. You can change it later in Settings → Device type.</string>
+    <string name="device_tv">TV</string>
+    <string name="device_phone">Phone</string>
+    <string name="device_tablet">Tablet</string>
 </resources>

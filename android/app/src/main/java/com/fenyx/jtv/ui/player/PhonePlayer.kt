@@ -193,7 +193,7 @@ internal fun LazyListScope.channelsSection(
                 ui.overlay = PlayerOverlay.Menu
             }
         }
-        PhoneChannelRow(ch, isPlaying, d.epg, onTap, onHold)
+        PhoneChannelRow(ch, isPlaying, d.epg, onTap, onHold, number = if (bGroup == MainViewModel.GROUP_FAVORITES) i + 1 else ch.channelNumber)
     }
 }
 
@@ -476,7 +476,7 @@ internal fun NextRow(p: EpgProgram) {
 
 /** 64dp row. The playing one is marked by its "Playing" label (no inverted fill, no side stripe). */
 @Composable
-internal fun PhoneChannelRow(ch: Channel, playing: Boolean, epg: EpgSource, onClick: () -> Unit, onLongClick: () -> Unit) {
+internal fun PhoneChannelRow(ch: Channel, playing: Boolean, epg: EpgSource, onClick: () -> Unit, onLongClick: () -> Unit, number: Int = ch.channelNumber) {
     val c = Jtv.colors
     val now = LocalNow.current
     val nn = rememberNowNext(epg, ch.id, always = playing)
@@ -491,7 +491,7 @@ internal fun PhoneChannelRow(ch: Channel, playing: Boolean, epg: EpgSource, onCl
         val fg2 = if (focused) c.invTx else c.t2
         Row(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (ch.channelNumber > 0) ch.channelNumber.toString() else "–",
+                if (number > 0) number.toString() else "–",
                 style = numberStyle(16.sp), color = fg, maxLines = 1, modifier = Modifier.width(48.dp),
             )
             ChannelPlate(ch.logoUrl, 48.dp, 28.dp)

@@ -209,6 +209,7 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                             sizes = TvTiles,
                             onFocused = onRailFocus,
                             onClick = onRailClick,
+                            positional = ui.browseGroup == MainViewModel.GROUP_FAVORITES,
                         )
                         Spacer(Modifier.height(10.dp))
                     }
@@ -528,6 +529,7 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
                                 focusIndex = ui.browseIndex.coerceIn(0, list.size - 1),
                                 focusToken = ui.browseFocusToken, takeFocus = false, sizes = tiles,
                                 onFocused = noFocus, onClick = onRailClick,
+                                positional = bGroup == MainViewModel.GROUP_FAVORITES,
                             )
                             Spacer(Modifier.height(8.dp))
                         } else {

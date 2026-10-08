@@ -121,7 +121,7 @@ internal fun RemoteButtonsScreen(modifier: Modifier, onClose: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         LazyColumn(
             Modifier.weight(1f)
-                .then(if (Jtv.isPhonePortrait) Modifier.fillMaxWidth() else Modifier.widthIn(max = 820.dp).fillMaxWidth())
+                .fillMaxWidth()
                 .focusRestorer(),
             contentPadding = PaddingValues(bottom = 16.dp),
         ) {
