@@ -1,10 +1,26 @@
 <p align="center"><img src="https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/screenshot/jtv-mark.svg" width="110" alt="JTV" /></p>
 
-# JTV 2.0 beta 9
+# JTV 2.0 beta 10
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.9.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.10.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 9
+## New in beta 10
+- **Pictures of what's on.** On TV and tablet Home, the side panel shows a picture of the show playing on the channel you rest on, with its time and description, even with the programme guide setting off. The channels just above and below are loaded ahead, so moving down is quick.
+- **Choose your categories.** **Settings → Categories**: show or hide any category and change their order (Move up, Move down, Move to top). Your choice applies to Home, the Guide and the player's channel list. All channels always stays.
+- **Volume up / Volume down** can now be put on any button (Settings → Remote buttons), handy for game controllers.
+- **Fixes for TV remotes:**
+  - **Remove buttons** in Remote buttons works with remotes connected over HDMI-CEC (it used to record OK instead).
+  - **Remove from favourites** now asks and then removes correctly with a remote.
+
+## Known limits
+- Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
+- Jio doesn't offer replays on some channels (for example Colors, Nick, many sports channels).
+
+---
+
+## Earlier betas
+
+### Beta 9
 - **Works on more TV boxes.** Some boxes (for example MXQ Pro) were shown the phone layout. JTV now asks once at first start: **TV, Phone or Tablet**. You can change it any time in **Settings → Device type** (#6).
 - **Favourites are numbered 1, 2, 3…** in your own order. Typing a number in Favourites picks that favourite (#7).
 - **A calmer player:**
@@ -16,14 +32,6 @@
 - **New version popup:** when an update is out, JTV offers it once with **Download and install**, **Later** or **Ignore this version**.
 - **Mouse fix:** with an air mouse, lists no longer scroll by themselves under a still pointer.
 - Smaller clock, channel names on focused tiles, Settings uses the full screen width.
-
-## Known limits
-- Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
-- Jio doesn't offer replays on some channels (for example Colors, Nick, many sports channels).
-
----
-
-## Earlier betas
 
 ### Beta 8
 - **Clearer message when no channel plays.** When Jio refuses every channel, the problem is the connection or the account, not the channels. JTV now refreshes the sign-in once by itself. If Jio still refuses, it tells you what to check: an active Jio plan with JioTV, no VPN (Jio only streams to Indian networks), or signing in again. Before, every channel said "Jio isn't providing this channel" (#4).
