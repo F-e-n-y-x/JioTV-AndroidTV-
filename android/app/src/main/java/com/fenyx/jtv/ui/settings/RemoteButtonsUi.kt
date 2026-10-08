@@ -230,6 +230,10 @@ private fun CaptureDialog(
     var holding by remember { mutableStateOf<UiText?>(null) }
     // The key-down that started the current press (so a key-up alone, e.g. the OK that opened this, is ignored).
     var downCode by remember { mutableStateOf<Int?>(null) }
+    // A hold is a press the remote auto-repeats while it's down. Timing the key-up alone isn't enough:
+    // HDMI-CEC remotes deliver the release late, which made a plain OK on "Remove buttons" count as a
+    // held OK and get captured instead of pressing the button.
+    var repeated by remember { mutableStateOf(false) }
 
     DialogPanel(onDismiss, width = 560.dp) {
         Column(
@@ -242,12 +246,14 @@ private fun CaptureDialog(
                     RemoteKeys.isSystem(code) -> false
                     down && n.repeatCount == 0 -> {
                         downCode = code
+                        repeated = false
                         holding = null
                         // OK / arrows: let the tap move or press in this dialog.
                         !RemoteKeys.isLockedTap(code)
                     }
                     down -> {
-                        if (n.eventTime - n.downTime >= RemoteKeys.HOLD_MS && downCode == code) {
+                        if (downCode == code) {
+                            repeated = true
                             holding = UiText.of(R.string.remote_holding, RemoteKeys.buttonLabel(code, n.scanCode))
                         }
                         // Held OK / arrows don't auto-repeat through the dialog's buttons.
@@ -256,7 +262,7 @@ private fun CaptureDialog(
                     else -> {
                         if (downCode != code) return@onPreviewKeyEvent !RemoteKeys.isLockedTap(code)
                         downCode = null
-                        val hold = n.eventTime - n.downTime >= RemoteKeys.HOLD_MS
+                        val hold = repeated
                         if (RemoteKeys.isLockedTap(code) && !hold) {
                             holding = null
                             false // a plain tap on OK / an arrow: the dialog's own buttons
