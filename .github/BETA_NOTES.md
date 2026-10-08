@@ -1,12 +1,21 @@
 <p align="center"><img src="https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/screenshot/jtv-mark.svg" width="110" alt="JTV" /></p>
 
-# JTV 2.0 beta 8
+# JTV 2.0 beta 9
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.8.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.9.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 8
-- **Clearer message when no channel plays.** When Jio refuses every channel, the problem is the connection or the account, not the channels. JTV now refreshes the sign-in once by itself. If Jio still refuses, it tells you what to check: an active Jio plan with JioTV, no VPN (Jio only streams to Indian networks), or signing in again. Before, every channel said "Jio isn't providing this channel" (#4).
-- **No leftover picture.** When a channel can't load, the previous channel's video no longer stays on screen behind the message.
+## New in beta 9
+- **Works on more TV boxes.** Some boxes (for example MXQ Pro) were shown the phone layout. JTV now asks once at first start: **TV, Phone or Tablet**. You can change it any time in **Settings → Device type** (#6).
+- **Favourites are numbered 1, 2, 3…** in your own order. Typing a number in Favourites picks that favourite (#7).
+- **A calmer player:**
+  - The channel card is now one wide, see-through bar with the channel logo, at the bottom of the screen.
+  - The seek bar shows only when it's useful (paused, rewound, replays).
+  - When a channel can't play, a small centred card shows the logo and two clear buttons.
+  - ↑ goes to the next channel, the same as CH+. You can switch this back in Settings → Remote buttons.
+- **Remote and game controller:** volume buttons and controller buttons (A, B, X, Y, L1, R1…) can now be given actions. There are new **Channel up / Channel down** actions too. A volume button with no action still changes the volume.
+- **New version popup:** when an update is out, JTV offers it once with **Download and install**, **Later** or **Ignore this version**.
+- **Mouse fix:** with an air mouse, lists no longer scroll by themselves under a still pointer.
+- Smaller clock, channel names on focused tiles, Settings uses the full screen width.
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
@@ -15,6 +24,10 @@
 ---
 
 ## Earlier betas
+
+### Beta 8
+- **Clearer message when no channel plays.** When Jio refuses every channel, the problem is the connection or the account, not the channels. JTV now refreshes the sign-in once by itself. If Jio still refuses, it tells you what to check: an active Jio plan with JioTV, no VPN (Jio only streams to Indian networks), or signing in again. Before, every channel said "Jio isn't providing this channel" (#4).
+- **No leftover picture.** When a channel can't load, the previous channel's video no longer stays on screen behind the message.
 
 ### Beta 7
 - **हिन्दी में JTV.** The whole app can now be in Hindi: **Settings → General → App language** (Same as device / English / हिन्दी). Menus, buttons, categories, languages, days and months are translated. Channel names and show titles stay as Jio sends them.
