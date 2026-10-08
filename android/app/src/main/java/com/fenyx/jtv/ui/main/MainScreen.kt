@@ -343,9 +343,24 @@ fun MainScreen(
                     list = { listContent(if (Jtv.isTv) TvRow else TouchRow.copy(height = 64.dp), false) },
                     preview = {
                         focusedChannel?.let { ch ->
-                            // Only the channel you rest on: one small guide request after half a second,
-                            // even with the guide setting off, so the pane can show the show and its picture.
-                            LaunchedEffect(ch.id) { delay(500); viewModel.fetchNativeEpgIfMissing(ch.id) }
+                            // The channel you rest on (after 0.25 s, so fast scrolling fetches nothing) and its
+                            // neighbours: one small guide request each, even with the guide setting off, and the
+                            // neighbours' pictures go into the image cache so the next row shows at once.
+                            val ctx = androidx.compose.ui.platform.LocalContext.current
+                            val near = remember(ch.id, shown) {
+                                val i = shown.indexOfFirst { it.id == ch.id }
+                                listOfNotNull(shown.getOrNull(i - 1), shown.getOrNull(i + 1))
+                            }
+                            LaunchedEffect(ch.id) {
+                                delay(250)
+                                viewModel.fetchNativeEpgIfMissing(ch.id)
+                                near.forEach { viewModel.fetchNativeEpgIfMissing(it.id) }
+                            }
+                            val nearPosters = near.mapNotNull { n -> epgData[n.id]?.let { nowNext(it, now) }?.now?.posterUrl }
+                            LaunchedEffect(nearPosters) {
+                                delay(250)
+                                nearPosters.forEach { coil.Coil.imageLoader(ctx).enqueue(posterRequest(ctx, it)) }
+                            }
                             PreviewPane(
                                 ch, epgData[ch.id].orEmpty(), now,
                                 isFavorite = favoriteChannels.contains(ch.id),
@@ -510,20 +525,22 @@ private fun PhoneHome(
 }
 
 /**
- * The running show's picture over the logo plate. Loads only after the pane has rested on it for half
- * a second (fast scrolling loads nothing), decoded at 480×270 so a 1080p poster costs little memory on
- * cheap TV boxes; Coil's disk cache keeps it for next time. Missing/failed: the logo plate stays.
+ * Jio serves show pictures only at 1920×1080 (~175 KB): decode them at 480×270 in RGB_565 so each costs
+ * ~250 KB of memory and decodes fast on cheap TV boxes. One builder, so prefetch and display share the
+ * same cache keys.
+ */
+private fun posterRequest(ctx: android.content.Context, url: String) =
+    coil.request.ImageRequest.Builder(ctx).data(url).size(480, 270).allowRgb565(true).crossfade(120).build()
+
+/**
+ * The running show's picture over the logo plate (its url only exists once the focused channel's guide
+ * has loaded, which is already debounced). Missing/failed: the logo plate stays.
  */
 @Composable
 private fun ShowPicture(url: String?, modifier: Modifier) {
     if (url == null) return
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    var ready by remember(url) { mutableStateOf(false) }
-    LaunchedEffect(url) { delay(500); ready = true }
-    if (!ready) return
-    val request = remember(url) {
-        coil.request.ImageRequest.Builder(ctx).data(url).size(480, 270).crossfade(150).build()
-    }
+    val request = remember(url) { posterRequest(ctx, url) }
     coil.compose.AsyncImage(
         model = request, contentDescription = null,
         contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = modifier,
