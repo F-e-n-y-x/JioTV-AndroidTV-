@@ -44,6 +44,7 @@ class SettingsManager(private val context: Context) {
         private val AUTH_USER_ID = stringPreferencesKey("auth_user_id")
 
         private val AUTOPLAY_LAST_CHANNEL = booleanPreferencesKey("autoplay_last_channel")
+        private val IGNORED_UPDATE = stringPreferencesKey("ignored_update_version")
         private val UP_IS_NEXT_CHANNEL = booleanPreferencesKey("up_is_next_channel")
         private val REVERSE_CH_PLUS_MINUS = booleanPreferencesKey("reverse_ch_plus_minus")
         private val LAST_CHANNEL_ID = stringPreferencesKey("last_channel_id")
@@ -244,6 +245,13 @@ class SettingsManager(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[EPG_URL] = url
         }
+    }
+
+    /** The update version the user chose to ignore: no automatic popup for it (Settings still offers it). */
+    val ignoredUpdateFlow: Flow<String?> = context.dataStore.data.map { it[IGNORED_UPDATE] }
+
+    suspend fun setIgnoredUpdate(version: String) {
+        context.dataStore.edit { it[IGNORED_UPDATE] = version }
     }
 
     suspend fun setAutoplayLastChannel(enabled: Boolean) {

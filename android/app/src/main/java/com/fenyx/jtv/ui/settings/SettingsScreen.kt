@@ -795,6 +795,52 @@ private fun PickerDialog(
     }
 }
 
+/**
+ * GitHub release notes → plain text: just the "What's new" section when there is one (not the logo or
+ * install blurb), without markdown marks.
+ */
+internal fun releaseNotesText(md: String): String {
+    val lines = md.lines()
+    val start = lines.indexOfFirst { it.startsWith("## ") && (it.contains("New", true) || it.contains("What", true)) }
+    val section = if (start < 0) lines else lines.drop(start + 1).takeWhile { !it.startsWith("## ") && it.trim() != "---" }
+    return section.filterNot { it.trimStart().startsWith("<") }
+        .joinToString("\n").replace(Regex("[*`]|^#+ ?|^> ?", RegexOption.MULTILINE), "").trim()
+}
+
+/**
+ * Opens by itself on Home once per app start when a newer version is out: Download & Install, Later,
+ * or Ignore this version (no popup for it again; Settings still offers it).
+ */
+@Composable
+fun UpdatePrompt(vm: com.fenyx.jtv.ui.main.MainViewModel) {
+    val context = LocalContext.current
+    val settings = remember { SettingsManager(context) }
+    val scope = rememberCoroutineScope()
+    val info by vm.updateInfo.collectAsState()
+    val ignored by settings.ignoredUpdateFlow.collectAsState(initial = "")
+    val downloading by vm.isDownloadingUpdate.collectAsState()
+    val progress by vm.updateDownloadProgress.collectAsState()
+    val done by vm.updateDownloadedBytes.collectAsState()
+    val total by vm.updateTotalBytes.collectAsState()
+    val error by vm.updateError.collectAsState()
+    var closed by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val i = info
+    // ignored == "" while DataStore loads, so an ignored version never flashes up.
+    if (i == null || !i.isUpdateAvailable || closed || ignored == "" || ignored == i.versionName) return
+    Dialog(
+        onDismissRequest = { if (!downloading) closed = true },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        UpdateDialog(
+            updateInfo = i, isDownloading = downloading, downloadProgress = progress,
+            downloadedBytes = done, totalBytes = total, errorMessage = error,
+            onDownloadAndInstall = { vm.downloadAndInstallUpdate(context) },
+            onDismiss = { closed = true },
+            onIgnore = { scope.launch { settings.setIgnoredUpdate(i.versionName) }; closed = true },
+        )
+    }
+}
+
 @Composable
 private fun UpdateDialog(
     updateInfo: AppUpdateManager.UpdateInfo,
@@ -804,7 +850,8 @@ private fun UpdateDialog(
     totalBytes: Long,
     errorMessage: String?,
     onDownloadAndInstall: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onIgnore: (() -> Unit)? = null,
 ) {
     val initialFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -883,7 +930,7 @@ private fun UpdateDialog(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item {
                         Text(
-                            text = updateInfo.changelog.ifBlank { "Performance improvements and bug fixes." },
+                            text = releaseNotesText(updateInfo.changelog).ifBlank { "Performance improvements and bug fixes." },
                             style = MaterialTheme.typography.bodySmall,
                             color = TvOnSurfaceVariant,
                             lineHeight = 18.sp
@@ -965,6 +1012,31 @@ private fun UpdateDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!isDownloading) {
+                    if (onIgnore != null) {
+                    Surface(
+                        onClick = onIgnore,
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = TvDarkSurfaceVariant,
+                            focusedContainerColor = TvDarkSurface
+                        ),
+                        border = ClickableSurfaceDefaults.border(
+                            focusedBorder = androidx.tv.material3.Border(
+                                border = androidx.compose.foundation.BorderStroke(1.5.dp, TvFocusBorder),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        )
+                    ) {
+                        Text(
+                            "Ignore this version",
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                            color = TvOnSurface
+                        )
+                    }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+                    }
                     Surface(
                         onClick = onDismiss,
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),

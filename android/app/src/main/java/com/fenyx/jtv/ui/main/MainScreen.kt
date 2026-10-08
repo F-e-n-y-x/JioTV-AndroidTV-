@@ -64,6 +64,7 @@ fun MainScreen(
     val channels by viewModel.channels.collectAsState()
     val groups by viewModel.groups.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    com.fenyx.jtv.ui.settings.UpdatePrompt(viewModel)
     val error by viewModel.error.collectAsState()
     val selectedGroup by viewModel.selectedGroup.collectAsState()
 
