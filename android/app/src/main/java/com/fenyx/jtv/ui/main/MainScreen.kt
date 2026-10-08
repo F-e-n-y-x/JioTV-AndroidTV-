@@ -343,8 +343,11 @@ fun MainScreen(
                     list = { listContent(if (Jtv.isTv) TvRow else TouchRow.copy(height = 64.dp), false) },
                     preview = {
                         focusedChannel?.let { ch ->
+                            // Only the channel you rest on: one small guide request after half a second,
+                            // even with the guide setting off, so the pane can show the show and its picture.
+                            LaunchedEffect(ch.id) { delay(500); viewModel.fetchNativeEpgIfMissing(ch.id) }
                             PreviewPane(
-                                ch, if (epgMode) epgData[ch.id].orEmpty() else null, now,
+                                ch, epgData[ch.id].orEmpty(), now,
                                 isFavorite = favoriteChannels.contains(ch.id),
                                 onWatch = { play(ch) },
                                 onFavorite = { if (favoriteChannels.contains(ch.id)) confirmUnfav = ch else viewModel.toggleFavorite(ch.id) },
@@ -507,6 +510,27 @@ private fun PhoneHome(
 }
 
 /**
+ * The running show's picture over the logo plate. Loads only after the pane has rested on it for half
+ * a second (fast scrolling loads nothing), decoded at 480×270 so a 1080p poster costs little memory on
+ * cheap TV boxes; Coil's disk cache keeps it for next time. Missing/failed: the logo plate stays.
+ */
+@Composable
+private fun ShowPicture(url: String?, modifier: Modifier) {
+    if (url == null) return
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var ready by remember(url) { mutableStateOf(false) }
+    LaunchedEffect(url) { delay(500); ready = true }
+    if (!ready) return
+    val request = remember(url) {
+        coil.request.ImageRequest.Builder(ctx).data(url).size(480, 270).crossfade(150).build()
+    }
+    coil.compose.AsyncImage(
+        model = request, contentDescription = null,
+        contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = modifier,
+    )
+}
+
+/**
  * Right-hand pane for the focused channel: logo picture with the amber number strap, what's on now
  * (when the guide is on), what's next, and labelled buttons (no hidden-only actions for older users).
  */
@@ -526,6 +550,7 @@ private fun PreviewPane(
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(c.plate)) {
             ChannelPlate(ch.logoUrl, 132.dp, 74.dp, Modifier.align(Alignment.Center).padding(bottom = 20.dp))
+            ShowPicture(nn?.now?.posterUrl, Modifier.matchParentSize())
             Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(if (tv) 42.dp else 48.dp).background(androidx.compose.ui.graphics.Color(0xFF141416))) {
                 NumberBlock(ch.channelNumber, Modifier.fillMaxHeight().width(if (tv) 84.dp else 96.dp), fontSize = if (tv) 26.sp else 30.sp)
                 Text(
@@ -567,10 +592,6 @@ private fun PreviewPane(
         } else {
             Text(groupLabel(ch.group), style = textStyle(16.sp, FontWeight.SemiBold), color = c.tx)
             Text(languageLabel(ch.language), style = textStyle(15.sp), color = c.t2)
-            if (programs == null) {
-                Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.home_guide_off_hint), style = textStyle(14.sp), color = c.t3, maxLines = 3)
-            }
         }
         Spacer(Modifier.weight(1f))
         // TV: OK on the row already plays and hold-OK opens options (shown in the key hint), so no

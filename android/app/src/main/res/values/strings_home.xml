@@ -40,7 +40,6 @@
         <item quantity="other">%d min left</item>
     </plurals>
     <string name="home_time_range_left">%1$s – %2$s · %3$s</string>
-    <string name="home_guide_off_hint">Turn on the programme guide in Settings to see what\'s on.</string>
     <string name="home_watch">Watch</string>
     <string name="home_saved">Saved</string>
     <string name="home_favourite">Favourite</string>

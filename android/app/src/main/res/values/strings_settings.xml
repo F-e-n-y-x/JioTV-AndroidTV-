@@ -261,6 +261,8 @@
     <string name="remote_action_voice_boost">Voice boost (next level)</string>
     <string name="remote_action_sleep">Sleep timer</string>
     <string name="remote_action_mute">Sound off or on</string>
+    <string name="remote_action_volume_up">Volume up</string>
+    <string name="remote_action_volume_down">Volume down</string>
     <string name="remote_action_search">Search</string>
     <string name="remote_action_go_live">Go live</string>
     <string name="remote_action_number_entry">Type a channel number</string>

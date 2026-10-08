@@ -29,7 +29,7 @@ data class EpgProgram(
     val showId: String? = null,
     val showtime: String? = null,
     val catchup: Boolean = false,
-    // Native-guide extras (null for XMLTV). Kept small: cast is trimmed, the poster is not stored.
+    // Native-guide extras (null for XMLTV). Kept small: cast is trimmed, the poster is a short path.
     /** Episode synopsis, only when it differs from [description]. */
     val episodeDesc: String? = null,
     /** "Series", "Movie", "Sports", "News"... */
@@ -43,7 +43,12 @@ data class EpgProgram(
     val director: String? = null,
     /** Episode number, null when the guide has none. */
     val episodeNum: Int? = null,
-)
+    /** Show picture path from Jio's guide ("epgdata/….jpg"); see [posterUrl]. */
+    val poster: String? = null,
+) {
+    /** The show picture (16:9, served at 1920×1080: always load it with a small decode size). */
+    val posterUrl: String? get() = poster?.let { "https://jiotvimages.cdn.jio.com/dare_images/shows/$it" }
+}
 
 enum class EpgSyncStatus {
     IDLE, DOWNLOADING, EXTRACTING, PARSING, COMPLETED, ERROR
@@ -311,6 +316,7 @@ class EpgRepository(private val context: Context) {
                                 cast = shared(shortCast(jsonText(obj, "starCast"))),
                                 director = shared(shortNames(jsonText(obj, "director"), 3)),
                                 episodeNum = obj.opt("episode_num")?.toString()?.trim()?.toIntOrNull()?.takeIf { it > 0 },
+                                poster = jsonText(obj, "episodePoster") ?: jsonText(obj, "episodeThumbnail"),
                             )
                         )
                     }

@@ -261,6 +261,8 @@
     <string name="remote_action_voice_boost">आवाज़ साफ़ करें (अगला लेवल)</string>
     <string name="remote_action_sleep">स्लीप टाइमर</string>
     <string name="remote_action_mute">आवाज़ बंद या चालू</string>
+    <string name="remote_action_volume_up">आवाज़ बढ़ाएँ</string>
+    <string name="remote_action_volume_down">आवाज़ घटाएँ</string>
     <string name="remote_action_search">खोजें</string>
     <string name="remote_action_go_live">लाइव पर जाएँ</string>
     <string name="remote_action_number_entry">चैनल नंबर लिखें</string>

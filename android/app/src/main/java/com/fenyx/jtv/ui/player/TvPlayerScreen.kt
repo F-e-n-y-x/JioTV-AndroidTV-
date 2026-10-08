@@ -1281,6 +1281,13 @@ fun TvPlayerScreen(
                 flash(context.getString(R.string.player_voice_boost_is, context.getString(voiceLabelRes(next))))
             }
             com.fenyx.jtv.data.RemoteAction.Mute -> { muted = !muted; flash(context.getString(if (muted) R.string.player_sound_off else R.string.player_sound_on)) }
+            // The system volume, with its usual on-screen slider (for controllers without volume keys).
+            com.fenyx.jtv.data.RemoteAction.VolumeUp, com.fenyx.jtv.data.RemoteAction.VolumeDown ->
+                (context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager).adjustStreamVolume(
+                    android.media.AudioManager.STREAM_MUSIC,
+                    if (a == com.fenyx.jtv.data.RemoteAction.VolumeUp) android.media.AudioManager.ADJUST_RAISE else android.media.AudioManager.ADJUST_LOWER,
+                    android.media.AudioManager.FLAG_SHOW_UI,
+                )
             com.fenyx.jtv.data.RemoteAction.Search -> onRemoteScreen(a)
             com.fenyx.jtv.data.RemoteAction.GoLive -> if (ts.seekable) { doGoLive(); flash(context.getString(R.string.common_live)) }
             com.fenyx.jtv.data.RemoteAction.NumberEntry -> {

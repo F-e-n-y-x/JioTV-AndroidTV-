@@ -32,6 +32,8 @@ enum class RemoteAction(val id: String, @StringRes val labelRes: Int) {
     VoiceBoost("voice_boost", R.string.remote_action_voice_boost),
     Sleep("sleep", R.string.remote_action_sleep),
     Mute("mute", R.string.remote_action_mute),
+    VolumeUp("volume_up", R.string.remote_action_volume_up),
+    VolumeDown("volume_down", R.string.remote_action_volume_down),
     Search("search", R.string.remote_action_search),
     GoLive("go_live", R.string.remote_action_go_live),
     NumberEntry("number_entry", R.string.remote_action_number_entry);

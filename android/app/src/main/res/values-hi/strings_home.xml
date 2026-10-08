@@ -36,7 +36,6 @@
         <item quantity="other">%d मिनट बाकी</item>
     </plurals>
     <string name="home_time_range_left">%1$s – %2$s · %3$s</string>
-    <string name="home_guide_off_hint">क्या चल रहा है, यह देखने के लिए सेटिंग्स में प्रोग्राम गाइड चालू करें।</string>
     <string name="home_watch">देखें</string>
     <string name="home_saved">सेव है</string>
     <string name="home_favourite">फ़ेवरेट</string>
