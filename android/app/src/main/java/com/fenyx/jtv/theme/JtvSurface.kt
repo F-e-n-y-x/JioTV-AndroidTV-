@@ -20,6 +20,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.composed
 import kotlinx.coroutines.launch
 import androidx.tv.material3.ClickableSurfaceBorder
 import androidx.tv.material3.ClickableSurfaceColors
@@ -28,19 +32,35 @@ import androidx.tv.material3.ClickableSurfaceGlow
 import androidx.tv.material3.ClickableSurfaceScale
 import androidx.tv.material3.ClickableSurfaceShape
 
+/** Where the pointer was (window px) when hover last moved focus. One mouse, so one global. */
+private var lastHoverFocusAt = androidx.compose.ui.geometry.Offset.Unspecified
+
+/**
+ * Hovering an item focuses it, but only when the pointer itself moved. Focusing scrolls the list,
+ * which slides a new item under a still pointer and fires another Enter; following that one too
+ * made lists scroll on their own (air mouse / mouse on TV).
+ */
 @OptIn(ExperimentalComposeUiApi::class)
-fun Modifier.mouseHoverToFocus(focusRequester: FocusRequester): Modifier = this
-    .focusRequester(focusRequester)
-    .pointerInput(Unit) {
-        awaitPointerEventScope {
-            while (true) {
-                val event = awaitPointerEvent()
-                if (event.type == PointerEventType.Enter) {
+fun Modifier.mouseHoverToFocus(focusRequester: FocusRequester): Modifier = composed {
+    var coords by remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    this
+        .focusRequester(focusRequester)
+        .onGloballyPositioned { coords = it }
+        .pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    if (event.type != PointerEventType.Enter) continue
+                    val c = coords?.takeIf { it.isAttached } ?: continue
+                    val at = c.localToWindow(event.changes.first().position)
+                    val last = lastHoverFocusAt
+                    if (last.isSpecified && (at - last).getDistance() < 2f) continue // list moved, pointer didn't
+                    lastHoverFocusAt = at
                     focusRequester.requestFocus()
                 }
             }
         }
-    }
+}
 
 @Composable
 fun Surface(
