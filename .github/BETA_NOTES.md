@@ -1,16 +1,12 @@
 <p align="center"><img src="https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/screenshot/jtv-mark.svg" width="110" alt="JTV" /></p>
 
-# JTV 2.0 beta 10
+# JTV 2.0 beta 11
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.10.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.11.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 10
-- **Pictures of what's on.** On TV and tablet Home, the side panel shows a picture of the show playing on the channel you rest on, with its time and description, even with the programme guide setting off. The channels just above and below are loaded ahead, so moving down is quick.
-- **Choose your categories.** **Settings → Categories**: show or hide any category and change their order (Move up, Move down, Move to top). Your choice applies to Home, the Guide and the player's channel list. All channels always stays.
-- **Volume up / Volume down** can now be put on any button (Settings → Remote buttons), handy for game controllers.
-- **Fixes for TV remotes:**
-  - **Remove buttons** in Remote buttons works with remotes connected over HDMI-CEC (it used to record OK instead).
-  - **Remove from favourites** now asks and then removes correctly with a remote.
+## New in beta 11
+- **One loading sign.** While a channel loads with the controls open, only the ring around Play/Pause shows (there used to be a second spinner in the middle).
+- **Tidier phone and tablet player.** In full screen, the show bar at the bottom spans the width with even gaps on all sides. On the portrait player, the channel tag is a small rounded label set in from the corner.
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
@@ -19,6 +15,14 @@
 ---
 
 ## Earlier betas
+
+### Beta 10
+- **Pictures of what's on.** On TV and tablet Home, the side panel shows a picture of the show playing on the channel you rest on, with its time and description, even with the programme guide setting off. The channels just above and below are loaded ahead, so moving down is quick.
+- **Choose your categories.** **Settings → Categories**: show or hide any category and change their order (Move up, Move down, Move to top). Your choice applies to Home, the Guide and the player's channel list. All channels always stays.
+- **Volume up / Volume down** can now be put on any button (Settings → Remote buttons), handy for game controllers.
+- **Fixes for TV remotes:**
+  - **Remove buttons** in Remote buttons works with remotes connected over HDMI-CEC (it used to record OK instead).
+  - **Remove from favourites** now asks and then removes correctly with a remote.
 
 ### Beta 9
 - **Works on more TV boxes.** Some boxes (for example MXQ Pro) were shown the phone layout. JTV now asks once at first start: **TV, Phone or Tablet**. You can change it any time in **Settings → Device type** (#6).
