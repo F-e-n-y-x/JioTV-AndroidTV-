@@ -27,18 +27,19 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 ### On the TV
 
 <div align="center">
-  <img src="screenshot/v2/tv-home.png" width="49%" alt="TV home: categories, channels, and what's on now" />
+  <img src="screenshot/v2/tv-home.png" width="49%" alt="TV home: categories, channels, and the running show with its picture" />
   <img src="screenshot/v2/tv-guide.png" width="49%" alt="Guide with the Replay category: past shows you can watch again" />
-  <img src="screenshot/v2/tv-player.png" width="49%" alt="Player info strap with the big channel number" />
-  <img src="screenshot/v2/tv-browse.png" width="49%" alt="Channel browser: tiles over the picture" />
+  <img src="screenshot/v2/tv-player.png" width="49%" alt="Channel card: logo, show, time left and what's next" />
+  <img src="screenshot/v2/tv-browse.png" width="49%" alt="Channel browser: tiles over the picture, the focused one shows its name" />
   <img src="screenshot/v2/tv-paused-seek.png" width="49%" alt="Paused live TV with the seek bar and Live button" />
   <img src="screenshot/v2/tv-options.png" width="49%" alt="Options panel: language, quality, voice boost, sleep" />
+  <img src="screenshot/v2/tv-controls.png" width="49%" alt="Controls while live: no seek bar until you need it" />
 </div>
 
 - **What's on now, at a glance.** Every channel shows its number, logo, the show and time left. Press **OK** to watch.
 - **Guide with replays.** A time grid with a gentle "now" line. The **Replay** category lists channels Jio lets you watch again: press OK on a past show to watch it from the start, up to 7 days back.
 - **Pause and rewind live TV.** Pause keeps your place. Use ←/→ to rewind or skip, and **Live** to jump back.
-- **The channel strap.** Change channel and a broadcast-style strap shows the big number, the show, "Series · Drama · U · Hindi", time left and what's next.
+- **The channel card.** Change channel and a wide, see-through card shows the logo, number, show, time left and what's next.
 - **Browse without stopping the show.** Press ← to slide channel tiles over the picture; ↑ ↓ change category.
 - **One clear Options panel (→).** Language, picture quality in plain words, aspect, Voice Boost, sleep timer and favourite.
 - **Your remote, your buttons.** Settings → Remote buttons: put any action on any button (holding a button counts too). There are profiles for Standard, Fire TV, Basic and Air-mouse remotes.
@@ -53,8 +54,10 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
   <img src="screenshot/v2/phone-home-light.png" width="19%" alt="Phone home, light" />
 </div>
 <div align="center">
+  <img src="screenshot/v2/tablet-home.png" width="49%" alt="Tablet home with the running show's picture" />
   <img src="screenshot/v2/tablet-player.png" width="49%" alt="Tablet player: video, details and channels side by side" />
   <img src="screenshot/v2/tablet-mini.png" width="49%" alt="Tablet with the floating mini player" />
+  <img src="screenshot/v2/phone-landscape.png" width="49%" alt="Phone landscape: small controls, the picture stays clear" />
 </div>
 
 - **A YouTube-style player.**
@@ -205,17 +208,18 @@ The v2 beta lives on the [`v2-lab`](https://github.com/F-e-n-y-x/JioTV-AndroidTV
 
 ---
 
-<details>
-<summary><b>📸 Stable 1.5.x screenshots</b></summary>
+## 📸 Stable 1.5 (v1)
+
+The stable app, version 1.5.x, on a TV.
+
 <div align="center">
-  <img src="screenshot/ui_screenshot_1.png" width="32%" alt="Home" />
-  <img src="screenshot/ui_screenshot_2.png" width="32%" alt="Channels" />
-  <img src="screenshot/ui_screenshot_3.png" width="32%" alt="Player" />
-  <img src="screenshot/ui_screenshot_4.png" width="32%" alt="EPG" />
-  <img src="screenshot/ui_screenshot_5.png" width="32%" alt="Settings" />
-  <img src="screenshot/ui_screenshot_6.png" width="32%" alt="Player settings" />
+  <img src="screenshot/v1/tv-home.png" width="49%" alt="Stable home: channel grid with favourites starred" />
+  <img src="screenshot/v1/tv-guide.png" width="49%" alt="Stable guide view: now playing and what's next" />
+  <img src="screenshot/v1/tv-favourites.png" width="49%" alt="Stable favourites" />
+  <img src="screenshot/v1/tv-channel-menu.png" width="49%" alt="Hold OK on a channel: watch or add to favourites" />
+  <img src="screenshot/v1/tv-settings.png" width="49%" alt="Stable settings" />
+  <img src="screenshot/v1/tv-settings-playback.png" width="49%" alt="Playback settings: Up arrow = next channel, reverse CH+/CH-" />
 </div>
-</details>
 
 <details>
 <summary><b>📝 Changelog</b></summary>
