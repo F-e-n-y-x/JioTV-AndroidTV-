@@ -536,7 +536,8 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
                             SeekRow(d.timeshift, act, onInteract = bump)
                             Spacer(Modifier.height(4.dp))
                         }
-                        d.playing?.let { MiniInfoLine(it, d.epg, d.timeshift, Modifier.widthIn(max = 720.dp)) }
+                        // Full width between the same left / right / bottom gaps as the TV card.
+                        d.playing?.let { MiniInfoLine(it, d.epg, d.timeshift) }
                     }
                 }
             }
@@ -554,7 +555,7 @@ private fun MiniInfoLine(ch: Channel, epg: EpgSource, ts: Timeshift?, modifier: 
     val now = LocalNow.current
     val cur = rememberNowNext(epg, ch.id, always = true)?.now
     val replaying = isReplaying(cur)
-    Column(modifier.widthIn(max = 760.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg)) {
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg)) {
         Row(Modifier.height(if (tv) 56.dp else 48.dp), verticalAlignment = Alignment.CenterVertically) {
             com.fenyx.jtv.ui.components.ChannelPlate(ch.logoUrl, if (tv) 60.dp else 52.dp, if (tv) 40.dp else 34.dp, Modifier.padding(start = 8.dp))
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {

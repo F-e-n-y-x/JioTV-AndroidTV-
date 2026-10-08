@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -264,19 +265,22 @@ internal fun PhoneVideo(
         }
         // The number tag (and "Behind live") while the controls are hidden; the controls carry the name.
         if (playing != null && !controls) {
-            Row(Modifier.align(Alignment.BottomStart), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.background(c.acc).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                    Text(
-                        if (playing.channelNumber > 0) playing.channelNumber.toString() else "–",
-                        style = numberStyle(18.sp), color = c.accTx, maxLines = 1,
-                    )
-                }
-                Box(Modifier.background(StrapBg).padding(horizontal = 10.dp, vertical = 5.dp)) {
+            // Inset 12dp from the left and bottom edges, one rounded see-through plaque like the TV card:
+            // amber number · name.
+            Row(Modifier.align(Alignment.BottomStart).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.clip(RoundedCornerShape(6.dp)).background(StrapBg).padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (playing.channelNumber > 0) {
+                        JText(playing.channelNumber.toString(), 15.sp, color = c.acc, weight = FontWeight.Bold)
+                        Spacer(Modifier.width(8.dp))
+                    }
                     JText(playing.name, 15.sp, weight = FontWeight.SemiBold)
                 }
                 BehindLiveTag(
                     d.timeshift, 14.sp,
-                    Modifier.padding(start = 6.dp).background(StrapBg, RoundedCornerShape(4.dp))
+                    Modifier.padding(start = 6.dp).background(StrapBg, RoundedCornerShape(6.dp))
                         .padding(horizontal = 8.dp, vertical = 5.dp),
                 )
             }
