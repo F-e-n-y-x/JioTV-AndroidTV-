@@ -219,6 +219,10 @@
     <string name="remote_intro">कोई काम चुनें, फिर उसके लिए रिमोट का बटन दबाएँ।</string>
     <string name="remote_type">रिमोट का प्रकार</string>
     <string name="remote_type_desc">एक बार में सारे बटन सेट करता है</string>
+    <string name="remote_up_arrow">देखते समय ऊपर वाला तीर</string>
+    <string name="remote_up_arrow_desc">नीचे वाला तीर इसका उल्टा करता है। CH+ हमेशा अगले चैनल पर जाता है।</string>
+    <string name="remote_up_next">अगला चैनल</string>
+    <string name="remote_up_previous">पिछला चैनल</string>
     <string name="remote_custom">अपनी पसंद का</string>
     <string name="remote_reset">पहले जैसा करें</string>
     <string name="remote_section_actions">हर काम के बटन</string>

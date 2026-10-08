@@ -181,6 +181,7 @@ fun TvPlayerScreen(
     val settingsManager = remember { SettingsManager(context) }
     val favoriteChannels by settingsManager.favoriteChannelsFlow.collectAsState(initial = emptySet())
     val playerSetupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
+    val upIsNext by settingsManager.upIsNextChannelFlow.collectAsState(initial = true)
     // "Refresh Login" (server mode) state shown in the right-side overlay.
     var refreshingCreds by remember { mutableStateOf(false) }
 
@@ -572,6 +573,7 @@ fun TvPlayerScreen(
                     exoPlayer.prepare()
                     exoPlayer.playWhenReady = true
                     userPaused = false // a new channel always starts playing
+                    ts.paused = false
                 }
                 persistLastChannel()
             } else {
@@ -928,6 +930,7 @@ fun TvPlayerScreen(
 
     fun setPaused(p: Boolean) {
         if (p) { exoPlayer.pause(); userPaused = true } else { exoPlayer.play(); userPaused = false }
+        ts.paused = userPaused
         ts.update(exoPlayer)
     }
 
@@ -1627,12 +1630,12 @@ fun TvPlayerScreen(
                         Key.DirectionUp -> when (ov) {
                             PlayerOverlay.Browse -> { browseCategory(-1); true }
                             PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
-                            else -> { doZap(-1); true }
+                            else -> { doZap(if (upIsNext) 1 else -1); true }
                         }
                         Key.DirectionDown -> when (ov) {
                             PlayerOverlay.Browse -> { browseCategory(1); true }
                             PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
-                            else -> { doZap(1); true }
+                            else -> { doZap(if (upIsNext) -1 else 1); true }
                         }
                         Key.DirectionLeft -> when (ov) {
                             PlayerOverlay.Browse, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
@@ -1699,9 +1702,10 @@ fun TvPlayerScreen(
 
             val err = playbackError
             if (err != null && !isBuffering && !mini && !inPip) {
-                // Tablet page: over the picture, not the middle of the page.
-                val errBox = if (tabletPage) Modifier.videoBox(videoMode) else Modifier.matchParentSize()
-                Box(errBox, contentAlignment = Alignment.Center) { ErrorPanel(
+                // Page players: over the picture, not the middle of the page (it used to cover the
+                // channel list on phones). Full screen: low and small, so it doesn't fill the screen.
+                val errBox = if (pagePlayer) Modifier.videoBox(videoMode) else Modifier.matchParentSize()
+                Box(errBox, contentAlignment = if (pagePlayer) Alignment.Center else Alignment.BottomCenter) { ErrorPanel(
                     error = err,
                     channel = currentChannel,
                     firstFocus = errorFocus,
@@ -1714,7 +1718,7 @@ fun TvPlayerScreen(
                             ErrorAction.GoLive -> exitReplay()
                         }
                     },
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(if (pagePlayer) 8.dp else 48.dp),
                 ) }
             }
 

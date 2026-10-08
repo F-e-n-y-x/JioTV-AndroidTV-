@@ -88,6 +88,7 @@ internal fun RemoteButtonsScreen(modifier: Modifier, onClose: () -> Unit) {
     val c = Jtv.colors
     val isTv = Jtv.isTv
     val map by settings.remoteKeyMapFlow.collectAsState(initial = RemoteKeys.Default)
+    val upIsNext by settings.upIsNextChannelFlow.collectAsState(initial = true)
     var sheet by remember { mutableStateOf<RemoteSheet>(RemoteSheet.None) }
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { if (isTv) runCatching { firstFocus.requestFocus() } }
@@ -137,6 +138,13 @@ internal fun RemoteButtonsScreen(modifier: Modifier, onClose: () -> Unit) {
                     label = stringResource(R.string.remote_reset), value = "",
                     description = stringResource(RemoteProfile.Standard.labelRes), destructive = false, modifier = Modifier,
                 ) { sheet = RemoteSheet.Reset }
+            }
+            item(key = "up", contentType = "row") {
+                SettingsRow(
+                    label = stringResource(R.string.remote_up_arrow),
+                    value = stringResource(if (upIsNext) R.string.remote_up_next else R.string.remote_up_previous),
+                    description = stringResource(R.string.remote_up_arrow_desc), destructive = false, modifier = Modifier,
+                ) { scope.launch { settings.setUpIsNextChannel(!upIsNext) } }
             }
             item(key = "s:actions", contentType = "section") { SettingsSection(stringResource(R.string.remote_section_actions)) }
             items(RemoteAction.entries, key = { it.id }, contentType = { "row" }) { a ->

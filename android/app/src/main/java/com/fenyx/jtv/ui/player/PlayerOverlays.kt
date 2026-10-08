@@ -534,7 +534,7 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
     }
 }
 
-/** One slim line over the video: small number block · show title · time left · thin progress. */
+/** One slim line over the video: logo · show title · time left · thin progress. */
 @Composable
 private fun MiniInfoLine(ch: Channel, epg: EpgSource, ts: Timeshift?, modifier: Modifier = Modifier) {
     val c = Jtv.colors
@@ -542,9 +542,9 @@ private fun MiniInfoLine(ch: Channel, epg: EpgSource, ts: Timeshift?, modifier: 
     val now = LocalNow.current
     val cur = rememberNowNext(epg, ch.id, always = true)?.now
     val replaying = isReplaying(cur)
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg.copy(alpha = 0.85f))) {
+    Column(modifier.widthIn(max = 760.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg.copy(alpha = 0.85f))) {
         Row(Modifier.height(if (tv) 56.dp else 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            NumberBlock(ch.channelNumber, Modifier.width(64.dp).fillMaxHeight(), 22.sp)
+            com.fenyx.jtv.ui.components.ChannelPlate(ch.logoUrl, if (tv) 60.dp else 52.dp, if (tv) 40.dp else 34.dp, Modifier.padding(start = 8.dp))
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 JText(cur?.title ?: ch.name, if (tv) 18.sp else 16.sp, color = c.tx, weight = FontWeight.SemiBold)
                 JText(

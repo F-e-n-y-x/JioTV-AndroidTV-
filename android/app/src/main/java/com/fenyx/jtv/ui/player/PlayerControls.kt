@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -116,6 +117,15 @@ internal class Timeshift {
      * bar covers the programme; the Live button reads "Go live" and returns to the live channel.
      */
     var replay by mutableStateOf(false)
+
+    /** The user paused (set by the player). */
+    var paused by mutableStateOf(false)
+
+    /**
+     * Watching live and playing: the bar has nothing to show, so it stays out of the way until the
+     * user pauses, rewinds or moves to it (TV). Schedule files and replays always show it.
+     */
+    val barQuiet: Boolean get() = !vod && !replay && !paused && atLive && scrubMs == null
 
     val behindMs: Long get() = (spanMs - positionMs).coerceAtLeast(0L)
     /** Live: at the live point. Schedule file: within 30 s of the scheduled position. Replay: never. */
@@ -468,20 +478,24 @@ internal fun SeekRow(
     onBarFocus: (Boolean) -> Unit = {},
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
+    var barFocused by remember { mutableStateOf(false) }
+    // TV: a quiet bar stays focusable (Down still reaches it) but invisible until focused.
+    // Touch: a quiet bar isn't there at all, so a stray tap can't seek.
+    val quiet = ts.barQuiet && !barFocused
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (ts.seekable) {
+        if (ts.seekable && !(quiet && !Jtv.isTv)) {
             LiveSeekBar(
                 ts, onCommit = { actions.seekTo(it) }, onInteract = onInteract,
-                modifier = Modifier.weight(1f).then(
+                modifier = Modifier.weight(1f).alpha(if (quiet) 0f else 1f).then(
                     if (upFocus != null || liveFocus != null) Modifier.focusProperties {
                         upFocus?.let { up = it }
                         liveFocus?.let { down = it }
                     } else Modifier,
                 ),
-                focus = barFocus, onFocus = onBarFocus,
+                focus = barFocus, onFocus = { barFocused = it; onBarFocus(it) },
             )
             Spacer(Modifier.width(10.dp))
-            BehindTime(ts)
+            if (!quiet) BehindTime(ts)
             Spacer(Modifier.width(8.dp))
         } else {
             Spacer(Modifier.weight(1f))

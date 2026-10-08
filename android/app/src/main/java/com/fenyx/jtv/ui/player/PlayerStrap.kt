@@ -72,16 +72,14 @@ import kotlinx.coroutines.delay
 
 @Immutable
 internal data class StrapSizes(
-    val height: Dp, val numW: Dp, val numSize: TextUnit, val nameSize: TextUnit,
-    val titleSize: TextUnit, val metaSize: TextUnit, val nextW: Dp,
+    val plateW: Dp, val plateH: Dp, val nameSize: TextUnit,
+    val titleSize: TextUnit, val metaSize: TextUnit, val maxW: Dp,
 )
 
 @Immutable
 internal data class TileSizes(val w: Dp, val h: Dp, val plateW: Dp, val plateH: Dp, val numSize: TextUnit, val gap: Dp)
 
-internal val TvStrap = StrapSizes(112.dp, 132.dp, 48.sp, 14.sp, 22.sp, 14.sp, 280.dp)
-internal val TabletStrap = StrapSizes(132.dp, 150.dp, 56.sp, 16.sp, 26.sp, 16.sp, 340.dp)
-internal val PhoneLandStrap = StrapSizes(96.dp, 104.dp, 36.sp, 14.sp, 18.sp, 14.sp, 220.dp)
+internal val TvStrap = StrapSizes(96.dp, 64.dp, 16.sp, 22.sp, 15.sp, 760.dp)
 
 internal val TvTiles = TileSizes(100.dp, 72.dp, 62.dp, 34.dp, 15.sp, 10.dp)
 internal val TabletTiles = TileSizes(108.dp, 80.dp, 68.dp, 38.dp, 16.sp, 12.dp)
@@ -144,7 +142,10 @@ internal fun EpgStrap(
     InfoStrap(channel, nn, LocalNow.current, s, modifier, timeshift)
 }
 
-/** Amber number block · channel / show / meta / times + progress · NEXT column (D-tv-player-dark). */
+/**
+ * The channel card on zap / Info: logo · "151 Movies Now HD" · show · times + thin progress · one
+ * "Next" line. Compact on purpose: it sits over the picture, so it stays small and bottom-left.
+ */
 @Composable
 internal fun InfoStrap(
     channel: Channel, nn: NowNext?, now: Long, s: StrapSizes, modifier: Modifier = Modifier,
@@ -152,63 +153,43 @@ internal fun InfoStrap(
     timeshift: Timeshift? = null,
 ) {
     val c = Jtv.colors
-    val meta = nn?.now?.let { programMeta(it, channel.language) }.orEmpty()
-    // The meta line adds one line of height only when there is one, so straps without it are unchanged.
-    val extra = if (meta.isNotEmpty()) with(androidx.compose.ui.platform.LocalDensity.current) { (s.metaSize * 1.3f).toDp() } + 2.dp else 0.dp
+    val cur = nn?.now
     Row(
-        modifier.fillMaxWidth().height(s.height + extra).clip(RoundedCornerShape(8.dp)).background(StrapBg),
+        modifier.widthIn(max = s.maxW).clip(RoundedCornerShape(8.dp)).background(StrapBg).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        NumberBlock(channel.channelNumber, Modifier.width(s.numW).fillMaxHeight(), s.numSize)
-        val cur = nn?.now
-        Column(
-            Modifier.weight(1f).fillMaxHeight().padding(horizontal = 20.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            if (cur != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    JText(channel.name, s.nameSize, color = c.t2, weight = FontWeight.SemiBold)
-                    if (timeshift != null) BehindLiveTag(timeshift, s.nameSize, Modifier.padding(start = 14.dp))
+        ChannelPlate(channel.logoUrl, s.plateW, s.plateH)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f, fill = false)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (channel.channelNumber > 0) {
+                    JText("${channel.channelNumber}", s.nameSize, color = c.acc, weight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
                 }
+                JText(channel.name, s.nameSize, color = if (cur != null) c.t2 else c.tx, weight = FontWeight.SemiBold)
+                if (timeshift != null) BehindLiveTag(timeshift, s.metaSize, Modifier.padding(start = 12.dp))
+            }
+            if (cur != null) {
                 JText(cur.title, s.titleSize, weight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
-                if (meta.isNotEmpty()) JText(meta, s.metaSize, color = c.t2, modifier = Modifier.padding(top = 2.dp))
                 if (isReplaying(cur)) {
-                    // Catch-up: when it was on; the seek bar shows where in the show we are.
-                    JText(replayStatus(cur), s.metaSize, color = c.tx, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
-                } else Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    JText(replayStatus(cur), s.metaSize, color = c.tx, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                } else Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     JText("${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)}", s.metaSize, color = c.t2)
-                    Spacer(Modifier.width(12.dp))
-                    JtvProgress(cur.progress(now), Modifier.weight(1f))
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(10.dp))
+                    JtvProgress(cur.progress(now), Modifier.width(120.dp))
+                    Spacer(Modifier.width(10.dp))
                     val left = cur.minutesLeft(now)
                     if (left <= 10) EndsSoonPill(cur.stopMs, fontSize = s.metaSize)
                     else JText(pluralStringResource(R.plurals.player_min_left, left, left), s.metaSize, color = c.t2)
                 }
+                nn.later.firstOrNull()?.let { p ->
+                    JText(
+                        "${stringResource(R.string.player_next_label)}  ${formatTime(p.startMs)}  ${p.title}",
+                        s.metaSize, color = c.t2, modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             } else {
-                JText(channel.name, s.titleSize, weight = FontWeight.Bold)
-                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    JText(channelSubtitle(channel), s.metaSize, color = c.t2)
-                    if (timeshift != null) BehindLiveTag(timeshift, s.metaSize, Modifier.padding(start = 14.dp))
-                }
-            }
-        }
-        val later = nn?.later.orEmpty().take(3)
-        if (later.isNotEmpty()) {
-            Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
-            Column(
-                Modifier.width(s.nextW).fillMaxHeight().padding(horizontal = 18.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
-            ) {
-                SectionLabel(stringResource(R.string.player_next_label))
-                later.forEach { p ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            formatTime(p.startMs),
-                            style = textStyle(s.metaSize).copy(fontFeatureSettings = "tnum"),
-                            color = c.t2, maxLines = 1, modifier = Modifier.width(76.dp),
-                        )
-                        JText(p.title, s.metaSize, modifier = Modifier.weight(1f))
-                    }
-                }
+                JText(channelSubtitle(channel), s.metaSize, color = c.t2, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }
@@ -391,7 +372,7 @@ internal fun errorActionLabel(a: ErrorAction) = stringResource(when (a) {
     ErrorAction.GoLive -> R.string.player_go_live
 })
 
-/** One sentence and one or two buttons; focus lands on the first button. */
+/** A small card: one sentence, the channel, one or two buttons. Focus lands on the first button. */
 @Composable
 internal fun ErrorPanel(
     error: PlayerError,
@@ -402,29 +383,30 @@ internal fun ErrorPanel(
     modifier: Modifier = Modifier,
 ) {
     val c = Jtv.colors
-    val h = if (touch) 56.dp else 44.dp
+    val h = if (touch) 48.dp else 40.dp
     Column(
-        modifier.widthIn(max = 640.dp).clip(RoundedCornerShape(8.dp)).background(StrapBg).padding(28.dp),
+        modifier.widthIn(max = 520.dp).clip(RoundedCornerShape(8.dp)).background(StrapBg)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            stringResource(error.message), style = textStyle(22.sp, FontWeight.SemiBold), color = c.tx, textAlign = TextAlign.Center,
+            stringResource(error.message), style = textStyle(17.sp, FontWeight.SemiBold), color = c.tx,
+            textAlign = TextAlign.Center, maxLines = 3,
         )
         if (channel != null) {
-            Spacer(Modifier.height(6.dp))
             JText(
                 if (channel.channelNumber > 0) "${channel.channelNumber}  ${channel.name}" else channel.name,
-                16.sp, color = c.t2,
+                14.sp, color = c.t2, modifier = Modifier.padding(top = 2.dp),
             )
         }
-        Spacer(Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             JtvButton(
                 errorActionLabel(error.primary), { onAction(error.primary) },
-                modifier = Modifier.focusRequester(firstFocus), primary = true, minHeight = h, fontSize = 18.sp,
+                modifier = Modifier.focusRequester(firstFocus), primary = true, minHeight = h, fontSize = 16.sp,
             )
             error.secondary?.let { a ->
-                JtvButton(errorActionLabel(a), { onAction(a) }, minHeight = h, fontSize = 18.sp)
+                JtvButton(errorActionLabel(a), { onAction(a) }, minHeight = h, fontSize = 16.sp)
             }
         }
     }
