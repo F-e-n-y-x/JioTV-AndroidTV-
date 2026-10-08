@@ -57,7 +57,9 @@ fun ChannelActionsDialog(channel: Channel, actions: List<ChannelAction>, startWi
     val c = Jtv.colors
     val firstFocus = remember { FocusRequester() }
     var confirming by remember { mutableStateOf(startWith) }
-    LaunchedEffect(confirming) { runCatching { firstFocus.requestFocus() } }
+    // Wait a frame: switching to the "Remove …?" step swaps the focused buttons, and asking for focus
+    // before the new ones exist left nothing focused on TV, so OK did nothing.
+    LaunchedEffect(confirming) { androidx.compose.runtime.withFrameNanos { }; runCatching { firstFocus.requestFocus() } }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
       androidx.compose.foundation.layout.Box(
