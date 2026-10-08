@@ -228,7 +228,7 @@
     <string name="remote_reset">Reset to default</string>
     <string name="remote_section_actions">Buttons for each action</string>
     <string name="remote_not_set">Not set</string>
-    <string name="remote_note">Back, OK and the arrows always keep their job. You can give OK and the arrows a hold (long press) action. Volume buttons and game controller buttons can take an action too; a volume button with no action still changes the volume.</string>
+    <string name="remote_note">Back, OK and the arrows always keep their job. The Remote type profiles can still put a long press on OK. Volume buttons and game controller buttons can take an action too; a volume button with no action still changes the volume.</string>
     <string name="remote_hint_back">go back</string>
     <string name="remote_reset_title">Reset remote buttons?</string>
     <string name="remote_reset_message">Every button goes back to the standard Android TV remote.</string>
@@ -236,7 +236,7 @@
     <string name="remote_replace_title">Already used for %s — replace?</string>
     <string name="remote_replace_message">%1$s will do \"%2$s\" instead.</string>
     <string name="remote_replace">Replace</string>
-    <string name="remote_locked">%s keeps its own job. Try another button, or hold it.</string>
+    <string name="remote_locked">%s keeps its own job. Try another button.</string>
     <string name="remote_system">%s belongs to the system. Try another button.</string>
     <string name="remote_press">Press the button you want to use…</string>
     <string name="remote_holding">Hold %s: let go to use it</string>

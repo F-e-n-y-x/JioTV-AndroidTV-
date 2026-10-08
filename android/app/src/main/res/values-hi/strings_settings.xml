@@ -228,7 +228,7 @@
     <string name="remote_reset">पहले जैसा करें</string>
     <string name="remote_section_actions">हर काम के बटन</string>
     <string name="remote_not_set">सेट नहीं</string>
-    <string name="remote_note">वापस, OK और तीर वाले बटन का काम नहीं बदलता। OK और तीर बटन को दबाकर रखने पर कोई काम दे सकते हैं। आवाज़ के बटन और गेम कंट्रोलर के बटन पर भी काम सेट कर सकते हैं; बिना काम वाला आवाज़ का बटन आवाज़ ही बदलेगा।</string>
+    <string name="remote_note">वापस, OK और तीर वाले बटन का काम नहीं बदलता। रिमोट के प्रकार वाले प्रोफ़ाइल OK को दबाकर रखने का काम अब भी दे सकते हैं। आवाज़ के बटन और गेम कंट्रोलर के बटन पर भी काम सेट कर सकते हैं; बिना काम वाला आवाज़ का बटन आवाज़ ही बदलेगा।</string>
     <string name="remote_hint_back">वापस जाएँ</string>
     <string name="remote_reset_title">रिमोट के बटन पहले जैसे करें?</string>
     <string name="remote_reset_message">हर बटन सामान्य Android TV रिमोट जैसा हो जाएगा।</string>
@@ -236,7 +236,7 @@
     <string name="remote_replace_title">यह \"%s\" के लिए लगा है — बदलें?</string>
     <string name="remote_replace_message">%1$s अब \"%2$s\" करेगा।</string>
     <string name="remote_replace">बदलें</string>
-    <string name="remote_locked">%s का अपना काम है। कोई और बटन आज़माएँ, या इसे दबाकर रखें।</string>
+    <string name="remote_locked">%s का अपना काम है। कोई और बटन आज़माएँ।</string>
     <string name="remote_system">%s सिस्टम का बटन है। कोई और बटन आज़माएँ।</string>
     <string name="remote_press">जो बटन लगाना है, उसे दबाएँ…</string>
     <string name="remote_holding">%s दबाकर रखा: लगाने के लिए छोड़ दें</string>

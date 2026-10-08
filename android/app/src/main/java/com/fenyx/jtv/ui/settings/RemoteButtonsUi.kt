@@ -244,6 +244,10 @@ private fun CaptureDialog(
                 when {
                     RemoteKeys.isBack(code) -> { if (!down) onDismiss(); true }
                     RemoteKeys.isSystem(code) -> false
+                    // OK and the arrows only move and press this dialog's buttons, never get recorded:
+                    // HDMI-CEC remotes auto-repeat even short presses, so "is it a hold?" can't be told
+                    // apart and pressing "Remove buttons" recorded OK instead. (Profiles still set hold-OK.)
+                    RemoteKeys.isLockedTap(code) -> { downCode = null; holding = null; false }
                     down && n.repeatCount == 0 -> {
                         downCode = code
                         repeated = false
