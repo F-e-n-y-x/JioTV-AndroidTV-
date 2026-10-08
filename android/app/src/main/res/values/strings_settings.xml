@@ -228,7 +228,7 @@
     <string name="remote_reset">Reset to default</string>
     <string name="remote_section_actions">Buttons for each action</string>
     <string name="remote_not_set">Not set</string>
-    <string name="remote_note">Back, OK and the arrows always keep their job. You can give OK and the arrows a hold (long press) action.</string>
+    <string name="remote_note">Back, OK and the arrows always keep their job. You can give OK and the arrows a hold (long press) action. Volume buttons and game controller buttons can take an action too; a volume button with no action still changes the volume.</string>
     <string name="remote_hint_back">go back</string>
     <string name="remote_reset_title">Reset remote buttons?</string>
     <string name="remote_reset_message">Every button goes back to the standard Android TV remote.</string>
@@ -251,6 +251,8 @@
     <string name="remote_action_favourite">Favourite on or off</string>
     <string name="remote_action_guide">Programme guide</string>
     <string name="remote_action_channel_list">Channel list</string>
+    <string name="remote_action_channel_up">Channel up</string>
+    <string name="remote_action_channel_down">Channel down</string>
     <string name="remote_action_previous_channel">Previous channel</string>
     <string name="remote_action_play_pause">Pause or play</string>
     <string name="remote_action_language">Sound language</string>
@@ -284,6 +286,9 @@
     <string name="remote_key_right">Right arrow</string>
     <string name="remote_key_back">Back</string>
     <string name="remote_key_menu">Menu</string>
+    <string name="remote_key_volume_up">Volume up</string>
+    <string name="remote_key_volume_down">Volume down</string>
+    <string name="remote_key_mute">Mute</string>
     <string name="remote_key_guide">Guide</string>
     <string name="remote_key_info">Info</string>
     <string name="remote_key_red">Red button</string>

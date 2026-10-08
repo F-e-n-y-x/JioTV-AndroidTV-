@@ -1259,6 +1259,8 @@ fun TvPlayerScreen(
             com.fenyx.jtv.data.RemoteAction.Guide ->
                 if (epgModeState.value) onRemoteScreen(a) else if (ov != PlayerOverlay.Browse) openBrowse()
             com.fenyx.jtv.data.RemoteAction.ChannelList -> if (ov != PlayerOverlay.Browse) openBrowse()
+            com.fenyx.jtv.data.RemoteAction.ChannelUp -> doZap(1)
+            com.fenyx.jtv.data.RemoteAction.ChannelDown -> doZap(-1)
             com.fenyx.jtv.data.RemoteAction.PreviousChannel -> {
                 val p = tunedBefore
                 if (p == null) flash(context.getString(R.string.player_no_previous)) else doTune(p.first, p.second)
@@ -1703,9 +1705,9 @@ fun TvPlayerScreen(
             val err = playbackError
             if (err != null && !isBuffering && !mini && !inPip) {
                 // Page players: over the picture, not the middle of the page (it used to cover the
-                // channel list on phones). Full screen: low and small, so it doesn't fill the screen.
+                // channel list on phones). Full screen: small, in the middle, clear of the channel card.
                 val errBox = if (pagePlayer) Modifier.videoBox(videoMode) else Modifier.matchParentSize()
-                Box(errBox, contentAlignment = if (pagePlayer) Alignment.Center else Alignment.BottomCenter) { ErrorPanel(
+                Box(errBox, contentAlignment = Alignment.Center) { ErrorPanel(
                     error = err,
                     channel = currentChannel,
                     firstFocus = errorFocus,
@@ -1718,7 +1720,7 @@ fun TvPlayerScreen(
                             ErrorAction.GoLive -> exitReplay()
                         }
                     },
-                    modifier = Modifier.padding(if (pagePlayer) 8.dp else 48.dp),
+                    modifier = Modifier.padding(8.dp),
                 ) }
             }
 

@@ -190,7 +190,7 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                 NumberEntry(digits, match, miss, Modifier.align(Alignment.TopEnd).padding(end = 48.dp, top = 27.dp))
             } else if (strapVisible) {
                 Plaque(Modifier.align(Alignment.TopEnd).padding(end = 48.dp, top = 27.dp)) {
-                    JtvClock(now, size = 34.sp, dateColor = c.t2)
+                    JtvClock(now)
                 }
             }
 
@@ -198,7 +198,7 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                 visible = strapVisible, enter = fadeInFast, exit = fadeOutFast,
                 modifier = Modifier.align(Alignment.BottomStart),
             ) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 48.dp, vertical = 27.dp)) {
+                Column(Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 27.dp)) {
                     if (browsing && browseList.isNotEmpty()) {
                         ChannelRail(
                             channels = browseList,
@@ -217,10 +217,7 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                         val isPlaying = strapCh.id == d.playing?.id
                         EpgStrap(strapCh, d.epg, TvStrap, playing = isPlaying, timeshift = if (isPlaying) d.timeshift else null)
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Plaque(Modifier.padding(0.dp)) {
-                        KeyHint(hints(if (browsing) BrowseHint else BannerHint), keyColor = c.t2, color = c.t3)
-                    }
+                    BottomHint(hints(if (browsing) BrowseHint else BannerHint))
                 }
             }
 
@@ -272,7 +269,7 @@ private fun TvControls(ui: PlayerUi, d: OverlayData) {
                 stringResource(R.string.common_settings), { ui.openOptions() }, icon = Icons.Filled.Settings,
                 modifier = toCentre.focusRequester(settingsFr),
             )
-            Plaque { JtvClock(LocalNow.current, size = 28.sp, dateColor = c.t2) }
+            Plaque { JtvClock(LocalNow.current) }
         }
         CentreControls(
             paused = paused, buffering = d.buffering, actions = act,
@@ -285,7 +282,7 @@ private fun TvControls(ui: PlayerUi, d: OverlayData) {
                 else if (ui.focusedControl == ControlFocus.Play) ui.focusedControl = ControlFocus.None
             },
         )
-        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 48.dp, vertical = 27.dp)) {
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 48.dp)) {
             SeekRow(
                 ts, act, onInteract = bump,
                 barFocus = barFr, liveFocus = liveFr, upFocus = playFr,
@@ -295,9 +292,22 @@ private fun TvControls(ui: PlayerUi, d: OverlayData) {
                 },
             )
             Spacer(Modifier.height(10.dp))
-            d.playing?.let { MiniInfoLine(it, d.epg, null, Modifier.widthIn(max = 900.dp)) }
-            Spacer(Modifier.height(8.dp))
-            Plaque { KeyHint(hints(if (paused && ts.seekable) ControlsPausedHint else ControlsHint), keyColor = c.t2, color = c.t3) }
+            d.playing?.let { EpgStrap(it, d.epg, TvStrap) }
+            BottomHint(hints(if (paused && ts.seekable) ControlsPausedHint else ControlsHint))
+        }
+    }
+}
+
+/**
+ * The key hint under the channel card: small and centred in a 48dp bottom gap, so the card sits the
+ * same 48dp from the bottom as from the left and right edges.
+ */
+@Composable
+private fun BottomHint(items: List<Pair<String, String>>) {
+    val c = Jtv.colors
+    Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(StrapBg).padding(horizontal = 12.dp, vertical = 4.dp)) {
+            KeyHint(items, keyColor = c.t2, color = c.t3)
         }
     }
 }
@@ -352,7 +362,7 @@ internal fun OverVideoIcon(
         onClick = onClick,
         modifier = modifier.size(size).semantics { contentDescription = description; role = Role.Button },
         shape = CircleShape,
-        container = StrapBg.copy(alpha = 0.8f),
+        container = StrapBg,
     ) { focused ->
         Icon(
             icon, contentDescription = null, tint = if (focused) c.invTx else c.tx,
@@ -388,7 +398,7 @@ internal fun OptionsAndMenu(ui: PlayerUi, d: OverlayData, touch: Boolean, panelW
                 touch = touch,
                 onPage = { ui.optionsPage = it },
                 onClose = { ui.overlay = PlayerOverlay.None },
-                modifier = Modifier.width(panelWidth).fillMaxHeight().background(c.s1)
+                modifier = Modifier.width(panelWidth).fillMaxHeight().background(c.s1.copy(alpha = 0.92f))
                     .padding(start = 24.dp, end = edge, top = 27.dp, bottom = 27.dp),
             )
         }
@@ -492,7 +502,7 @@ internal fun TouchOverlays(ui: PlayerUi, d: OverlayData, compact: Boolean, exitF
                         })
                         OverVideoIcon(Icons.Filled.Settings, stringResource(R.string.common_settings), { ui.openOptions() })
                         if (exitFullScreen) OverVideoIcon(PlayerIcons.FullscreenExit, stringResource(R.string.player_exit_full_screen), { act.fullScreen(false) })
-                        if (!compact) Plaque { JtvClock(now, size = 24.sp, dateColor = c.t2) }
+                        if (!compact) Plaque { JtvClock(now, size = 18.sp) }
                     }
                     // ── Centre: previous · play/pause · next ──
                     if (!showChannels) CentreControls(
@@ -542,7 +552,7 @@ private fun MiniInfoLine(ch: Channel, epg: EpgSource, ts: Timeshift?, modifier: 
     val now = LocalNow.current
     val cur = rememberNowNext(epg, ch.id, always = true)?.now
     val replaying = isReplaying(cur)
-    Column(modifier.widthIn(max = 760.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg.copy(alpha = 0.85f))) {
+    Column(modifier.widthIn(max = 760.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg)) {
         Row(Modifier.height(if (tv) 56.dp else 48.dp), verticalAlignment = Alignment.CenterVertically) {
             com.fenyx.jtv.ui.components.ChannelPlate(ch.logoUrl, if (tv) 60.dp else 52.dp, if (tv) 40.dp else 34.dp, Modifier.padding(start = 8.dp))
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {

@@ -243,14 +243,10 @@ fun EndsSoonPill(stopMs: Long, modifier: Modifier = Modifier, fontSize: TextUnit
 
 /** Big clock + date, top-right of every TV screen. */
 @Composable
-fun JtvClock(now: Long, modifier: Modifier = Modifier, size: TextUnit = 34.sp, color: Color = Jtv.colors.tx, dateColor: Color = Jtv.colors.t3) {
+fun JtvClock(now: Long, modifier: Modifier = Modifier, size: TextUnit = 22.sp, color: Color = Jtv.colors.tx, dateColor: Color = Jtv.colors.t2) {
     Column(modifier, horizontalAlignment = Alignment.End) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(formatTimeShort(now), style = numberStyle(size), color = color, maxLines = 1)
-            Text(" " + formatAmPm(now), style = numberStyle(size * 0.45f), color = color, maxLines = 1,
-                modifier = Modifier.padding(bottom = (size.value * 0.12f).dp))
-        }
-        Text(formatDay(now), style = textStyle(size * 0.38f), color = dateColor, maxLines = 1)
+        Text("${formatTimeShort(now)} ${formatAmPm(now)}", style = textStyle(size, FontWeight.SemiBold), color = color, maxLines = 1)
+        Text(formatDay(now), style = textStyle(size * 0.64f), color = dateColor, maxLines = 1)
     }
 }
 
@@ -308,11 +304,6 @@ fun JtvButton(
 }
 
 /** Leading 4dp amber bar, drawn behind content (focused tiles / current category). */
-fun Modifier.leadingBar(color: Color, show: Boolean, width: Dp = 4.dp): Modifier =
-    if (!show) this else drawBehind {
-        drawRect(color, topLeft = Offset.Zero, size = Size(width.toPx(), size.height))
-    }
-
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(text, modifier = modifier, style = textStyle(12.sp, FontWeight.SemiBold), color = Jtv.colors.t3, maxLines = 1)

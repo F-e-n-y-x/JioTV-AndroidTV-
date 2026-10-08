@@ -228,7 +228,7 @@
     <string name="remote_reset">पहले जैसा करें</string>
     <string name="remote_section_actions">हर काम के बटन</string>
     <string name="remote_not_set">सेट नहीं</string>
-    <string name="remote_note">वापस, OK और तीर वाले बटन का काम नहीं बदलता। OK और तीर बटन को दबाकर रखने पर कोई काम दे सकते हैं।</string>
+    <string name="remote_note">वापस, OK और तीर वाले बटन का काम नहीं बदलता। OK और तीर बटन को दबाकर रखने पर कोई काम दे सकते हैं। आवाज़ के बटन और गेम कंट्रोलर के बटन पर भी काम सेट कर सकते हैं; बिना काम वाला आवाज़ का बटन आवाज़ ही बदलेगा।</string>
     <string name="remote_hint_back">वापस जाएँ</string>
     <string name="remote_reset_title">रिमोट के बटन पहले जैसे करें?</string>
     <string name="remote_reset_message">हर बटन सामान्य Android TV रिमोट जैसा हो जाएगा।</string>
@@ -251,6 +251,8 @@
     <string name="remote_action_favourite">फ़ेवरेट चालू या बंद</string>
     <string name="remote_action_guide">प्रोग्राम गाइड</string>
     <string name="remote_action_channel_list">चैनल लिस्ट</string>
+    <string name="remote_action_channel_up">अगला चैनल</string>
+    <string name="remote_action_channel_down">पिछला चैनल</string>
     <string name="remote_action_previous_channel">पिछला चैनल</string>
     <string name="remote_action_play_pause">रोकें या चलाएँ</string>
     <string name="remote_action_language">आवाज़ की भाषा</string>
@@ -284,6 +286,9 @@
     <string name="remote_key_right">दायाँ तीर</string>
     <string name="remote_key_back">वापस</string>
     <string name="remote_key_menu">मेन्यू</string>
+    <string name="remote_key_volume_up">आवाज़ बढ़ाएँ</string>
+    <string name="remote_key_volume_down">आवाज़ घटाएँ</string>
+    <string name="remote_key_mute">म्यूट</string>
     <string name="remote_key_guide">गाइड</string>
     <string name="remote_key_info">इन्फ़ो</string>
     <string name="remote_key_red">लाल बटन</string>

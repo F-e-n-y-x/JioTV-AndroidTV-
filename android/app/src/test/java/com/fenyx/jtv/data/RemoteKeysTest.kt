@@ -78,7 +78,8 @@ class RemoteKeysTest {
     }
 
     @Test fun systemKeysAreNeverTaken() {
-        assertEquals(AssignResult.SystemKey, std.assign(RemoteAction.Mute, KeySpec(KeyEvent.KEYCODE_VOLUME_MUTE)))
+        // Volume keys can take an action (game controllers); Home and Power never can.
+        assertTrue(std.assign(RemoteAction.ChannelList, KeySpec(KeyEvent.KEYCODE_VOLUME_UP)) is AssignResult.Done)
         assertEquals(AssignResult.SystemKey, std.assign(RemoteAction.Mute, KeySpec(KeyEvent.KEYCODE_HOME)))
     }
 

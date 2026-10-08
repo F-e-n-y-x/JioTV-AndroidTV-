@@ -22,6 +22,8 @@ enum class RemoteAction(val id: String, @StringRes val labelRes: Int) {
     Favourite("favourite", R.string.remote_action_favourite),
     Guide("guide", R.string.remote_action_guide),
     ChannelList("channel_list", R.string.remote_action_channel_list),
+    ChannelUp("channel_up", R.string.remote_action_channel_up),
+    ChannelDown("channel_down", R.string.remote_action_channel_down),
     PreviousChannel("previous_channel", R.string.remote_action_previous_channel),
     PlayPause("play_pause", R.string.remote_action_play_pause),
     Language("language", R.string.remote_action_language),
@@ -180,8 +182,9 @@ object RemoteKeys {
     private val BACK = setOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE)
     private val SYSTEM = setOf(
         KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_POWER, KeyEvent.KEYCODE_TV_POWER, KeyEvent.KEYCODE_SLEEP,
-        KeyEvent.KEYCODE_WAKEUP, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN,
-        KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_APP_SWITCH, KeyEvent.KEYCODE_ASSIST,
+        // Volume keys are NOT here: they can take an action in the player (game controllers have few
+        // buttons); with none set they fall through and change the volume as usual.
+        KeyEvent.KEYCODE_WAKEUP, KeyEvent.KEYCODE_APP_SWITCH, KeyEvent.KEYCODE_ASSIST,
         KeyEvent.KEYCODE_VOICE_ASSIST, KeyEvent.KEYCODE_ALL_APPS, KeyEvent.KEYCODE_NOTIFICATION,
     )
 
@@ -208,6 +211,23 @@ object RemoteKeys {
             KeyEvent.KEYCODE_DPAD_RIGHT -> UiText.of(R.string.remote_key_right)
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> UiText.of(R.string.remote_key_back)
             KeyEvent.KEYCODE_MENU -> UiText.of(R.string.remote_key_menu)
+            KeyEvent.KEYCODE_VOLUME_UP -> UiText.of(R.string.remote_key_volume_up)
+            KeyEvent.KEYCODE_VOLUME_DOWN -> UiText.of(R.string.remote_key_volume_down)
+            KeyEvent.KEYCODE_VOLUME_MUTE -> UiText.of(R.string.remote_key_mute)
+            // Game controller buttons: their printed names, the same in every language.
+            KeyEvent.KEYCODE_BUTTON_A -> UiText.raw("A")
+            KeyEvent.KEYCODE_BUTTON_B -> UiText.raw("B")
+            KeyEvent.KEYCODE_BUTTON_X -> UiText.raw("X")
+            KeyEvent.KEYCODE_BUTTON_Y -> UiText.raw("Y")
+            KeyEvent.KEYCODE_BUTTON_L1 -> UiText.raw("L1")
+            KeyEvent.KEYCODE_BUTTON_R1 -> UiText.raw("R1")
+            KeyEvent.KEYCODE_BUTTON_L2 -> UiText.raw("L2")
+            KeyEvent.KEYCODE_BUTTON_R2 -> UiText.raw("R2")
+            KeyEvent.KEYCODE_BUTTON_THUMBL -> UiText.raw("L3")
+            KeyEvent.KEYCODE_BUTTON_THUMBR -> UiText.raw("R3")
+            KeyEvent.KEYCODE_BUTTON_START -> UiText.raw("Start")
+            KeyEvent.KEYCODE_BUTTON_SELECT -> UiText.raw("Select")
+            KeyEvent.KEYCODE_BUTTON_MODE -> UiText.raw("Mode")
             KeyEvent.KEYCODE_GUIDE -> UiText.of(R.string.remote_key_guide)
             KeyEvent.KEYCODE_INFO -> UiText.of(R.string.remote_key_info)
             KeyEvent.KEYCODE_PROG_RED -> UiText.of(R.string.remote_key_red)

@@ -207,7 +207,7 @@ fun GuideScreen(
             }
             if (isTv && onTab != null) com.fenyx.jtv.ui.main.TvTabs(com.fenyx.jtv.ui.main.PhoneTab.Guide, onTab, Modifier.padding(end = 20.dp, top = 2.dp))
             // Phones show the time in the status bar.
-            if (Jtv.form != com.fenyx.jtv.theme.FormFactor.Phone) JtvClock(now, size = if (isTv) 34.sp else 26.sp, dateColor = c.t2)
+            if (Jtv.form != com.fenyx.jtv.theme.FormFactor.Phone) JtvClock(now, size = if (isTv) 22.sp else 20.sp)
         }
 
         if (epgMode == null) return@Column // setting still loading; draw nothing rather than flash

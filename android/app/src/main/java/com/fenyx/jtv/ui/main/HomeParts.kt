@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -327,7 +328,7 @@ private fun RailItem(
         shape = RoundedCornerShape(0.dp),
         focusedContainer = c.s2,
     ) {
-        if (selected) Box(Modifier.align(Alignment.CenterStart).width(3.dp).height(40.dp).background(c.acc))
+        if (selected) Box(Modifier.align(Alignment.Center).size(56.dp, 52.dp).clip(RoundedCornerShape(12.dp)).background(c.s2))
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, contentDescription = null, tint = if (selected) c.acc else c.t2, modifier = Modifier.size(24.dp))
             Text(

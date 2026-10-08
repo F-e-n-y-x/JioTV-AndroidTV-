@@ -415,7 +415,7 @@ private fun WideHome(
             if (tv) TvTabs(PhoneTab.Live, { t ->
                 when (t) { PhoneTab.Guide -> onGuide(); PhoneTab.Search -> onSearch(); PhoneTab.Settings -> onSettings(); else -> {} }
             }, Modifier.padding(end = 20.dp, top = 2.dp))
-            JtvClock(now, size = 32.sp)
+            JtvClock(now)
         }
         Spacer(Modifier.height(14.dp))
         // Favourites arrive after the channel list; without this the column keeps "All" pinned at the

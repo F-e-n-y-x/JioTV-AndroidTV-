@@ -349,7 +349,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                 // No Back button: phone has the bottom tab bar, tablet the navigation rail, TV the tabs.
                 JText(stringResource(R.string.common_settings), if (isTv) 28.sp else 24.sp, Modifier.weight(1f), weight = FontWeight.Bold)
                 if (isTv && onTab != null) com.fenyx.jtv.ui.main.TvTabs(com.fenyx.jtv.ui.main.PhoneTab.Settings, onTab, Modifier.padding(end = 20.dp))
-                if (form != FormFactor.Phone) JtvClock(now, dateColor = c.t2, size = if (isTv) 34.sp else 28.sp)
+                if (form != FormFactor.Phone) JtvClock(now, size = if (isTv) 22.sp else 20.sp)
             }
             Spacer(Modifier.height(8.dp))
             LazyColumn(

@@ -4,6 +4,8 @@ import com.fenyx.jtv.R
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,7 +81,8 @@ internal data class StrapSizes(
 @Immutable
 internal data class TileSizes(val w: Dp, val h: Dp, val plateW: Dp, val plateH: Dp, val numSize: TextUnit, val gap: Dp)
 
-internal val TvStrap = StrapSizes(96.dp, 64.dp, 16.sp, 22.sp, 15.sp, 760.dp)
+/** maxW = width of the times / Next column on the right. */
+internal val TvStrap = StrapSizes(84.dp, 56.dp, 16.sp, 22.sp, 15.sp, 380.dp)
 
 internal val TvTiles = TileSizes(100.dp, 72.dp, 62.dp, 34.dp, 15.sp, 10.dp)
 internal val TabletTiles = TileSizes(108.dp, 80.dp, 68.dp, 38.dp, 16.sp, 12.dp)
@@ -143,8 +146,8 @@ internal fun EpgStrap(
 }
 
 /**
- * The channel card on zap / Info: logo · "151 Movies Now HD" · show · times + thin progress · one
- * "Next" line. Compact on purpose: it sits over the picture, so it stays small and bottom-left.
+ * The channel card on zap / Info, full width and two lines tall: logo · "151 Movies Now HD" over the
+ * show · times, progress and "Next" on the right. Low and wide so it covers as little picture as possible.
  */
 @Composable
 internal fun InfoStrap(
@@ -155,12 +158,12 @@ internal fun InfoStrap(
     val c = Jtv.colors
     val cur = nn?.now
     Row(
-        modifier.widthIn(max = s.maxW).clip(RoundedCornerShape(8.dp)).background(StrapBg).padding(14.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(StrapBg).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ChannelPlate(channel.logoUrl, s.plateW, s.plateH)
         Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f, fill = false)) {
+        Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (channel.channelNumber > 0) {
                     JText("${channel.channelNumber}", s.nameSize, color = c.acc, weight = FontWeight.Bold)
@@ -169,27 +172,33 @@ internal fun InfoStrap(
                 JText(channel.name, s.nameSize, color = if (cur != null) c.t2 else c.tx, weight = FontWeight.SemiBold)
                 if (timeshift != null) BehindLiveTag(timeshift, s.metaSize, Modifier.padding(start = 12.dp))
             }
-            if (cur != null) {
-                JText(cur.title, s.titleSize, weight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+            JText(
+                cur?.title ?: channelSubtitle(channel), if (cur != null) s.titleSize else s.metaSize,
+                weight = if (cur != null) FontWeight.Bold else FontWeight.Normal,
+                color = if (cur != null) c.tx else c.t2, modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        if (cur != null) {
+            Spacer(Modifier.width(24.dp))
+            Column(Modifier.width(s.maxW)) {
                 if (isReplaying(cur)) {
-                    JText(replayStatus(cur), s.metaSize, color = c.tx, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-                } else Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    JText("${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)}", s.metaSize, color = c.t2)
-                    Spacer(Modifier.width(10.dp))
-                    JtvProgress(cur.progress(now), Modifier.width(120.dp))
-                    Spacer(Modifier.width(10.dp))
-                    val left = cur.minutesLeft(now)
-                    if (left <= 10) EndsSoonPill(cur.stopMs, fontSize = s.metaSize)
-                    else JText(pluralStringResource(R.plurals.player_min_left, left, left), s.metaSize, color = c.t2)
+                    JText(replayStatus(cur), s.metaSize, color = c.tx, weight = FontWeight.SemiBold)
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        JText("${formatTime(cur.startMs)} – ${formatTime(cur.stopMs)}", s.metaSize, color = c.t2, modifier = Modifier.weight(1f, fill = false))
+                        Spacer(Modifier.width(10.dp))
+                        val left = cur.minutesLeft(now)
+                        if (left <= 10) EndsSoonPill(cur.stopMs, fontSize = s.metaSize)
+                        else JText(pluralStringResource(R.plurals.player_min_left, left, left), s.metaSize, color = c.t2)
+                    }
+                    JtvProgress(cur.progress(now), Modifier.fillMaxWidth().padding(vertical = 6.dp))
                 }
                 nn.later.firstOrNull()?.let { p ->
                     JText(
                         "${stringResource(R.string.player_next_label)}  ${formatTime(p.startMs)}  ${p.title}",
-                        s.metaSize, color = c.t2, modifier = Modifier.padding(top = 4.dp),
+                        s.metaSize, color = c.t2,
                     )
                 }
-            } else {
-                JText(channelSubtitle(channel), s.metaSize, color = c.t2, modifier = Modifier.padding(top = 2.dp))
             }
         }
     }
@@ -198,7 +207,8 @@ internal fun InfoStrap(
 // ───────────────────────── Tile rail ─────────────────────────
 
 /**
- * Horizontal channel rail (D-tv-live-dark). The focused tile is inverted with a 4dp amber leading bar
+ * Horizontal channel rail (D-tv-live-dark). The focused tile is inverted and slightly larger, and
+ * shows the channel name (also on mouse hover);
  * and a slight scale; the playing channel has an amber dot. [focusToken] changes move focus (TV) and
  * scroll to [focusIndex].
  */
@@ -254,16 +264,18 @@ private fun RailTile(
     onClick: () -> Unit,
 ) {
     val c = Jtv.colors
+    val hover = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
     JtvClickable(
         onClick = onClick,
         modifier = modifier
             .size(sizes.w, sizes.h)
+            .hoverable(hover)
             .onFocusChanged { if (it.isFocused) onFocused() },
         container = StrapBg,
         focusedScale = 1.04f,
     ) { focused ->
         Box(Modifier.fillMaxSize()) {
-            if (focused) Box(Modifier.align(Alignment.CenterStart).width(4.dp).fillMaxHeight().background(c.acc))
             if (playing) Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(7.dp).clip(CircleShape).background(c.acc))
             Column(
                 Modifier.align(Alignment.Center),
@@ -271,10 +283,15 @@ private fun RailTile(
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 ChannelPlate(channel.logoUrl, sizes.plateW, sizes.plateH)
-                Text(
+                if (focused || hovered) Text(
+                    channel.name, style = textStyle(13.sp, FontWeight.SemiBold),
+                    color = if (focused) c.invTx else c.tx, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                ) else Text(
                     if (channel.channelNumber > 0) channel.channelNumber.toString() else "–",
                     style = numberStyle(sizes.numSize),
-                    color = if (focused) c.invTx else c.tx,
+                    color = c.tx,
                     maxLines = 1,
                 )
             }
@@ -372,7 +389,10 @@ internal fun errorActionLabel(a: ErrorAction) = stringResource(when (a) {
     ErrorAction.GoLive -> R.string.player_go_live
 })
 
-/** A small card: one sentence, the channel, one or two buttons. Focus lands on the first button. */
+/**
+ * Centred, see-through card when a channel can't play: the channel's logo and name, one plain
+ * sentence, then one or two buttons (focus on the first, so OK does the likely thing).
+ */
 @Composable
 internal fun ErrorPanel(
     error: PlayerError,
@@ -383,24 +403,29 @@ internal fun ErrorPanel(
     modifier: Modifier = Modifier,
 ) {
     val c = Jtv.colors
-    val h = if (touch) 48.dp else 40.dp
+    val h = if (touch) 48.dp else 44.dp
     Column(
-        modifier.widthIn(max = 520.dp).clip(RoundedCornerShape(8.dp)).background(StrapBg)
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+        modifier.widthIn(max = 480.dp).clip(RoundedCornerShape(12.dp)).background(StrapBg)
+            .padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (channel != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ChannelPlate(channel.logoUrl, 56.dp, 36.dp)
+                Spacer(Modifier.width(12.dp))
+                JText(
+                    if (channel.channelNumber > 0) "${channel.channelNumber}  ${channel.name}" else channel.name,
+                    16.sp, color = c.t2, weight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+        }
         Text(
-            stringResource(error.message), style = textStyle(17.sp, FontWeight.SemiBold), color = c.tx,
+            stringResource(error.message), style = textStyle(18.sp, FontWeight.SemiBold), color = c.tx,
             textAlign = TextAlign.Center, maxLines = 3,
         )
-        if (channel != null) {
-            JText(
-                if (channel.channelNumber > 0) "${channel.channelNumber}  ${channel.name}" else channel.name,
-                14.sp, color = c.t2, modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             JtvButton(
                 errorActionLabel(error.primary), { onAction(error.primary) },
                 modifier = Modifier.focusRequester(firstFocus), primary = true, minHeight = h, fontSize = 16.sp,

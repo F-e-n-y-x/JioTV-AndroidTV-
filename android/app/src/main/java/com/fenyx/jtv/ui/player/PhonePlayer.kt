@@ -77,7 +77,6 @@ import com.fenyx.jtv.ui.components.JtvClickable
 import com.fenyx.jtv.ui.components.JtvProgress
 import com.fenyx.jtv.ui.components.LocalNow
 import com.fenyx.jtv.ui.components.formatTime
-import com.fenyx.jtv.ui.components.leadingBar
 import com.fenyx.jtv.ui.components.minutesLeft
 import com.fenyx.jtv.ui.components.numberStyle
 import com.fenyx.jtv.ui.components.progress
@@ -277,7 +276,7 @@ internal fun PhoneVideo(
                 }
                 BehindLiveTag(
                     d.timeshift, 14.sp,
-                    Modifier.padding(start = 6.dp).background(StrapBg.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                    Modifier.padding(start = 6.dp).background(StrapBg, RoundedCornerShape(4.dp))
                         .padding(horizontal = 8.dp, vertical = 5.dp),
                 )
             }
@@ -475,7 +474,7 @@ internal fun NextRow(p: EpgProgram) {
 
 // ───────────────────────── 5. Channels ─────────────────────────
 
-/** 64dp row. The playing one has a 4dp amber leading bar and a "Playing" label (no inverted fill). */
+/** 64dp row. The playing one is marked by its "Playing" label (no inverted fill, no side stripe). */
 @Composable
 internal fun PhoneChannelRow(ch: Channel, playing: Boolean, epg: EpgSource, onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = Jtv.colors
@@ -485,7 +484,7 @@ internal fun PhoneChannelRow(ch: Channel, playing: Boolean, epg: EpgSource, onCl
     JtvClickable(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = Modifier.fillMaxWidth().height(64.dp).leadingBar(c.acc, playing),
+        modifier = Modifier.fillMaxWidth().height(64.dp),
         shape = RoundedCornerShape(0.dp),
     ) { focused ->
         val fg = if (focused) c.invTx else c.tx

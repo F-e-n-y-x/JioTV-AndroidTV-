@@ -97,7 +97,7 @@ class PlayerUi(initial: PlayerOverlay) {
 }
 
 /** The one solid strap colour (approved mockups). Everything else uses Jtv.colors tokens. */
-internal val StrapBg = Color(0xFF141416)
+internal val StrapBg = Color(0xC7141416) // ~78%: readable over bright video, still shows the picture
 
 @Composable
 internal fun groupLabel(group: String?): String = when (group) {

@@ -439,7 +439,7 @@ internal fun LiveButton(ts: Timeshift, onClick: () -> Unit, modifier: Modifier =
         val pill = when {
             focused -> Modifier.background(c.inv, shape)
             atLive -> Modifier.background(c.acc, shape)
-            else -> Modifier.background(StrapBg.copy(alpha = 0.8f), shape).border(1.5.dp, c.acc, shape)
+            else -> Modifier.background(StrapBg, shape).border(1.5.dp, c.acc, shape)
         }
         val fg = when {
             focused -> c.invTx
@@ -563,6 +563,6 @@ internal fun ControlsTitle(ch: com.fenyx.jtv.data.Channel?, size: androidx.compo
         listOfNotNull(ch.channelNumber.takeIf { it > 0 }?.toString(), ch.name).joinToString("  "),
         size, color = Jtv.colors.tx, weight = FontWeight.SemiBold,
         modifier = modifier.widthIn(max = maxWidth).clip(RoundedCornerShape(6.dp))
-            .background(StrapBg.copy(alpha = 0.8f)).padding(horizontal = 10.dp, vertical = 6.dp),
+            .background(StrapBg).padding(horizontal = 10.dp, vertical = 6.dp),
     )
 }
