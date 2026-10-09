@@ -21,6 +21,14 @@
     <string name="setup_error_enter_url">सर्वर का पता लिखें।</string>
     <string name="setup_error_enter_code">अपना एक्सेस कोड लिखें।</string>
     <string name="setup_error_connection_failed">जुड़ नहीं पाया। फिर से कोशिश करें।</string>
+    <string name="setup_servers_nearby">आपके नेटवर्क पर सर्वर</string>
+    <string name="setup_scanning">सर्वर ढूँढ रहे हैं…</string>
+    <string name="setup_scan_again">फिर से ढूँढें</string>
+    <string name="setup_no_server_found">इस नेटवर्क पर कोई सर्वर नहीं मिला</string>
+    <string name="setup_no_server_hint">सर्वर और यह डिवाइस एक ही वाई-फ़ाई पर होने चाहिए, और सर्वर पर पोर्ट %1$d खुला होना चाहिए।</string>
+    <string name="setup_server_lite">लाइट</string>
+    <string name="setup_server_full">फ़ुल</string>
+    <string name="setup_custom_server">दूसरा सर्वर</string>
 
     <string name="error_no_server_url">सर्वर का पता नहीं भरा गया है।</string>
     <string name="error_server_access_denied">सर्वर ने यह एक्सेस कोड नहीं माना। कोड देखकर फिर से कोशिश करें।</string>

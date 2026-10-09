@@ -42,9 +42,9 @@ object ServerClient {
     fun normalizeBaseUrl(raw: String): String = raw.trim().trimEnd('/')
 
     /** Base URLs to try for the current sign-in mode: the hardcoded JTV list for "jtv", the user's
-     *  saved URL for a self-hosted "server", empty for phone/none. */
+     *  saved URL for a self-hosted "server", empty for phone/none. "jtv" first tries servers the last LAN scan found. */
     fun candidateUrls(setupMode: String?, savedServerUrl: String): List<String> = when (setupMode) {
-        "jtv" -> JTV_SERVER_URLS
+        "jtv" -> ServerDiscovery.lastFound + JTV_SERVER_URLS
         "server" -> listOf(savedServerUrl)
         else -> emptyList()
     }

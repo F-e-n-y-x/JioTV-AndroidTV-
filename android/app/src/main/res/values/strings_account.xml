@@ -23,6 +23,14 @@
     <string name="setup_error_enter_url">Enter the server address.</string>
     <string name="setup_error_enter_code">Enter your access code.</string>
     <string name="setup_error_connection_failed">Could not connect. Try again.</string>
+    <string name="setup_servers_nearby">Servers on your network</string>
+    <string name="setup_scanning">Looking for servers…</string>
+    <string name="setup_scan_again">Scan again</string>
+    <string name="setup_no_server_found">No server found on this network</string>
+    <string name="setup_no_server_hint">The server and this device must be on the same Wi-Fi, and port %1$d must be open on the server.</string>
+    <string name="setup_server_lite">Lite</string>
+    <string name="setup_server_full">Full</string>
+    <string name="setup_custom_server">Custom server</string>
 
     <!-- Server errors shown to the user (data/ServerClient.kt) -->
     <string name="error_no_server_url">No server address is set.</string>

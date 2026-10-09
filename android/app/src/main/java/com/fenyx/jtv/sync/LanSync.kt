@@ -291,7 +291,7 @@ object LanSync {
     }
 
     @Suppress("DEPRECATION")
-    private suspend fun resolve(mgr: NsdManager, si: NsdServiceInfo): NsdServiceInfo? =
+    internal suspend fun resolve(mgr: NsdManager, si: NsdServiceInfo): NsdServiceInfo? =
         suspendCancellableCoroutine { cont ->
             val ok = runCatching {
                 mgr.resolveService(si, object : NsdManager.ResolveListener {
