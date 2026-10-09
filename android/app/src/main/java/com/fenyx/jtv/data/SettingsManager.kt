@@ -46,6 +46,7 @@ class SettingsManager(private val context: Context) {
         private val AUTOPLAY_LAST_CHANNEL = booleanPreferencesKey("autoplay_last_channel")
         private val IGNORED_UPDATE = stringPreferencesKey("ignored_update_version")
         private val UP_IS_NEXT_CHANNEL = booleanPreferencesKey("up_is_next_channel")
+        private val OPEN_ON_START = stringPreferencesKey("open_on_start")
         private val REVERSE_CH_PLUS_MINUS = booleanPreferencesKey("reverse_ch_plus_minus")
         private val LAST_CHANNEL_ID = stringPreferencesKey("last_channel_id")
         private val LAST_CHANNEL_GROUP = stringPreferencesKey("last_channel_group")
@@ -252,6 +253,13 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setIgnoredUpdate(version: String) {
         context.dataStore.edit { it[IGNORED_UPDATE] = version }
+    }
+
+    /** Open JTV when the TV turns on: AutoStart.OFF / BOOT / WAKE. */
+    val openOnStartFlow: Flow<String> = context.dataStore.data.map { it[OPEN_ON_START] ?: com.fenyx.jtv.AutoStart.OFF }
+
+    suspend fun setOpenOnStart(mode: String) {
+        context.dataStore.edit { it[OPEN_ON_START] = mode }
     }
 
     suspend fun setAutoplayLastChannel(enabled: Boolean) {

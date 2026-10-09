@@ -71,6 +71,20 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
     val epgSyncStatus by mainViewModel.epgSyncStatus.collectAsState()
     val autoplayLastChannel by settingsManager.autoplayLastChannelFlow.collectAsState(initial = false)
     val upIsNextChannel by settingsManager.upIsNextChannelFlow.collectAsState(initial = true)
+    val openOnStart by settingsManager.openOnStartFlow.collectAsState(initial = com.fenyx.jtv.AutoStart.OFF)
+    var showOpenOnStartPicker by remember { mutableStateOf(false) }
+    var showAutoStartPermission by remember { mutableStateOf(false) }
+    // Re-checked on every return to the app, so it updates after "Display over other apps".
+    var canAutoOpen by remember { mutableStateOf(true) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        canAutoOpen = com.fenyx.jtv.AutoStart.allowed(context)
+        onPauseOrDispose { }
+    }
+    val openOnStartOptions = listOf(
+        com.fenyx.jtv.AutoStart.OFF to "Off",
+        com.fenyx.jtv.AutoStart.BOOT to "After the box starts up",
+        com.fenyx.jtv.AutoStart.WAKE to "Also after standby",
+    )
     val reverseChPlusMinus by settingsManager.reverseChPlusMinusFlow.collectAsState(initial = false)
     val groupLanguageVariants by settingsManager.groupLanguageVariantsFlow.collectAsState(initial = true)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
@@ -316,6 +330,16 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                 }
 
                 item {
+                    SettingsItem(
+                        title = "Open When the TV Turns On",
+                        subtitle = if (openOnStart != com.fenyx.jtv.AutoStart.OFF && !canAutoOpen)
+                            "Needs \"Display over other apps\" for JTV. If your TV has no such setting, run once from a computer: adb shell appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow"
+                        else "${openOnStartOptions.first { it.first == openOnStart }.second}. Opens JTV by itself when the TV or box is switched on; with Autoplay Last Channel it plays like a normal TV",
+                        onClick = { showOpenOnStartPicker = true }
+                    )
+                }
+
+                item {
                     SettingsToggle(
                         title = "Up Arrow = Next Channel",
                         subtitle = if (upIsNextChannel) "On: Up goes to the next channel (1 → 2 → 3), Down to the previous"
@@ -493,6 +517,42 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel) 
                         showPlayerResizeModePicker = false
                     },
                     onDismiss = { showPlayerResizeModePicker = false }
+                )
+            }
+        }
+
+        if (showOpenOnStartPicker) {
+            Dialog(onDismissRequest = { showOpenOnStartPicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+                PickerDialog(
+                    title = "Open When the TV Turns On",
+                    options = openOnStartOptions,
+                    currentValue = openOnStart,
+                    onSelect = { v ->
+                        scope.launch { settingsManager.setOpenOnStart(v) }
+                        com.fenyx.jtv.AutoStart.sync(context, v)
+                        showOpenOnStartPicker = false
+                        showAutoStartPermission = v != com.fenyx.jtv.AutoStart.OFF && !com.fenyx.jtv.AutoStart.allowed(context)
+                    },
+                    onDismiss = { showOpenOnStartPicker = false }
+                )
+            }
+        }
+
+        // Android 10+: explain the one permission, then open its settings page.
+        if (showAutoStartPermission) {
+            var noScreen by remember { mutableStateOf(false) }
+            Dialog(onDismissRequest = { showAutoStartPermission = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+                PickerDialog(
+                    title = "Allow JTV to Open by Itself",
+                    message = if (noScreen) "This TV has no \"Display over other apps\" setting. Run once from a computer: adb shell appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow"
+                        else "This TV needs one permission so JTV can open when it turns on. On the next screen, find JTV under \"Display over other apps\" and turn it on, then press Back.",
+                    options = if (noScreen) listOf("ok" to "OK") else listOf("open" to "Open Settings"),
+                    currentValue = "",
+                    onSelect = { v ->
+                        if (v == "open" && !com.fenyx.jtv.AutoStart.askPermission(context)) noScreen = true
+                        else showAutoStartPermission = false
+                    },
+                    onDismiss = { showAutoStartPermission = false }
                 )
             }
         }
@@ -704,7 +764,8 @@ private fun PickerDialog(
     options: List<Pair<String, String>>,
     currentValue: String,
     onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    message: String? = null,
 ) {
     Box(
         modifier = Modifier
@@ -725,6 +786,10 @@ private fun PickerDialog(
                 fontWeight = FontWeight.Bold,
                 color = TvOnBackground
             )
+            if (message != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(message, style = MaterialTheme.typography.bodyLarge, color = TvOnSurface)
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn(

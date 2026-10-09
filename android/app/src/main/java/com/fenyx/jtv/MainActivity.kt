@@ -2,6 +2,7 @@ package com.fenyx.jtv
 
 import android.os.Bundle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -40,6 +41,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleBackupIntent(intent)
+        // Restarts the standby watcher after an app update or if the system stopped it.
+        lifecycleScope.launch {
+            AutoStart.sync(applicationContext, com.fenyx.jtv.data.SettingsManager(applicationContext).openOnStartFlow.first())
+        }
 
         // Edge-to-edge + hidden system bars so the app's navy background fills the ENTIRE screen (incl.
         // any area the keyboard leaves) instead of the OS painting black at the edges. Removing this
