@@ -56,7 +56,7 @@ import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.launch
 
 /** Which second-level picker / dialog is open. */
-private enum class Sheet { None, Theme, DeviceType, AppLanguage, Accent, StartWith, OpenOnStart, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
+private enum class Sheet { None, Theme, DeviceType, AppLanguage, Accent, StartWith, OpenOnStart, AutoStartPermission, AutoStartNoScreen, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
 
 /**
  * Settings, v2 "Everyday": a plain two-level list. Section labels, then rows of *label + current
@@ -450,8 +450,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                 onSelect = { v ->
                     scope.launch { settingsManager.setOpenOnStart(v) }
                     com.fenyx.jtv.AutoStart.sync(context, v)
-                    if (v != com.fenyx.jtv.AutoStart.OFF && !com.fenyx.jtv.AutoStart.allowed(context)) com.fenyx.jtv.AutoStart.askPermission(context)
-                    sheet = Sheet.None
+                    sheet = if (v != com.fenyx.jtv.AutoStart.OFF && !com.fenyx.jtv.AutoStart.allowed(context)) Sheet.AutoStartPermission else Sheet.None
                 },
                 onDismiss = { sheet = Sheet.None })
             Sheet.StartWith -> PickerDialog(stringResource(R.string.settings_start), startOptions, if (autoplayLastChannel) "last" else "list",
@@ -472,6 +471,21 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             Sheet.EpgUrl -> EpgUrlDialog(
                 initial = epgUrl,
                 onSave = { url -> scope.launch { settingsManager.setEpgUrl(url) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            // Android 10+: explain the one permission, then open its settings page.
+            Sheet.AutoStartPermission -> ConfirmDialog(
+                title = stringResource(R.string.autostart_permission_title),
+                message = stringResource(R.string.autostart_permission_message),
+                confirm = stringResource(R.string.autostart_open_settings),
+                focusConfirm = true,
+                onConfirm = { sheet = if (com.fenyx.jtv.AutoStart.askPermission(context)) Sheet.None else Sheet.AutoStartNoScreen },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.AutoStartNoScreen -> ConfirmDialog(
+                title = stringResource(R.string.autostart_permission_title),
+                message = stringResource(R.string.settings_open_on_start_needs, context.packageName),
+                confirm = stringResource(R.string.common_ok),
+                focusConfirm = true,
+                onConfirm = { sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
             Sheet.ConfirmSignOut -> ConfirmDialog(
                 title = stringResource(R.string.settings_signout_title),
@@ -755,11 +769,14 @@ internal fun ConfirmDialog(
     confirm: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    /** For a harmless confirm: focus starts on it instead of Cancel. */
+    focusConfirm: Boolean = false,
 ) {
     val c = Jtv.colors
     // Focus starts on Cancel: nothing destructive happens on a single accidental OK press.
     val cancelFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
+    val confirmFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { (if (focusConfirm) confirmFocus else cancelFocus).requestFocus() } }
     DialogPanel(onDismiss) {
         Text(title, style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
         Spacer(Modifier.height(8.dp))
@@ -767,7 +784,7 @@ internal fun ConfirmDialog(
         Spacer(Modifier.height(24.dp))
         androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             JtvButton(stringResource(R.string.common_cancel), onDismiss, Modifier.focusRequester(cancelFocus), fontSize = 18.sp)
-            JtvButton(confirm, onConfirm, primary = true, fontSize = 18.sp)
+            JtvButton(confirm, onConfirm, Modifier.focusRequester(confirmFocus), primary = true, fontSize = 18.sp)
         }
     }
 }

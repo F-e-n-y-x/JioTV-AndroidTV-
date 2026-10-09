@@ -22,6 +22,9 @@
     <string name="settings_start_desc">ऐप खोलते ही क्या दिखे</string>
     <string name="settings_start_list">चैनल लिस्ट</string>
     <string name="settings_start_last">पिछला चैनल</string>
+    <string name="autostart_permission_title">JTV को अपने आप खुलने दें</string>
+    <string name="autostart_permission_message">TV चालू होने पर JTV खुले, इसके लिए एक अनुमति चाहिए। अगली स्क्रीन पर \"दूसरे ऐप्स के ऊपर दिखाएं\" में JTV को चालू करें, फिर Back दबाएं।</string>
+    <string name="autostart_open_settings">सेटिंग्स खोलें</string>
     <string name="settings_open_on_start">TV चालू होने पर खोलें</string>
     <string name="settings_open_on_start_desc">TV या बॉक्स चालू होते ही JTV अपने आप खुल जाएगा। \"ऐप खुलने पर → पिछला चैनल\" के साथ यह आम TV की तरह चलेगा।</string>
     <string name="settings_open_on_start_boot">बॉक्स स्टार्ट होने पर</string>

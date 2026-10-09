@@ -22,6 +22,9 @@
     <string name="settings_start_desc">What you see when the app opens</string>
     <string name="settings_start_list">Channel list</string>
     <string name="settings_start_last">Last channel</string>
+    <string name="autostart_permission_title">Allow JTV to open by itself</string>
+    <string name="autostart_permission_message">This TV needs one permission so JTV can open when it turns on. On the next screen, find JTV under \"Display over other apps\" and turn it on, then press Back.</string>
+    <string name="autostart_open_settings">Open settings</string>
     <string name="settings_open_on_start">Open when the TV turns on</string>
     <string name="settings_open_on_start_desc">Opens JTV by itself when the TV or box is switched on. With Start with → Last channel, it plays like a normal TV.</string>
     <string name="settings_open_on_start_boot">After the box starts up</string>
