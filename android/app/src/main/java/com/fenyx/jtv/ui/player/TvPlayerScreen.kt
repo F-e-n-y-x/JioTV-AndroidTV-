@@ -1673,7 +1673,10 @@ fun TvPlayerScreen(
             val paused = userPaused && !isBuffering
             val status: @Composable BoxScope.() -> Unit = {
                 // One loading sign: with the controls up, the ring around Play/Pause already shows it.
-                if (buffering && ui.overlay != PlayerOverlay.Controls) BufferingIndicator(name, Modifier.align(Alignment.Center))
+                // TV shows them as the Controls overlay; touch as the Banner (or while paused).
+                val controlsUp = if (isTv) ui.overlay == PlayerOverlay.Controls
+                    else ui.overlay == PlayerOverlay.Banner || overlayData.model.paused
+                if (buffering && !controlsUp) BufferingIndicator(name, Modifier.align(Alignment.Center))
                 if (paused && isTv) TvPausedBadge(ui, Modifier.align(Alignment.Center))
             }
 
