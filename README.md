@@ -87,7 +87,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 
 1. Download the APK:
    - **Stable:** `JTV-v1.5.x.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
-   - **Beta:** `JTV-v2.0-beta.11.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
+   - **Beta:** `JTV-v2.0-beta.12.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
 2. **Install it on your TV.**
    - The easiest way is to copy it to a USB stick and open it with a file manager such as **X-plore** or **File Commander**.
    - Or use ADB:

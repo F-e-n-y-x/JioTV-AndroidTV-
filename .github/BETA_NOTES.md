@@ -1,12 +1,11 @@
 <p align="center"><img src="https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/screenshot/jtv-mark.svg" width="110" alt="JTV" /></p>
 
-# JTV 2.0 beta 11
+# JTV 2.0 beta 12
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.11.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.12.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 11
-- **One loading sign.** While a channel loads with the controls open, only the ring around Play/Pause shows (there used to be a second spinner in the middle).
-- **Tidier phone and tablet player.** In full screen, the show bar at the bottom spans the width with even gaps on all sides. On the portrait player, the channel tag is a small rounded label set in from the corner.
+## New in beta 12
+- **Favourites numbered everywhere.** In the Favourites category, the numbers 1, 2, 3 (your own order) now also show in the Guide, the player's channel card, the controls, the error card, the options panel, the mini player and the Home side panel. Other categories keep Jio's channel numbers.
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
@@ -15,6 +14,10 @@
 ---
 
 ## Earlier betas
+
+### Beta 11
+- **One loading sign.** While a channel loads with the controls open, only the ring around Play/Pause shows (there used to be a second spinner in the middle).
+- **Tidier phone and tablet player.** In full screen, the show bar at the bottom spans the width with even gaps on all sides. On the portrait player, the channel tag is a small rounded label set in from the corner.
 
 ### Beta 10
 - **Pictures of what's on.** On TV and tablet Home, the side panel shows a picture of the show playing on the channel you rest on, with its time and description, even with the programme guide setting off. The channels just above and below are loaded ahead, so moving down is quick.
