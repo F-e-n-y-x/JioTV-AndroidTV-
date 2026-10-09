@@ -221,7 +221,17 @@ class EpgRepository(private val context: Context) {
         return@withContext epgMap
     }
 
-    suspend fun getNativeEpgForChannel(channelId: String, offset: Int = 0): List<EpgProgram> = withContext(Dispatchers.IO) {
+    /**
+     * Jio's guide for one channel and day. Jio's "today" (offset 0) lags for hours after midnight and
+     * ends before now; then its "tomorrow" (the real today) is fetched too and merged.
+     */
+    suspend fun getNativeEpgForChannel(channelId: String, offset: Int = 0): List<EpgProgram> {
+        val day = fetchNativeDay(channelId, offset)
+        if (offset != 0 || day.any { it.stopMs > System.currentTimeMillis() }) return day
+        return (day + fetchNativeDay(channelId, 1)).distinctBy { it.startMs }.sortedBy { it.startMs }
+    }
+
+    private suspend fun fetchNativeDay(channelId: String, offset: Int): List<EpgProgram> = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
         try {
             val url = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/getepg/get?offset=$offset&channel_id=$channelId&langId=6")
