@@ -234,6 +234,10 @@ The **"Everyday"** redesign for TV, phone and tablet:
 - A Recent category.
 - Wi-Fi favourites sync with "Play on TV", plus favourites backup.
 
+### v1.5.12
+- **Open when the TV turns on** (#8). Settings → Playback → *Open When the TV Turns On*: after the box starts up, or also after standby. On Android 10+ JTV asks once for *Display over other apps*.
+- **Guide fixed after midnight.** Jio's guide sends the previous day for a few hours after midnight; JTV now loads the next day too, so the current show appears.
+
 ### v1.5.11
 - **New version popup.** When an update is out, JTV offers it once on Home: **Download & Install**, **Later**, or **Ignore this version**.
 - **Mouse fix.** With an air mouse, lists no longer scroll by themselves under a still pointer.

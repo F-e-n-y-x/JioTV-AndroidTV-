@@ -91,4 +91,4 @@ jobs:
           files: ${{ steps.apk.outputs.apk_path }}
           draft: false
           prerelease: false
-          generate_release_notes: true
+          body_path: .github/RELEASE_NOTES.md
