@@ -1,13 +1,12 @@
 <p align="center"><img src="https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/screenshot/jtv-mark.svg" width="110" alt="JTV" /></p>
 
-# JTV 2.0 beta 13
+# JTV 2.0 beta 14
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.13.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.14.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 13
-- **Open when the TV turns on** (requested in #8). Settings → General → *Open when the TV turns on*: **After the box starts up**, or **Also after standby** for TVs that only sleep when switched off. With *Start with → Last channel*, it plays like a normal TV. On Android 10 and newer, a popup explains the one permission (*Display over other apps*) and opens that setting for you.
-- **Guide fixed after midnight.** For a few hours after midnight Jio's guide still sends the previous day, so the Guide showed "Nothing scheduled". JTV now also loads the next day.
-- **One loading sign on phone and tablet** in full screen (the spinner in the middle no longer shows while the controls' ring does).
+## New in beta 14
+- **Find your server automatically.** Sign-in → *Self-hosted server* now lists the JTV servers on your home network (name, address, *Full* or *Lite*). Pick one and enter your access code. *Custom server* below still takes any address.
+- Works with the full Docker server and the new tiny **JTV lite** server for routers (OpenWrt, Raspberry Pi, any PC). Both use one port, **29180**.
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
@@ -16,6 +15,11 @@
 ---
 
 ## Earlier betas
+
+### Beta 13
+- **Open when the TV turns on** (requested in #8). Settings → General → *Open when the TV turns on*: **After the box starts up**, or **Also after standby** for TVs that only sleep when switched off. With *Start with → Last channel*, it plays like a normal TV. On Android 10 and newer, a popup explains the one permission (*Display over other apps*) and opens that setting for you.
+- **Guide fixed after midnight.** For a few hours after midnight Jio's guide still sends the previous day, so the Guide showed "Nothing scheduled". JTV now also loads the next day.
+- **One loading sign on phone and tablet** in full screen (the spinner in the middle no longer shows while the controls' ring does).
 
 ### Beta 12
 - **Favourites numbered everywhere.** In the Favourites category, the numbers 1, 2, 3 (your own order) now also show in the Guide, the player's channel card, the controls, the error card, the options panel, the mini player and the Home side panel. Other categories keep Jio's channel numbers.
