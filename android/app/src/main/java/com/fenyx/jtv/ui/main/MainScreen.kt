@@ -367,6 +367,7 @@ fun MainScreen(
                             }
                             PreviewPane(
                                 ch, epgData[ch.id].orEmpty(), now,
+                                number = if (isFavoritesGroup) shown.indexOfFirst { it.id == ch.id } + 1 else ch.channelNumber,
                                 isFavorite = favoriteChannels.contains(ch.id),
                                 onWatch = { play(ch) },
                                 onFavorite = { if (favoriteChannels.contains(ch.id)) confirmUnfav = ch else viewModel.toggleFavorite(ch.id) },
@@ -560,6 +561,7 @@ private fun PreviewPane(
     ch: Channel,
     programs: List<EpgProgram>?,
     now: Long,
+    number: Int,
     isFavorite: Boolean,
     onWatch: () -> Unit,
     onFavorite: () -> Unit,
@@ -573,7 +575,7 @@ private fun PreviewPane(
             ChannelPlate(ch.logoUrl, 132.dp, 74.dp, Modifier.align(Alignment.Center).padding(bottom = 20.dp))
             ShowPicture(nn?.now?.posterUrl, Modifier.matchParentSize())
             Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(if (tv) 42.dp else 48.dp).background(androidx.compose.ui.graphics.Color(0xFF141416))) {
-                NumberBlock(ch.channelNumber, Modifier.fillMaxHeight().width(if (tv) 84.dp else 96.dp), fontSize = if (tv) 26.sp else 30.sp)
+                NumberBlock(number, Modifier.fillMaxHeight().width(if (tv) 84.dp else 96.dp), fontSize = if (tv) 26.sp else 30.sp)
                 Text(
                     ch.name, style = textStyle(if (tv) 16.sp else 17.sp, FontWeight.SemiBold), color = androidx.compose.ui.graphics.Color(0xFFECECEE),
                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

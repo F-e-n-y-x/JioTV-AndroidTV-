@@ -216,7 +216,14 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
                     val strapCh = if (browsing) browseList.getOrNull(ui.browseIndex) ?: d.playing else d.playing
                     if (strapCh != null) {
                         val isPlaying = strapCh.id == d.playing?.id
-                        EpgStrap(strapCh, d.epg, TvStrap, playing = isPlaying, timeshift = if (isPlaying) d.timeshift else null)
+                        val nums = when {
+                            !browsing -> LocalFavNumbers.current
+                            ui.browseGroup == MainViewModel.GROUP_FAVORITES -> positions(browseList)
+                            else -> emptyMap()
+                        }
+                        CompositionLocalProvider(LocalFavNumbers provides nums) {
+                            EpgStrap(strapCh, d.epg, TvStrap, playing = isPlaying, timeshift = if (isPlaying) d.timeshift else null)
+                        }
                     }
                     BottomHint(hints(if (browsing) BrowseHint else BannerHint))
                 }
@@ -320,7 +327,7 @@ private fun PointerTopBar(playing: Channel?, onBack: () -> Unit, onOptions: () -
         if (playing != null) {
             Plaque {
                 JText(
-                    if (playing.channelNumber > 0) "${playing.channelNumber}  ${playing.name}" else playing.name,
+                    shownNumber(playing).let { if (it > 0) "$it  ${playing.name}" else playing.name },
                     18.sp, weight = FontWeight.SemiBold,
                 )
             }

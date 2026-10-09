@@ -560,7 +560,7 @@ internal fun CentreControls(
 internal fun ControlsTitle(ch: com.fenyx.jtv.data.Channel?, size: androidx.compose.ui.unit.TextUnit, maxWidth: Dp, modifier: Modifier = Modifier) {
     if (ch == null) return
     JText(
-        listOfNotNull(ch.channelNumber.takeIf { it > 0 }?.toString(), ch.name).joinToString("  "),
+        listOfNotNull(shownNumber(ch).takeIf { it > 0 }?.toString(), ch.name).joinToString("  "),
         size, color = Jtv.colors.tx, weight = FontWeight.SemiBold,
         modifier = modifier.widthIn(max = maxWidth).clip(RoundedCornerShape(6.dp))
             .background(StrapBg).padding(horizontal = 10.dp, vertical = 6.dp),

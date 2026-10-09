@@ -29,7 +29,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -149,6 +151,20 @@ internal fun EpgStrap(
  * The channel card on zap / Info, full width and two lines tall: logo · "151 Movies Now HD" over the
  * show · times, progress and "Next" on the right. Low and wide so it covers as little picture as possible.
  */
+/**
+ * Favourites are numbered 1, 2, 3 in the user's order (issue #7): channel id → position while the
+ * player is in Favourites, empty elsewhere. Provided by the player around its overlays.
+ */
+internal val LocalFavNumbers = compositionLocalOf<Map<String, Int>> { emptyMap() }
+
+/** The number to show for [ch]: its Favourites position there, else Jio's number (0 = none). */
+@Composable
+@ReadOnlyComposable
+internal fun shownNumber(ch: Channel): Int = LocalFavNumbers.current[ch.id] ?: ch.channelNumber
+
+/** Channel id → 1-based position in [list]. */
+internal fun positions(list: List<Channel>): Map<String, Int> = list.withIndex().associate { (i, c) -> c.id to i + 1 }
+
 @Composable
 internal fun InfoStrap(
     channel: Channel, nn: NowNext?, now: Long, s: StrapSizes, modifier: Modifier = Modifier,
@@ -165,8 +181,9 @@ internal fun InfoStrap(
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (channel.channelNumber > 0) {
-                    JText("${channel.channelNumber}", s.nameSize, color = c.acc, weight = FontWeight.Bold)
+                val num = shownNumber(channel)
+                if (num > 0) {
+                    JText("$num", s.nameSize, color = c.acc, weight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
                 }
                 JText(channel.name, s.nameSize, color = if (cur != null) c.t2 else c.tx, weight = FontWeight.SemiBold)
@@ -418,7 +435,7 @@ internal fun ErrorPanel(
                 ChannelPlate(channel.logoUrl, 56.dp, 36.dp)
                 Spacer(Modifier.width(12.dp))
                 JText(
-                    if (channel.channelNumber > 0) "${channel.channelNumber}  ${channel.name}" else channel.name,
+                    shownNumber(channel).let { if (it > 0) "$it  ${channel.name}" else channel.name },
                     16.sp, color = c.t2, weight = FontWeight.SemiBold,
                 )
             }

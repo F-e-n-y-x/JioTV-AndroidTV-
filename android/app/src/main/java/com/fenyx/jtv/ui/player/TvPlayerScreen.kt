@@ -1420,7 +1420,10 @@ fun TvPlayerScreen(
 
     JtvDarkOnly {
       // Catch-up: overlays show "Replay · …" for the replayed show (see PlayerReplay.kt).
-      CompositionLocalProvider(LocalReplay provides activeReplay) {
+      val favNumbers = remember(currentGroup, currentChannels) {
+          if (currentGroup == MainViewModel.GROUP_FAVORITES) positions(currentChannels) else emptyMap()
+      }
+      CompositionLocalProvider(LocalReplay provides activeReplay, LocalFavNumbers provides favNumbers) {
         Box(
             modifier = (if (inPip) Modifier else modifier)
                 .then(rootFrame)

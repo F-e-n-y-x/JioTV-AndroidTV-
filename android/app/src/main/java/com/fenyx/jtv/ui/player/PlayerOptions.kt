@@ -144,7 +144,7 @@ internal fun OptionsPanel(
         JText(title, 22.sp, weight = FontWeight.Bold)
         if (channel != null) {
             JText(
-                if (channel.channelNumber > 0) "${channel.channelNumber}  ${channel.name}" else channel.name,
+                shownNumber(channel).let { if (it > 0) "$it  ${channel.name}" else channel.name },
                 16.sp, color = Jtv.colors.t2, modifier = Modifier.padding(top = 2.dp),
             )
         }
@@ -284,7 +284,7 @@ internal fun QuickMenu(
     ) {
         if (channel != null) {
             JText(
-                if (channel.channelNumber > 0) "${channel.channelNumber}  ${channel.name}" else channel.name,
+                shownNumber(channel).let { if (it > 0) "$it  ${channel.name}" else channel.name },
                 18.sp, weight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 10.dp),
             )
         }

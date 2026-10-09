@@ -32,6 +32,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import com.fenyx.jtv.ui.player.shownNumber
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -191,6 +193,11 @@ fun GuideScreen(
     val gutter = if (isTv) 48.dp else 16.dp
     val topPad = if (isTv) 27.dp else 12.dp
 
+    // In Favourites the numbers are positions 1, 2, 3, as on Home and in the player (issue #7).
+    val favNumbers = remember(category, channels) {
+        if (category == MainViewModel.GROUP_FAVORITES) com.fenyx.jtv.ui.player.positions(channels) else emptyMap()
+    }
+    CompositionLocalProvider(com.fenyx.jtv.ui.player.LocalFavNumbers provides favNumbers) {
     Column(
         modifier
             .fillMaxSize()
@@ -536,6 +543,7 @@ fun GuideScreen(
             onClose = { details = null },
         )
     }
+    }
 }
 
 private const val NO_PROG = Long.MIN_VALUE
@@ -668,7 +676,7 @@ private fun FocusLine(
     val noGuide = stringResource(R.string.guide_no_guide_for_channel)
     val meta = buildString {
         if (channel != null) {
-            if (channel.channelNumber > 0) append("${channel.channelNumber} ")
+            shownNumber(channel).let { if (it > 0) append("$it ") }
             append(channel.name)
         }
         if (prog != null) {
@@ -794,7 +802,7 @@ private fun GuideRow(
             horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
         ) {
             Text(
-                if (channel.channelNumber > 0) channel.channelNumber.toString() else "",
+                shownNumber(channel).let { if (it > 0) it.toString() else "" },
                 modifier = Modifier.width(if (compact) 40.dp else 44.dp),
                 style = numberStyle(if (compact) 16.sp else 18.sp),
                 color = c.tx,
@@ -966,7 +974,7 @@ private fun GuideDetails(
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(6.dp))
-                val chLine = (if (channel.channelNumber > 0) "${channel.channelNumber} " else "") + channel.name
+                val chLine = shownNumber(channel).let { if (it > 0) "$it " else "" } + channel.name
                 JText(chLine, 18.sp, color = c.t2)
                 if (prog != null) {
                     val state = when {

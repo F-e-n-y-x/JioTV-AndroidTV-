@@ -272,8 +272,9 @@ internal fun PhoneVideo(
                     Modifier.clip(RoundedCornerShape(6.dp)).background(StrapBg).padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (playing.channelNumber > 0) {
-                        JText(playing.channelNumber.toString(), 15.sp, color = c.acc, weight = FontWeight.Bold)
+                    val num = shownNumber(playing)
+                    if (num > 0) {
+                        JText(num.toString(), 15.sp, color = c.acc, weight = FontWeight.Bold)
                         Spacer(Modifier.width(8.dp))
                     }
                     JText(playing.name, 15.sp, weight = FontWeight.SemiBold)

@@ -157,7 +157,7 @@ internal fun MiniPlayerContent(
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     if (channel != null) {
-                        val title = if (channel.channelNumber > 0) "${channel.channelNumber} ${channel.name}" else channel.name
+                        val title = shownNumber(channel).let { if (it > 0) "$it ${channel.name}" else channel.name }
                         JText(title, 14.sp, color = c.tx, weight = FontWeight.SemiBold)
                         val sub = error ?: cur?.let { if (isReplaying(it)) replayLine(it) else it.title }
                             ?: channel.group.takeIf { it.isNotBlank() }?.let { com.fenyx.jtv.ui.main.groupLabel(it) } ?: com.fenyx.jtv.ui.main.languageLabel(channel.language)
