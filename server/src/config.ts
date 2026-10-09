@@ -48,7 +48,7 @@ export function parseTrustProxy(raw: string | undefined): boolean | number | str
 
 /** Runtime configuration, read once from the environment. */
 export const config = {
-  port: Number(process.env.PORT ?? 8080),
+  port: Number(process.env.PORT ?? 29180),
   httpsPort: Number(process.env.HTTPS_PORT ?? 8443),
   host: process.env.HOST ?? "0.0.0.0",
   serverToken: process.env.JTV_SERVER_TOKEN ?? "",
@@ -58,6 +58,13 @@ export const config = {
   masterKey: process.env.MASTER_KEY ?? "",
   dataDir: path.resolve(process.env.DATA_DIR ?? "./data"),
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  // LAN discovery (see discovery.ts): fixed port the app scans; 0 turns it off. The main port (default
+  // the same 29180, so one port does everything) answers it too.
+  discoveryPort: Number(process.env.DISCOVERY_PORT ?? 29180),
+  // Name shown in the app's list of servers, and the port the app should use (the host side of a
+  // Docker port mapping, when it differs from PORT).
+  serverName: process.env.SERVER_NAME ?? "",
+  publicPort: Number(process.env.PUBLIC_PORT ?? process.env.PORT ?? 29180),
 };
 
 /** Shared Jio API constants (mirrors the Android app's JioApiClient). */

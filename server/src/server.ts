@@ -1,4 +1,5 @@
 import path from "node:path";
+import { discoveryInfo, startDiscovery } from "./discovery";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
@@ -71,6 +72,7 @@ async function buildApp(extra?: Record<string, unknown>): Promise<FastifyInstanc
       return (typeof cf === "string" && cf) || req.ip;
     },
   });
+  app.get("/jtv-server", async (_req, reply) => reply.type("application/json").send(discoveryInfo()));
   await registerRoutes(app);
   await registerPlayRoutes(app);
   await registerPlaylistRoutes(app);
@@ -124,6 +126,8 @@ async function main() {
   }
 
   startRefreshScheduler();
+  const discovery = startDiscovery();
+  if (discovery) process.once("exit", () => discovery.close());
 
   // HTTP
   try {

@@ -1,0 +1,25 @@
+# JTV server: Portainer stack / `docker compose -f stack.yml up -d` with the ready-made image
+# (no build). One port, 29180: web page, the app, and finding the server on your network.
+# Portainer: Stacks → Add stack → Web editor → paste this file → Deploy the stack.
+services:
+  jtv-server:
+    image: ghcr.io/f-e-n-y-x/jiotv-server:latest
+    container_name: jtv-server
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 15s
+    environment:
+      - SERVER_NAME=JTV server   # name shown in the app's list of servers
+      # Uncomment if the port is open straight to the internet with no proxy in front:
+      # - TRUST_PROXY=false
+    ports:
+      - "29180:29180"   # web page + app + discovery
+      - "8443:8443"     # optional: HTTPS (self-signed), only for DRM channels in the browser
+    volumes:
+      - jtv-data:/app/data
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  jtv-data:

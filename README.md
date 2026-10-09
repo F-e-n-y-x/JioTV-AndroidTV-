@@ -158,7 +158,7 @@ A self-hosted server lets you **sign in once and share it with every TV** at hom
 - **M3U and EPG for IPTV players.** VLC, TiviMate, OTT Navigator and Kodi, with a full programme guide.
 
 ```bash
-cd server && docker compose up -d --build   # then open http://<host>:8080
+cd server && docker compose up -d --build   # then open http://<host>:29180
 ```
 
 See **[`server/README.md`](server/README.md)** for setup and the API.

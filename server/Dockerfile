@@ -31,10 +31,10 @@ COPY --from=web /web/dist ./web/dist
 # (root) image needs a one-time chown — see README "Upgrading: data volume permissions".
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node
-EXPOSE 8080
+EXPOSE 29180
 VOLUME ["/app/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD wget -qO- http://127.0.0.1:8080/api/status || exit 1
+  CMD wget -qO- http://127.0.0.1:${PORT:-29180}/api/status || exit 1
 # Exec form: node is the main process and receives SIGTERM directly (graceful shutdown in server.ts).
 # docker-compose adds `init: true` so a tiny init reaps zombies and forwards signals.
 CMD ["node", "dist/server.js"]

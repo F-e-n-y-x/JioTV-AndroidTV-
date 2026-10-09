@@ -15,13 +15,19 @@ services:
     stop_grace_period: 15s
     env_file: [.env]
     environment:
-      - PORT=8080
+      # One port for the web page, the app and LAN discovery (29180 is unassigned and unused by
+      # common home-server apps). Existing setups can keep PORT=8080 in .env.
+      - PORT=${PORT:-29180}
       - DATA_DIR=/app/data
       # Honour X-Forwarded-* from Cloudflare / Caddy (https links, real client IP for rate limits).
-      # Set to false if port 8080 is exposed straight to the internet with no proxy in front.
+      # Set to false if the port is exposed straight to the internet with no proxy in front.
       - TRUST_PROXY=${TRUST_PROXY:-true}
+      # Shown in the app's "Servers on your network" list.
+      - SERVER_NAME=${SERVER_NAME:-JTV server}
     ports:
-      - "8080:8080"
+      - "${PORT:-29180}:${PORT:-29180}"
+      # Only when PORT isn't 29180: the app still finds the server through 29180.
+      # - "29180:29180"
     volumes:
       - jtv-data:/app/data
     logging: *default-logging
