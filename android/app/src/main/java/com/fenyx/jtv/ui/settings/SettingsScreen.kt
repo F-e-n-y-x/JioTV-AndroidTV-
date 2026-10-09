@@ -56,7 +56,7 @@ import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.launch
 
 /** Which second-level picker / dialog is open. */
-private enum class Sheet { None, Theme, DeviceType, AppLanguage, Accent, StartWith, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
+private enum class Sheet { None, Theme, DeviceType, AppLanguage, Accent, StartWith, OpenOnStart, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
 
 /**
  * Settings, v2 "Everyday": a plain two-level list. Section labels, then rows of *label + current
@@ -82,6 +82,13 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val epgUrl by settingsManager.epgUrlFlow.collectAsState(initial = "https://avkb.short.gy/epg.xml.gz")
     val epgSyncStatus by mainViewModel.epgSyncStatus.collectAsState()
     val autoplayLastChannel by settingsManager.autoplayLastChannelFlow.collectAsState(initial = false)
+    val openOnStart by settingsManager.openOnStartFlow.collectAsState(initial = com.fenyx.jtv.AutoStart.OFF)
+    // Re-checked on every return to the app, so it updates after "Display over other apps".
+    var canAutoOpen by remember { mutableStateOf(true) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        canAutoOpen = com.fenyx.jtv.AutoStart.allowed(context)
+        onPauseOrDispose { }
+    }
     val groupLanguageVariants by settingsManager.groupLanguageVariantsFlow.collectAsState(initial = true)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
     val serverUrl by settingsManager.serverUrlFlow.collectAsState(initial = "")
@@ -168,6 +175,11 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val themeValue = themeMode ?: if (isTv) "dark" else "system"
     val accentMode by settingsManager.accentFlow.collectAsState(initial = null)
     val accentValue = accentMode ?: "amber"
+    val openOnStartOptions = listOf(
+        com.fenyx.jtv.AutoStart.OFF to stringResource(R.string.common_off),
+        com.fenyx.jtv.AutoStart.BOOT to stringResource(R.string.settings_open_on_start_boot),
+        com.fenyx.jtv.AutoStart.WAKE to stringResource(R.string.settings_open_on_start_wake),
+    )
     val startOptions = listOf("list" to stringResource(R.string.settings_start_list), "last" to stringResource(R.string.settings_start_last))
 
     val versionName = remember {
@@ -214,6 +226,11 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             description = stringResource(R.string.settings_categories_desc)) { categoriesScreen = true })
         add(SRow.Item("start", stringResource(R.string.settings_start), value = stringResource(if (autoplayLastChannel) R.string.settings_start_last else R.string.settings_start_list),
             description = stringResource(R.string.settings_start_desc)) { sheet = Sheet.StartWith })
+        if (isTv) add(SRow.Item("openOnStart", stringResource(R.string.settings_open_on_start),
+            value = openOnStartOptions.first { it.first == openOnStart }.second,
+            description = if (openOnStart != com.fenyx.jtv.AutoStart.OFF && !canAutoOpen)
+                stringResource(R.string.settings_open_on_start_needs, context.packageName)
+            else stringResource(R.string.settings_open_on_start_desc)) { sheet = Sheet.OpenOnStart })
 
         add(SRow.Section(stringResource(R.string.settings_section_picture_sound)))
         add(SRow.Item("quality", stringResource(R.string.settings_quality), value = qualities.find { it.first == quality }?.second ?: qualities[0].second) { sheet = Sheet.Quality })
@@ -428,6 +445,14 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                 swatches = com.fenyx.jtv.theme.ACCENTS.associate { it.first to (if (c.isDark) it.third.first else it.third.second) })
             Sheet.Theme -> PickerDialog(stringResource(R.string.settings_appearance), themes, themeValue,
                 onSelect = { v -> scope.launch { settingsManager.setThemeMode(v) }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.OpenOnStart -> PickerDialog(stringResource(R.string.settings_open_on_start), openOnStartOptions, openOnStart,
+                onSelect = { v ->
+                    scope.launch { settingsManager.setOpenOnStart(v) }
+                    com.fenyx.jtv.AutoStart.sync(context, v)
+                    if (v != com.fenyx.jtv.AutoStart.OFF && !com.fenyx.jtv.AutoStart.allowed(context)) com.fenyx.jtv.AutoStart.askPermission(context)
+                    sheet = Sheet.None
+                },
                 onDismiss = { sheet = Sheet.None })
             Sheet.StartWith -> PickerDialog(stringResource(R.string.settings_start), startOptions, if (autoplayLastChannel) "last" else "list",
                 onSelect = { v -> scope.launch { settingsManager.setAutoplayLastChannel(v == "last") }; sheet = Sheet.None },

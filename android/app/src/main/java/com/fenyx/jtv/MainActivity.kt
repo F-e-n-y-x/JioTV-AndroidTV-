@@ -2,6 +2,7 @@ package com.fenyx.jtv
 
 import android.os.Bundle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -79,6 +80,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleBackupIntent(intent)
+        // Restarts the standby watcher after an app update or if the system stopped it.
+        lifecycleScope.launch {
+            AutoStart.sync(applicationContext, com.fenyx.jtv.data.SettingsManager(applicationContext).openOnStartFlow.first())
+        }
         com.fenyx.jtv.ui.player.Pip.register(this)
 
         // Edge-to-edge + hidden system bars so the app's navy background fills the ENTIRE screen (incl.

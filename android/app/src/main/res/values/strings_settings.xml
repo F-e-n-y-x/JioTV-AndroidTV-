@@ -22,6 +22,11 @@
     <string name="settings_start_desc">What you see when the app opens</string>
     <string name="settings_start_list">Channel list</string>
     <string name="settings_start_last">Last channel</string>
+    <string name="settings_open_on_start">Open when the TV turns on</string>
+    <string name="settings_open_on_start_desc">Opens JTV by itself when the TV or box is switched on. With Start with → Last channel, it plays like a normal TV.</string>
+    <string name="settings_open_on_start_boot">After the box starts up</string>
+    <string name="settings_open_on_start_wake">Also after standby</string>
+    <string name="settings_open_on_start_needs">Needs \"Display over other apps\" for JTV (Settings → Apps → Special app access). If your TV has no such setting, run once from a computer: adb shell appops set %1$s SYSTEM_ALERT_WINDOW allow</string>
     <string name="settings_app_language_desc">Language of the app\'s words</string>
 
     <!-- Picture and sound -->

@@ -22,6 +22,11 @@
     <string name="settings_start_desc">ऐप खोलते ही क्या दिखे</string>
     <string name="settings_start_list">चैनल लिस्ट</string>
     <string name="settings_start_last">पिछला चैनल</string>
+    <string name="settings_open_on_start">TV चालू होने पर खोलें</string>
+    <string name="settings_open_on_start_desc">TV या बॉक्स चालू होते ही JTV अपने आप खुल जाएगा। \"ऐप खुलने पर → पिछला चैनल\" के साथ यह आम TV की तरह चलेगा।</string>
+    <string name="settings_open_on_start_boot">बॉक्स स्टार्ट होने पर</string>
+    <string name="settings_open_on_start_wake">स्टैंडबाय के बाद भी</string>
+    <string name="settings_open_on_start_needs">JTV के लिए \"दूसरे ऐप्स के ऊपर दिखाएं\" चालू करें (सेटिंग्स → ऐप्स → खास ऐप एक्सेस)। अगर TV में यह सेटिंग नहीं है, तो कंप्यूटर से एक बार चलाएं: adb shell appops set %1$s SYSTEM_ALERT_WINDOW allow</string>
     <string name="settings_app_language_desc">ऐप के शब्द किस भाषा में हों</string>
 
     <!-- Picture and sound -->
