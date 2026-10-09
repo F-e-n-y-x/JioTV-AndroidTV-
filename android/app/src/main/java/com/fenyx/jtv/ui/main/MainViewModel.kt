@@ -399,7 +399,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             viewModelScope.launch {
                 try {
                     epgFetchSemaphore.withPermit {
-                        val programs = epgRepository.getNativeEpgForChannel(channelId)
+                        var programs = epgRepository.getNativeEpgForChannel(channelId)
+                        // Jio's "today" (offset 0) lags for hours after midnight and ends before now;
+                        // then its "tomorrow" is the real today.
+                        if (programs.none { it.stopMs > System.currentTimeMillis() }) {
+                            programs = (programs + epgRepository.getNativeEpgForChannel(channelId, offset = 1))
+                                .distinctBy { it.startMs }.sortedBy { it.startMs }
+                        }
                         if (programs.isNotEmpty()) queueEpg(channelId, programs)
                     }
                 } finally {
