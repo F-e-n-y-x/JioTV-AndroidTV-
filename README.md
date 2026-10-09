@@ -149,19 +149,39 @@ It lifts the voice and lowers the background while keeping the bass full. **Medi
 
 ---
 
-## 🖥️ Companion server (optional)
+## 🖥️ Your own server (optional)
 
-A self-hosted server lets you **sign in once and share it with every TV** at home. It also gives you a web player and an M3U playlist for other apps. It's one Docker image (Node + React).
+A server at home lets you **sign in to Jio once and share it with every TV and phone**. Each device
+connects with a short access code, and the server keeps the login fresh, so no TV ever needs its own
+OTP. The app still plays channels straight from Jio; the server only hands out the login.
 
-- **One login for all your TVs.** The server keeps your Jio login fresh, and each TV connects with a short access code.
-- **Web player.** Channel grid, TV guide, catch-up and favourites in the browser.
-- **M3U and EPG for IPTV players.** VLC, TiviMate, OTT Navigator and Kodi, with a full programme guide.
+The app finds your server by itself: **Sign-in → Self-hosted server** lists the servers on your home
+network (beta 14+). Both kinds of server use one port, **29180**.
+
+| | **JTV server** (full) | **JTV lite** |
+|---|---|---|
+| What it is | Docker image (Node + React) | One small file, **under 1 MB** |
+| Runs on | NAS, home server, Raspberry Pi, any Docker host | OpenWrt routers, Raspberry Pi, any Linux or Windows PC, Docker |
+| One login for all TVs | ✅ | ✅ |
+| Found automatically by the app | ✅ | ✅ |
+| Web player in the browser | ✅ | — |
+| M3U playlist + EPG for VLC, TiviMate, Kodi… | ✅ | — |
+
+**JTV server**, the ready-made image (Portainer stack, `docker run` and compose in [`server/README.md`](server/README.md)):
 
 ```bash
-cd server && docker compose up -d --build   # then open http://<host>:29180
+docker run -d --name jtv-server --restart unless-stopped -p 29180:29180 \
+  -v jtv-data:/app/data ghcr.io/f-e-n-y-x/jiotv-server:latest
 ```
 
-See **[`server/README.md`](server/README.md)** for setup and the API.
+**JTV lite** on an OpenWrt router (download it for other machines from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/tag/lite-v0.1.0); details in [`lite/README.md`](lite/README.md)):
+
+```sh
+wget -qO- https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/lite/openwrt/install.sh | sh
+```
+
+Then open `http://<server-ip>:29180`, set a password, sign in to Jio with your number and OTP, and
+enter the access code in the app.
 
 ---
 
