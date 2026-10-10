@@ -11,7 +11,6 @@
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
-- Jio doesn't offer replays on some channels (for example Colors, Nick, many sports channels).
 
 ---
 
