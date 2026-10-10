@@ -1,12 +1,13 @@
 <p align="center"><img src="https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/screenshot/jtv-mark.svg" width="110" alt="JTV" /></p>
 
-# JTV 2.0 beta 14
+# JTV 2.0 beta 15
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.14.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.15.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 14
-- **Find your server automatically.** Sign-in → *Self-hosted server* now lists the JTV servers on your home network (name, address, *Full* or *Lite*). Pick one and enter your access code. *Custom server* below still takes any address.
-- Works with the full Docker server and the new tiny **JTV lite** server for routers (OpenWrt, Raspberry Pi, any PC). Both use one port, **29180**.
+## New in beta 15
+- **Working Zee channels & ClearKey DRM playback.** Restored working playback for Zee channels (Zee TV HD, Zee Cinema HD, &pictures HD, Zee News, Zee Marathi, Zing, Zee Talkies, and regional feeds) with ClearKey DRM support and official JioTV channel numbers and categories.
+- **Fixed category reordering.** Reordering categories in Settings → Categories preserves any unlisted or custom channels without disrupting navigation order.
+- **Background channel cache loading.** Asynchronous cache reading avoids IO pool stalls and thread deadlocks during app launch on Android TV and mobile devices.
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
@@ -15,6 +16,10 @@
 ---
 
 ## Earlier betas
+
+### Beta 14
+- **Find your server automatically.** Sign-in → *Self-hosted server* now lists the JTV servers on your home network (name, address, *Full* or *Lite*). Pick one and enter your access code. *Custom server* below still takes any address.
+- Works with the full Docker server and the new tiny **JTV lite** server for routers (OpenWrt, Raspberry Pi, any PC). Both use one port, **29180**.
 
 ### Beta 13
 - **Open when the TV turns on** (requested in #8). Settings → General → *Open when the TV turns on*: **After the box starts up**, or **Also after standby** for TVs that only sleep when switched off. With *Start with → Last channel*, it plays like a normal TV. On Android 10 and newer, a popup explains the one permission (*Display over other apps*) and opens that setting for you.

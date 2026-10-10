@@ -542,7 +542,8 @@ fun TvPlayerScreen(
                             .build()
                     )
 
-                if (streamData.isMpd && streamData.licenseUrl.isNotEmpty()) {
+                val isJwk = streamData.licenseUrl.startsWith("jwk:")
+                if (streamData.isMpd && streamData.licenseUrl.isNotEmpty() && !isJwk) {
                     val drmConfig = MediaItem.DrmConfiguration.Builder(androidx.media3.common.C.WIDEVINE_UUID)
                         .setLicenseUri(streamData.licenseUrl)
                         .setLicenseRequestHeaders(streamData.licenseHeaders)
@@ -562,7 +563,20 @@ fun TvPlayerScreen(
                 ts.reset()
                 ts.replay = cu != null
 
-                val mediaSource = mediaSourceFactory.createMediaSource(mediaItemBuilder.build())
+                val mediaSource = if (isJwk) {
+                    val jwkJson = streamData.licenseUrl.removePrefix("jwk:")
+                    val drmCallback = androidx.media3.exoplayer.drm.LocalMediaDrmCallback(jwkJson.toByteArray(Charsets.UTF_8))
+                    val drmSessionManager = androidx.media3.exoplayer.drm.DefaultDrmSessionManager.Builder()
+                        .setUuidAndExoMediaDrmProvider(androidx.media3.common.C.CLEARKEY_UUID, androidx.media3.exoplayer.drm.FrameworkMediaDrm.DEFAULT_PROVIDER)
+                        .build(drmCallback)
+                    DefaultMediaSourceFactory(context)
+                        .setDataSourceFactory(resolvingDataSourceFactory)
+                        .setDrmSessionManagerProvider { drmSessionManager }
+                        .setLoadErrorHandlingPolicy(com.fenyx.jtv.player.JioLoadErrorHandlingPolicy())
+                        .createMediaSource(mediaItemBuilder.build())
+                } else {
+                    mediaSourceFactory.createMediaSource(mediaItemBuilder.build())
+                }
 
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
                     // A track override belongs to one stream; a new stream picks by preferred language.

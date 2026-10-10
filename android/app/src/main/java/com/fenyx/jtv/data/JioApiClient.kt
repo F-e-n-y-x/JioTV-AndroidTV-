@@ -555,11 +555,16 @@ object JioApiClient {
         return java.io.File(cacheDir, CHANNEL_CACHE_FILE)
     }
 
-    /** Reads the persisted channel list regardless of age. Returns null if there is no usable cache. */
-    fun readChannelCache(context: android.content.Context): List<Channel>? {
+    /**
+     * Reads the persisted channel list regardless of age. Returns null if there is no usable cache.
+     * This is a suspend function so Zee channels can be loaded without runBlocking (which can deadlock
+     * the IO thread pool on phones/tablets with fewer cores).
+     */
+    suspend fun readChannelCache(context: android.content.Context): List<Channel>? =
+        withContext(Dispatchers.IO) {
         val cacheFile = channelCacheFile(context)
-        if (!cacheFile.exists()) return null
-        return try {
+        if (!cacheFile.exists()) return@withContext null
+        try {
             val jsonArray = org.json.JSONArray(cacheFile.readText())
             val channels = mutableListOf<Channel>()
             for (i in 0 until jsonArray.length()) {
@@ -580,7 +585,22 @@ object JioApiClient {
                     planType = obj.optString("planType", "")
                 ))
             }
-            channels.ifEmpty { null }
+            // Clean up any legacy dummy Zee channels (e.g. "zee_9001" or group "Zee") from previous builds
+            channels.removeAll { it.id.startsWith("zee_") || it.group == "Zee" }
+
+            // Load Zee channels with official channel numbers and categories
+            val zeeChannels = ZeeRepository.loadZeeChannels(context)
+            val zeeMap = zeeChannels.associateBy { it.channelNumber }
+            // Replace matching channels in cache so they get the working M3U stream and ClearKey DRM
+            val updated = channels.map { ch -> zeeMap[ch.channelNumber] ?: ch }.toMutableList()
+            val existingNumbers = updated.mapTo(HashSet()) { it.channelNumber }
+            zeeChannels.forEach { zc ->
+                if (zc.channelNumber !in existingNumbers) {
+                    updated.add(zc)
+                }
+            }
+            updated.sortBy { it.channelNumber }
+            updated.ifEmpty { null }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read channel cache", e)
             null
@@ -713,11 +733,14 @@ object JioApiClient {
             // (see ChannelSources). Both lists download + parse IN PARALLEL, then merge with v3.1 winning.
             val v14 = mutableMapOf<Int, Channel>()
             val v31 = mutableMapOf<Int, Channel>()
+            val zee = mutableListOf<Channel>()
             kotlinx.coroutines.coroutineScope {
                 launch(Dispatchers.IO) { parseChannels(ChannelSources.V31_URL, v31) }
                 launch(Dispatchers.IO) { parseChannels(ChannelSources.V14_URL, v14) }
+                launch(Dispatchers.IO) { zee.addAll(ZeeRepository.loadZeeChannels(context)) }
             }
             finalChannelsMap.putAll(ChannelSources.merge(v31, v14))
+            zee.forEach { zc -> finalChannelsMap[zc.channelNumber] = zc }
 
             if (finalChannelsMap.isEmpty()) {
                 // Network produced nothing — fall back to whatever we have on disk (even if stale)
@@ -820,6 +843,26 @@ object JioApiClient {
                 streamUrlCache.take(channelId, authData.authToken)?.let {
                     Log.d(TAG, "Stream URL for $channelId from prefetch")
                     return@withContext Result.success(it)
+                }
+            }
+            if (ZeeRepository.isZeeChannel(channelId)) {
+                val zc = ZeeRepository.getZeeChannel(channelId)
+                if (zc != null) {
+                    val jwkJson = ZeeRepository.clearKeyToJwkJson(zc.licenseKey)
+                    val headers = mapOf(
+                        "User-Agent" to zc.userAgent,
+                        "Referer" to zc.referer,
+                        "Origin" to zc.origin,
+                        "Cookie" to zc.cookie
+                    )
+                    val streamData = StreamData(
+                        streamUrl = zc.streamUrl,
+                        licenseUrl = if (jwkJson.isNotEmpty()) "jwk:$jwkJson" else "",
+                        isMpd = zc.isMpd,
+                        headers = headers,
+                        licenseHeaders = headers
+                    )
+                    return@withContext Result.success(streamData)
                 }
             }
             ensureStreamModesLoaded(context)

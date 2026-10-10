@@ -29,9 +29,16 @@ data class CategoryPrefs(val order: List<String> = emptyList(), val hidden: Set<
 
     /** [all] in the user's order, hidden ones included (what the Settings list shows). */
     fun reorderAll(all: List<String>): List<String> {
-        val ordered = order.filter { it in all }
-        val slots = ordered.toHashSet()
-        val next = ordered.iterator()
-        return all.map { if (it in slots) next.next() else it }
+        if (order.isEmpty()) return all
+        val inOrder = order.filter { it in all }
+        val missing = all.filter { it !in order }
+        if (missing.isEmpty()) return inOrder
+        val result = inOrder.toMutableList()
+        for (key in missing) {
+            val idxInAll = all.indexOf(key)
+            val insertPos = idxInAll.coerceIn(0, result.size)
+            result.add(insertPos, key)
+        }
+        return result
     }
 }

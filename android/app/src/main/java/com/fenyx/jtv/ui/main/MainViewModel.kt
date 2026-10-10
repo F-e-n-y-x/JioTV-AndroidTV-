@@ -315,8 +315,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val app = getApplication<Application>()
 
             // 1) Instant load from disk so the UI appears immediately (no network wait on boot).
-            // Parse the ~1300-channel cache OFF the main thread (it blocked the first frame on TVs).
-            val cached = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { JioApiClient.readChannelCache(app) }
+            // readChannelCache is now a suspend fun that handles its own IO dispatch internally
+            // (including loading Zee channels without runBlocking deadlock risk).
+            val cached = JioApiClient.readChannelCache(app)
             val cacheFresh = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { JioApiClient.isChannelCacheFresh(app) }
             if (cached != null) {
                 publishChannels(cached)
