@@ -22,8 +22,8 @@ android {
         applicationId = "com.fenyx.jtv"
         minSdk = 24          // Android 7.0 — comfortably covers the user's Android 10 TV
         targetSdk = 36       // Android 16 (latest)
-        versionCode = 215   // v2 track (2.0-beta.x = 200..); stable 1.5.x stays below
-        versionName = "2.0-beta.15"
+        versionCode = 216   // v2 track (2.0-beta.x = 200..); stable 1.5.x stays below
+        versionName = "2.0-beta.16"
     }
 
     signingConfigs {
@@ -74,6 +74,10 @@ android {
     // Hindi must stay complete: the release build's lint-vital pass fails on an untranslated string.
     lint {
       fatal += listOf("MissingTranslation", "ExtraTranslation", "StringFormatMatches", "StringFormatCount")
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     packaging {

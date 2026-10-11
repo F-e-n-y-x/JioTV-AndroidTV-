@@ -16,5 +16,5 @@ test("v1.4-only ids are kept only when allow-listed", () => {
 });
 
 test("allowlist is the v1.5.5 Zee regional set", () => {
-  assert.deepEqual([...V14_ONLY_ALLOWLIST.keys()].sort((a, b) => a - b), [413, 414, 625, 628, 722, 1691, 3476]);
+  assert.deepEqual([...V14_ONLY_ALLOWLIST.keys()].sort((a, b) => a - b), [413, 414, 625, 628, 722, 1691, 2256, 3051, 3476]);
 });

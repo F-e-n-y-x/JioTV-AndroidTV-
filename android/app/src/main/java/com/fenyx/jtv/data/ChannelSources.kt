@@ -33,6 +33,8 @@ object ChannelSources {
         628 to "Zee Tamil",
         722 to "Zee Sarthak",
         1691 to "Zee Classic",
+        2256 to "Zee Thirai",
+        3051 to "Zee Thirai HD",
         3476 to "Zee Bangla Sonar",
     )
 

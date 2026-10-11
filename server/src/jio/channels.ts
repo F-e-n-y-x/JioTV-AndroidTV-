@@ -33,6 +33,8 @@ export const V14_ONLY_ALLOWLIST: ReadonlyMap<number, string> = new Map([
   [628, "Zee Tamil"],
   [722, "Zee Sarthak"],
   [1691, "Zee Classic"],
+  [2256, "Zee Thirai"],
+  [3051, "Zee Thirai HD"],
   [3476, "Zee Bangla Sonar"],
 ]);
 

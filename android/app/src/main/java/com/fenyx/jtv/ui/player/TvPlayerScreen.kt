@@ -256,9 +256,11 @@ fun TvPlayerScreen(
     val voiceBoost by settingsManager.voiceBoostFlow.collectAsState(initial = 2)
     val audioNormalize by settingsManager.audioNormalizeFlow.collectAsState(initial = false)
     // LoudnessEnhancer handles makeup loudness; the dialogue processor does center-channel voice
-    // isolation. The processor is stable across player rebuilds and reads its level live.
+    // isolation. Keyed on player build settings so rebuilt players get their own processor instance.
     val audioEnhancer = remember { com.fenyx.jtv.player.AudioEnhancer() }
-    val dialogueProcessor = remember { com.fenyx.jtv.player.DialogueAudioProcessor() }
+    val dialogueProcessor = remember(hardwareOnlyPref, tunnelingPref, bufferSecPref) {
+        com.fenyx.jtv.player.DialogueAudioProcessor()
+    }
 
     // ExoPlayer is built using our custom factory to ensure Android TV optimizations. Keyed on the
     // settings that can only be applied at construction so changing any of them rebuilds the player;
@@ -499,6 +501,7 @@ fun TvPlayerScreen(
             }
             isBuffering = true
             exoPlayer.stop()
+            exoPlayer.clearMediaItems()
             
             val authData = settingsManager.authDataFlow.first()
             
@@ -798,6 +801,8 @@ fun TvPlayerScreen(
     // Release the player when it is replaced (hardware-decoder toggle) or the screen leaves.
     DisposableEffect(exoPlayer) {
         onDispose {
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
             exoPlayer.release()
         }
     }
@@ -1811,7 +1816,13 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
             update = { view ->
                 view.resizeMode = resizeMode
                 // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
-                if (!noVideo && view.player !== player) view.player = player
+                if (!noVideo && view.player !== player) {
+                    view.player = null
+                    view.player = player
+                }
+            },
+            onRelease = { view ->
+                view.player = null
             },
             modifier = Modifier.fillMaxSize(),
         )

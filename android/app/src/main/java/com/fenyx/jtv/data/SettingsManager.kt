@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -72,23 +73,23 @@ class SettingsManager(private val context: Context) {
 
     val recentChannelsFlow: Flow<List<String>> = context.dataStore.data.map { p ->
         p[RECENT_CHANNELS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
-    }
+    }.distinctUntilChanged()
 
-    val accentFlow: Flow<String?> = context.dataStore.data.map { it[ACCENT] }
+    val accentFlow: Flow<String?> = context.dataStore.data.map { it[ACCENT] }.distinctUntilChanged()
 
     suspend fun setAccent(key: String) {
         context.dataStore.edit { it[ACCENT] = key }
     }
 
-    val themeModeFlow: Flow<String?> = context.dataStore.data.map { it[THEME_MODE] }
+    val themeModeFlow: Flow<String?> = context.dataStore.data.map { it[THEME_MODE] }.distinctUntilChanged()
 
     suspend fun setThemeMode(mode: String) {
         context.dataStore.edit { it[THEME_MODE] = mode }
     }
 
-    val setupModeFlow: Flow<String?> = context.dataStore.data.map { it[SETUP_MODE] }
-    val serverUrlFlow: Flow<String> = context.dataStore.data.map { it[SERVER_URL] ?: "" }
-    val serverTokenFlow: Flow<String> = context.dataStore.data.map { it[SERVER_TOKEN] ?: "" }
+    val setupModeFlow: Flow<String?> = context.dataStore.data.map { it[SETUP_MODE] }.distinctUntilChanged()
+    val serverUrlFlow: Flow<String> = context.dataStore.data.map { it[SERVER_URL] ?: "" }.distinctUntilChanged()
+    val serverTokenFlow: Flow<String> = context.dataStore.data.map { it[SERVER_TOKEN] ?: "" }.distinctUntilChanged()
 
     suspend fun setSetupMode(mode: String?) {
         context.dataStore.edit { prefs ->
@@ -105,69 +106,69 @@ class SettingsManager(private val context: Context) {
 
     val defaultLanguageFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[DEFAULT_LANGUAGE] ?: "hi"
-    }
+    }.distinctUntilChanged()
 
     val defaultQualityFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[DEFAULT_QUALITY] ?: "auto"
-    }
+    }.distinctUntilChanged()
 
     val hardwareDecoderFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[HARDWARE_DECODER] ?: true
-    }
+    }.distinctUntilChanged()
 
     // Off by default: tunneling causes random black screens on many Amlogic/MediaTek TVs.
     val tunnelingFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[TUNNELING] ?: false
-    }
+    }.distinctUntilChanged()
 
     // Max playback buffer in seconds. Higher = smoother (rides out network/CDN jitter) at the cost of
     // more RAM and slightly higher channel-zap time. Default 60s.
     val playbackBufferSecFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[PLAYBACK_BUFFER_SEC] ?: 60
-    }
+    }.distinctUntilChanged()
 
     // Audio enhancement (applied via AudioEffects on the player session). Defaults to 2 (Medium) so
     // dialogue is clearer out of the box; users who explicitly set a level (incl. 0/Off) keep theirs.
     val voiceBoostFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[VOICE_BOOST] ?: 2
-    }
+    }.distinctUntilChanged()
     val audioNormalizeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[AUDIO_NORMALIZE] ?: false
-    }
+    }.distinctUntilChanged()
 
     val lastSelectedCategoryFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[LAST_SELECTED_CATEGORY]
-    }
+    }.distinctUntilChanged()
 
     val lastUpdateCheckFlow: Flow<Long> = context.dataStore.data.map { preferences ->
         preferences[LAST_UPDATE_CHECK]?.toLongOrNull() ?: 0L
-    }
+    }.distinctUntilChanged()
 
     val playerResizeModeFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[PLAYER_RESIZE_MODE] ?: 0 // Default: RESIZE_MODE_FIT
-    }
+    }.distinctUntilChanged()
 
     // On by default: most users want one tile per channel and pick language in the player.
     val groupLanguageVariantsFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[GROUP_LANGUAGE_VARIANTS] ?: true
-    }
+    }.distinctUntilChanged()
 
     val epgModeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[EPG_MODE] ?: false
-    }
+    }.distinctUntilChanged()
 
     val epgUrlFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[EPG_URL] ?: "https://avkb.short.gy/epg.xml.gz"
-    }
+    }.distinctUntilChanged()
 
     val autoplayLastChannelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[AUTOPLAY_LAST_CHANNEL] ?: false
-    }
+    }.distinctUntilChanged()
 
     /** In the player, Up goes to the next channel number (1 → 2 → 3), like CH+ (issue #5). */
     val upIsNextChannelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[UP_IS_NEXT_CHANNEL] ?: true
-    }
+    }.distinctUntilChanged()
 
     /** Settings → Categories: order and hidden ones, stored as newline-separated keys. */
     val categoryPrefsFlow: Flow<CategoryPrefs> = context.dataStore.data.map { p ->
@@ -175,7 +176,7 @@ class SettingsManager(private val context: Context) {
             order = p[CATEGORY_ORDER]?.split('\n')?.filter { it.isNotEmpty() }.orEmpty(),
             hidden = p[CATEGORY_HIDDEN]?.split('\n')?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
         )
-    }
+    }.distinctUntilChanged()
 
     suspend fun setCategoryPrefs(prefs: CategoryPrefs) {
         context.dataStore.edit {
@@ -424,7 +425,7 @@ class SettingsManager(private val context: Context) {
     /** The custom remote-button map; absent (or unreadable) = the Standard profile = today's keys. */
     val remoteKeyMapFlow: Flow<RemoteKeyMap> = context.dataStore.data.map { p ->
         RemoteKeyMap.fromJson(p[remoteKeysKey]) ?: RemoteKeys.Default
-    }
+    }.distinctUntilChanged()
 
     suspend fun setRemoteKeyMap(map: RemoteKeyMap) {
         context.dataStore.edit { it[remoteKeysKey] = map.toJson() }
@@ -436,7 +437,7 @@ class SettingsManager(private val context: Context) {
     }
 
     /** Phone/tablet: go into picture-in-picture when leaving the app while a channel plays. On by default. */
-    val pipOnLeaveFlow: Flow<Boolean> = context.dataStore.data.map { it[pipKey] ?: true }
+    val pipOnLeaveFlow: Flow<Boolean> = context.dataStore.data.map { it[pipKey] ?: true }.distinctUntilChanged()
 
     suspend fun setPipOnLeave(enabled: Boolean) {
         context.dataStore.edit { it[pipKey] = enabled }
