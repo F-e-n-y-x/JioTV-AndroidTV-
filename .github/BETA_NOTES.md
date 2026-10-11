@@ -1,8 +1,8 @@
-# JTV 2.0 beta 16.1
+# JTV 2.0 beta 17
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.16.1.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.17.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 16.1
+## New in beta 17
 - **Channel language filter.** Added a dedicated **Channel languages** setting (**Settings → Channels → Channel languages**): multi-select which languages you want to watch with channel counts, and show or hide channels language-wise across the entire app (Home, Categories, Guide, Search, and Player).
 - **Fixed double audio & decoder stability.** Fixed ghost audio and channel playback stops caused by multiple background player instances and preference flow re-triggers when switching preview/picture settings (display fit, stretch, aspect ratio); background playback is now cleanly paused when entering Settings or other screens.
 - **Live Star Sports & Sony Sports playback.** Updated sports streams upstream to an auto-renewing live feed (`mjelo`), resolving expired token errors (HTTP 403) across all Star Sports (Star Sports 1, 2, 3, Select 1/2 in English, Hindi, Tamil, Telugu, Kannada) and Sony Sports channels.
@@ -15,6 +15,11 @@
 ---
 
 ## Earlier betas
+
+### Beta 16
+- **Added Star Sports & Sony Sports channels.** Added all 23 Star Sports channels (Star Sports 1, 2, 3, Select 1, Select 2 in English, Hindi, Tamil, Telugu, Kannada) and Sony Sports channels (Sony Sports Ten 1, 2, 3, 4, 5 HD/SD, Eurosport, DD Sports) with ClearKey DRM streams.
+- **Added Zee Thirai & Zee Thirai HD.** Added Tamil movie channel Zee Thirai and Zee Thirai HD with ClearKey DRM playback and offline fallbacks.
+
 
 ### Beta 15
 - **Working Zee channels & ClearKey DRM playback.** Restored working playback for Zee channels (Zee TV HD, Zee Cinema HD, &pictures HD, Zee News, Zee Marathi, Zing, Zee Talkies, and regional feeds) with ClearKey DRM support and official JioTV channel numbers and categories.

@@ -23,7 +23,7 @@ android {
         minSdk = 24          // Android 7.0 — comfortably covers the user's Android 10 TV
         targetSdk = 36       // Android 16 (latest)
         versionCode = 217   // v2 track (2.0-beta.x = 200..); stable 1.5.x stays below
-        versionName = "2.0-beta.16.1"
+        versionName = "2.0-beta.17"
     }
 
     signingConfigs {
