@@ -1,11 +1,11 @@
-# JTV 2.0 beta 16
+# JTV 2.0 beta 16.1
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.16.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.16.1.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 16
-- **Added Star Sports & Sony Sports channels.** Added all 23 Star Sports channels (Star Sports 1, 2, 3, Select 1, Select 2 in English, Hindi, Tamil, Telugu, Kannada) and Sony Sports channels (Sony Sports Ten 1, 2, 3, 4, 5 HD/SD, Eurosport, DD Sports) with ClearKey DRM streams.
-- **Added Zee Thirai & Zee Thirai HD.** Added Tamil movie channel Zee Thirai and Zee Thirai HD with ClearKey DRM playback and offline fallbacks.
-- **Fixed preview settings stability & double audio.** Resolved ghost audio and double audio playback caused by preference flow re-triggers when switching preview settings (display fit, stretch, aspect ratio); properly key audio processors to playback instances.
+## New in beta 16.1
+- **Live Star Sports & Sony Sports playback.** Updated sports streams upstream to an auto-renewing live feed (`mjelo`), resolving expired token errors (HTTP 403) across all Star Sports (Star Sports 1, 2, 3, Select 1/2 in English, Hindi, Tamil, Telugu, Kannada) and Sony Sports channels.
+- **Added Zee Thirai & Zee Thirai HD.** Added Tamil movie channel Zee Thirai and Zee Thirai HD with ClearKey DRM playback.
+- **Fixed preview settings stability & double audio.** Resolved ghost audio and double audio playback caused by preference flow re-triggers when switching preview settings (display fit, stretch, aspect ratio).
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.

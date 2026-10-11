@@ -1,14 +1,7 @@
 name: Build and Release Android APK
 
+# Push triggers disabled to conserve GitHub Actions credits (builds are run locally)
 on:
-  push:
-    tags:
-      - 'v*'
-    branches:
-      - main
-    paths:
-      - 'android/**'
-      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
 permissions:
