@@ -53,6 +53,7 @@ class SettingsManager(private val context: Context) {
         private val IGNORED_UPDATE = stringPreferencesKey("ignored_update_version")
         private val CATEGORY_ORDER = stringPreferencesKey("category_order")
         private val CATEGORY_HIDDEN = stringPreferencesKey("category_hidden")
+        private val HIDDEN_CHANNEL_LANGUAGES = stringPreferencesKey("hidden_channel_languages")
         private val LAST_CHANNEL_ID = stringPreferencesKey("last_channel_id")
         private val LAST_CHANNEL_GROUP = stringPreferencesKey("last_channel_group")
 
@@ -207,10 +208,21 @@ class SettingsManager(private val context: Context) {
 
     val lastChannelIdFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[LAST_CHANNEL_ID]
-    }
+    }.distinctUntilChanged()
 
     val lastChannelGroupFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[LAST_CHANNEL_GROUP]
+    }.distinctUntilChanged()
+
+    /** Languages hidden by the user in Settings → Channels → Channel Languages. */
+    val hiddenLanguagesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[HIDDEN_CHANNEL_LANGUAGES]?.split('\n')?.filter { it.isNotBlank() }?.toSet().orEmpty()
+    }.distinctUntilChanged()
+
+    suspend fun setHiddenLanguages(languages: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[HIDDEN_CHANNEL_LANGUAGES] = languages.joinToString("\n")
+        }
     }
 
     /**

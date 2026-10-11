@@ -127,6 +127,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _recentIds = MutableStateFlow<List<String>>(emptyList())
     val recentIds: StateFlow<List<String>> = _recentIds.asStateFlow()
 
+    val hiddenLanguages: StateFlow<Set<String>> = settingsManager.hiddenLanguagesFlow
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptySet())
+
+    fun getAllLanguagesWithCounts(): Map<String, Int> {
+        val all = _allChannels.value
+        return if (all.isEmpty()) emptyMap()
+        else all.groupBy { it.language.ifBlank { "Other" } }.mapValues { it.value.size }
+    }
+
+    fun setHiddenLanguages(hidden: Set<String>) {
+        viewModelScope.launch { settingsManager.setHiddenLanguages(hidden) }
+    }
+
     init {
         viewModelScope.launch {
             settingsManager.recentChannelsFlow.distinctUntilChanged().collect { _recentIds.value = it }
@@ -137,22 +150,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _favoriteChannels.value = order.toSet()
             }
         }
-        // Apply language-variant collapsing. Depends ONLY on the channel list and the toggle (both
-        // deduped), and the collapse runs on Dispatchers.Default — previously it also keyed on
-        // defaultLanguageFlow and ran on the main thread, so EVERY DataStore write (incl. the
-        // setLastChannelId on each channel zap) re-collapsed all ~1300 channels on the UI thread and
-        // reshuffled the list, which both janked the app and swapped the playing channel out from under
-        // the player. Representative selection is now language-independent, so the list stays stable.
+        // Apply language filtering and language-variant collapsing.
         viewModelScope.launch {
             combine(
                 _allChannels,
-                settingsManager.groupLanguageVariantsFlow.distinctUntilChanged()
-            ) { all, groupOn ->
-                if (groupOn && all.isNotEmpty()) com.fenyx.jtv.data.ChannelLanguage.collapse(all)
-                else all to emptyMap<String, List<com.fenyx.jtv.data.ChannelLanguage.Variant>>()
+                settingsManager.groupLanguageVariantsFlow.distinctUntilChanged(),
+                settingsManager.hiddenLanguagesFlow.distinctUntilChanged()
+            ) { all, groupOn, hiddenLangs ->
+                val filtered = if (hiddenLangs.isEmpty()) all else all.filter { it.language !in hiddenLangs }
+                val effective = if (filtered.isEmpty()) all else filtered
+                val pair = if (groupOn && effective.isNotEmpty()) com.fenyx.jtv.data.ChannelLanguage.collapse(effective)
+                else effective to emptyMap<String, List<com.fenyx.jtv.data.ChannelLanguage.Variant>>()
+                pair
             }.flowOn(kotlinx.coroutines.Dispatchers.Default).collect { (display, map) ->
                 variantMap = map
                 _displayChannels.value = display
+                val validGroups = display.map { it.group }.distinct().sorted()
+                if (validGroups.isNotEmpty()) _groups.value = validGroups
             }
         }
         // Compute filtered/sorted channels reactively in the ViewModel (not in Compose)

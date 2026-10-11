@@ -352,4 +352,13 @@
     <string name="categories_move_top">Move to top</string>
     <string name="categories_all_shown">All shown</string>
     <string name="categories_n_hidden">%d hidden</string>
+
+    <!-- Channel languages -->
+    <string name="settings_channel_languages">Channel languages</string>
+    <string name="settings_channel_languages_desc">Choose which language channels to show in the app</string>
+    <string name="channel_languages_intro">Select which languages appear across all categories and channels.</string>
+    <string name="channel_languages_all_shown">All languages shown</string>
+    <string name="channel_languages_n_hidden">%d hidden</string>
+    <string name="channel_languages_show_all">Show all</string>
+    <string name="channel_languages_hide_all">Hide all</string>
 </resources>

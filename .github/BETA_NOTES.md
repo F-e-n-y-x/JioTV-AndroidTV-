@@ -3,9 +3,11 @@
 > ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.16.1.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
 ## New in beta 16.1
+- **Channel language filter.** Added a dedicated **Channel languages** setting (**Settings → Channels → Channel languages**): multi-select which languages you want to watch with channel counts, and show or hide channels language-wise across the entire app (Home, Categories, Guide, Search, and Player).
+- **Fixed double audio & decoder stability.** Fixed ghost audio and channel playback stops caused by multiple background player instances and preference flow re-triggers when switching preview/picture settings (display fit, stretch, aspect ratio); background playback is now cleanly paused when entering Settings or other screens.
 - **Live Star Sports & Sony Sports playback.** Updated sports streams upstream to an auto-renewing live feed (`mjelo`), resolving expired token errors (HTTP 403) across all Star Sports (Star Sports 1, 2, 3, Select 1/2 in English, Hindi, Tamil, Telugu, Kannada) and Sony Sports channels.
 - **Added Zee Thirai & Zee Thirai HD.** Added Tamil movie channel Zee Thirai and Zee Thirai HD with ClearKey DRM playback.
-- **Fixed preview settings stability & double audio.** Resolved ghost audio and double audio playback caused by preference flow re-triggers when switching preview settings (display fit, stretch, aspect ratio).
+- **Credits & Acknowledgments.** Huge thanks to [rathee-ashish/zee-playlist](https://github.com/rathee-ashish/zee-playlist) and community playlist contributors for channel stream metadata and Zee/sports playlist feeds.
 
 ## Known limits
 - Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.

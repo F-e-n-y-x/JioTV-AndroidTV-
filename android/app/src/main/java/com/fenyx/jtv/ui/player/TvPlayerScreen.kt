@@ -106,6 +106,8 @@ fun TvPlayerScreen(
     catchup: com.fenyx.jtv.data.CatchupRequest? = null,
     /** Remote buttons: open the programme guide or search (the host navigates). */
     onRemoteScreen: (com.fenyx.jtv.data.RemoteAction) -> Unit = {},
+    /** TV: true when this player is on top of backStack, false when obscured (Settings/Guide opened). */
+    isActive: Boolean = true,
 ) {
     val context = LocalContext.current
     // The app theme (the player itself is dark-only); the mini player matches the app.
@@ -225,6 +227,11 @@ fun TvPlayerScreen(
         language = settingsManager.defaultLanguageFlow.first()
         resizeMode = settingsManager.playerResizeModeFlow.first()
         prefsLoaded = true
+    }
+    LaunchedEffect(Unit) {
+        settingsManager.playerResizeModeFlow.collect { mode ->
+            resizeMode = mode
+        }
     }
 
     // Player state
@@ -801,9 +808,20 @@ fun TvPlayerScreen(
     // Release the player when it is replaced (hardware-decoder toggle) or the screen leaves.
     DisposableEffect(exoPlayer) {
         onDispose {
+            exoPlayer.volume = 0f
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
             exoPlayer.release()
+        }
+    }
+
+    // When the TV player is obscured by another screen (e.g. Settings or Guide), pause playback
+    // so no ghost audio plays and hardware decoders are relieved. Resume when returning to top.
+    LaunchedEffect(isActive) {
+        if (!isActive) {
+            exoPlayer.pause()
+        } else if (!userPaused && prefsLoaded) {
+            exoPlayer.play()
         }
     }
 
@@ -1814,10 +1832,11 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
                 }
             },
             update = { view ->
-                view.resizeMode = resizeMode
+                if (view.resizeMode != resizeMode) {
+                    view.resizeMode = resizeMode
+                }
                 // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
                 if (!noVideo && view.player !== player) {
-                    view.player = null
                     view.player = player
                 }
             },

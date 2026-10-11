@@ -113,6 +113,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
     var remoteScreen by rememberSaveable { mutableStateOf(false) }
     var categoriesScreen by rememberSaveable { mutableStateOf(false) }
+    var languagesScreen by rememberSaveable { mutableStateOf(false) }
     val categoryGroups by mainViewModel.groups.collectAsState()
     val remoteRowFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -263,6 +264,10 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         })
 
         add(SRow.Section(stringResource(R.string.settings_section_channels)))
+        val hiddenLangsCount = mainViewModel.hiddenLanguages.collectAsState().value.size
+        add(SRow.Item("channelLanguages", stringResource(R.string.settings_channel_languages),
+            value = if (hiddenLangsCount == 0) stringResource(R.string.channel_languages_all_shown) else stringResource(R.string.channel_languages_n_hidden, hiddenLangsCount),
+            description = stringResource(R.string.settings_channel_languages_desc)) { languagesScreen = true })
         add(SRow.Item("variants", stringResource(R.string.settings_group_languages), value = onOff(groupLanguageVariants),
             description = stringResource(R.string.settings_group_languages_desc)) {
             scope.launch { settingsManager.setGroupLanguageVariants(!groupLanguageVariants) }
@@ -360,6 +365,10 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     }
     if (categoriesScreen) {
         CategoriesScreen(modifier, categoryGroups, onClose = { categoriesScreen = false })
+        return
+    }
+    if (languagesScreen) {
+        ChannelLanguagesScreen(modifier, mainViewModel, onClose = { languagesScreen = false })
         return
     }
     if (remoteScreen) {

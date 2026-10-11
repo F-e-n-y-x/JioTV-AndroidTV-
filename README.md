@@ -380,6 +380,8 @@ See the [Releases page](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases) 
 Built with reference to, and inspiration from:
 - [dineshintry/plugin.kodi.jiotv](https://github.com/dineshintry/plugin.kodi.jiotv)
 - [JioTV-Go/jiotv_go](https://github.com/JioTV-Go/jiotv_go)
+- [rathee-ashish/zee-playlist](https://github.com/rathee-ashish/zee-playlist) — channel playlists and stream metadata for Zee and sports feeds
+- Upstream live stream feeds and community playlist contributors
 
 The UI font is [Anek Latin](https://github.com/EkType/Anek) (SIL Open Font License).
 

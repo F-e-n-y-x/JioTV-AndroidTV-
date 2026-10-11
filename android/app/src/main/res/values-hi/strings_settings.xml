@@ -352,4 +352,13 @@
     <string name="categories_move_top">सबसे ऊपर करें</string>
     <string name="categories_all_shown">सब दिख रही हैं</string>
     <string name="categories_n_hidden">%d छिपी हैं</string>
+
+    <!-- Channel languages -->
+    <string name="settings_channel_languages">चैनल भाषाएं</string>
+    <string name="settings_channel_languages_desc">चुनें कि ऐप में किन भाषाओं के चैनल दिखाई दें</string>
+    <string name="channel_languages_intro">चुनें कि सभी श्रेणियों और चैनलों में कौन सी भाषाएं दिखाई दें।</string>
+    <string name="channel_languages_all_shown">सभी भाषाएं दिख रही हैं</string>
+    <string name="channel_languages_n_hidden">%d छिपी हैं</string>
+    <string name="channel_languages_show_all">सभी दिखाएं</string>
+    <string name="channel_languages_hide_all">सभी छिपाएं</string>
 </resources>

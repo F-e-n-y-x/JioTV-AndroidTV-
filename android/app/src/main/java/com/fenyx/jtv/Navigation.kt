@@ -169,6 +169,11 @@ fun MainNavigation() {
      */
     fun openPlayer(index: Int, group: String?, catchup: com.fenyx.jtv.data.CatchupRequest? = null) {
         if (isTv) {
+            // Guarantee only one Player ever lives on TV backStack
+            while (backStack.any { it is Player }) {
+                val idx = backStack.indexOfFirst { it is Player }
+                if (idx >= 0) backStack.removeAt(idx) else break
+            }
             backStack.add(Player(channelIndex = index, group = group, catchup = catchup))
         } else {
             val prev = session.value
@@ -343,6 +348,7 @@ fun MainNavigation() {
                             }
                         }
                     }
+                    val isTop = backStack.lastOrNull() == playerArgs
                     PlayerForChannel(
                         channelIndex = playerArgs.channelIndex,
                         group = playerArgs.group,
@@ -355,6 +361,7 @@ fun MainNavigation() {
                             backStack.removeLastOrNull()
                             backStack.add(if (a == com.fenyx.jtv.data.RemoteAction.Search) Search else Guide)
                         },
+                        isActive = isTop,
                     )
                 }
             },
@@ -435,6 +442,7 @@ private fun PlayerForChannel(
     catchup: com.fenyx.jtv.data.CatchupRequest? = null, // catch-up
     modifier: Modifier = Modifier,
     onRemoteScreen: (com.fenyx.jtv.data.RemoteAction) -> Unit = {},
+    isActive: Boolean = true,
 ) {
     val groups by mainViewModel.groups.collectAsState()
     // Reactive (not a one-shot snapshot) so if the player is opened while the collapsed
@@ -483,5 +491,6 @@ private fun PlayerForChannel(
         openToken = openToken,
         catchup = catchup, // catch-up
         onRemoteScreen = onRemoteScreen,
+        isActive = isActive,
     )
 }
