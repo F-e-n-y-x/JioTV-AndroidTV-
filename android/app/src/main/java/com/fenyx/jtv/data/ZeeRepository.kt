@@ -1,7 +1,6 @@
 package com.fenyx.jtv.data
 
 import android.content.Context
-import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,6 +9,8 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
+import com.fenyx.jtv.data.JioApiClient.StreamData
 
 data class ZeeChannel(
     val id: String,
@@ -30,43 +31,53 @@ data class ZeeChannel(
 
 object ZeeRepository {
     private const val TAG = "ZeeRepository"
+    const val LIVE_COOKIE_URL = "https://allinonereborn2.online/jtv-fetch/jstarcookie/cookie.json"
     const val ZEE_M3U_URL = "https://raw.githubusercontent.com/rathee-ashish/zee-playlist/main/zee.m3u"
-    const val STAR_SPORTS_M3U_URL = "https://premiumplugx.top/jiostb/mjelo.php?view=raw"
-    private const val CACHE_FILE = "zee_playlist.m3u"
-    private const val SPORTS_CACHE_FILE = "sports_playlist.m3u"
+    const val SONY_M3U_URL = "https://vk-playlist.pages.dev/sony.m3u"
+    private const val COOKIE_CACHE_FILE = "live_tokens.json"
+    private const val ZEE_M3U_CACHE_FILE = "zee_playlist.m3u"
+    private const val SONY_M3U_CACHE_FILE = "sony_playlist.m3u"
 
-    private val zeeChannelsMap = java.util.concurrent.ConcurrentHashMap<String, ZeeChannel>()
+    data class LiveTokenInfo(
+        val streamUrl: String,
+        val cookie: String,
+        val expiryEpochSec: Long
+    )
+
+    private val liveTokensMap = ConcurrentHashMap<String, LiveTokenInfo>()
+    private val zeeChannelsMap = ConcurrentHashMap<String, ZeeChannel>()
 
     data class ZeeChannelMeta(
         val channelId: Int,
         val cleanName: String,
         val group: String,
         val language: String,
-        val stbNumber: Int = 0
+        val stbNumber: Int = 0,
+        val logoUrl: String = ""
     )
 
     /**
-     * Exact mapping of Zee TV, Star Sports, Sony Sports, and other sports channels
-     * to their official JioTV channel numbers, categories, languages and STB numbers.
+     * Exact mapping of Zee TV, Star Sports, and Sony channels
+     * to their official JioTV channel numbers, categories, languages, logos, and STB numbers.
      */
     private val CHANNEL_METADATA = mapOf(
         // Zee Channels
-        "zeetvhd" to ZeeChannelMeta(167, "Zee TV HD", "Entertainment", "Hindi"),
-        "zeecinemahd" to ZeeChannelMeta(165, "Zee Cinema HD", "Movies", "Hindi"),
-        "zeetalkies" to ZeeChannelMeta(153, "Zee Talkies", "Movies", "Marathi"),
-        "andpictureshd" to ZeeChannelMeta(185, "And Pictures HD", "Movies", "Hindi"),
-        "andpictures" to ZeeChannelMeta(1839, "And Pictures", "Movies", "Hindi"),
-        "zeeyuva" to ZeeChannelMeta(414, "Zee Yuva", "Entertainment", "Marathi"),
+        "zeetvhd" to ZeeChannelMeta(167, "Zee TV HD", "Entertainment", "Hindi", 104),
+        "zeecinemahd" to ZeeChannelMeta(165, "Zee Cinema HD", "Movies", "Hindi", 204),
+        "zeetalkies" to ZeeChannelMeta(153, "Zee Talkies", "Movies", "Marathi", 853),
+        "andpictureshd" to ZeeChannelMeta(185, "And Pictures HD", "Movies", "Hindi", 208),
+        "andpictures" to ZeeChannelMeta(1839, "And Pictures", "Movies", "Hindi", 207),
+        "zeeyuva" to ZeeChannelMeta(414, "Zee Yuva", "Entertainment", "Marathi", 858),
         "zee24taas" to ZeeChannelMeta(442, "Zee 24 Taas", "News", "Marathi", 9005),
-        "zeemarathi" to ZeeChannelMeta(445, "Zee Marathi", "Entertainment", "Marathi"),
-        "andtvhd" to ZeeChannelMeta(472, "And TV HD", "Entertainment", "Hindi"),
-        "zeecinema" to ZeeChannelMeta(484, "Zee Cinema", "Movies", "Hindi"),
-        "zeeaction" to ZeeChannelMeta(488, "Zee Action", "Movies", "Hindi"),
-        "zeebollywood" to ZeeChannelMeta(487, "Zee Bollywood", "Movies", "Hindi"),
+        "zeemarathi" to ZeeChannelMeta(445, "Zee Marathi", "Entertainment", "Marathi", 851),
+        "andtvhd" to ZeeChannelMeta(472, "And TV HD", "Entertainment", "Hindi", 110),
+        "zeecinema" to ZeeChannelMeta(484, "Zee Cinema", "Movies", "Hindi", 203),
+        "zeeaction" to ZeeChannelMeta(488, "Zee Action", "Movies", "Hindi", 213),
+        "zeebollywood" to ZeeChannelMeta(487, "Zee Bollywood", "Movies", "Hindi", 211),
         "zeenews" to ZeeChannelMeta(504, "Zee News", "News", "Hindi", 1007),
         "zeeuttarpradeshuttarakhand" to ZeeChannelMeta(572, "Zee UP UK", "News", "Hindi", 1020),
         "zeeupuk" to ZeeChannelMeta(572, "Zee UP UK", "News", "Hindi", 1020),
-        "zing" to ZeeChannelMeta(585, "Zing", "Music", "Hindi"),
+        "zing" to ZeeChannelMeta(585, "Zing", "Music", "Hindi", 453),
         "zeebharat" to ZeeChannelMeta(652, "Zee Bharat", "News", "Hindi", 1022),
         "zeepunjabharyanahimachalpradesh" to ZeeChannelMeta(654, "Zee Punjab Haryana HP", "News", "Punjabi", 9029),
         "zeepunjabharyanahp" to ZeeChannelMeta(654, "Zee Punjab Haryana HP", "News", "Punjabi", 9029),
@@ -77,37 +88,37 @@ object ZeeRepository {
         "zeerajasthannews" to ZeeChannelMeta(659, "Zee Rajasthan", "News", "Hindi", 1019),
         "zeerajasthan" to ZeeChannelMeta(659, "Zee Rajasthan", "News", "Hindi", 1019),
         "zeedelhincrharyana" to ZeeChannelMeta(724, "Zee Delhi NCR Haryana", "News", "Hindi", 1051),
-        "zeetalkieshd" to ZeeChannelMeta(1358, "Zee Talkies HD", "Movies", "Marathi"),
-        "zeemarathihd" to ZeeChannelMeta(1360, "Zee Marathi HD", "Entertainment", "Marathi"),
-        "zeetv" to ZeeChannelMeta(1351, "Zee TV", "Entertainment", "Hindi"),
-        "zeeclassic" to ZeeChannelMeta(1691, "Zee Classic", "Movies", "Hindi"),
-        "zeebiskope" to ZeeChannelMeta(878, "Zee Biskope", "Movies", "Bhojpuri"),
+        "zeetalkieshd" to ZeeChannelMeta(1358, "Zee Talkies HD", "Movies", "Marathi", 854),
+        "zeemarathihd" to ZeeChannelMeta(1360, "Zee Marathi HD", "Entertainment", "Marathi", 852),
+        "zeetv" to ZeeChannelMeta(1351, "Zee TV", "Entertainment", "Hindi", 103),
+        "zeeclassic" to ZeeChannelMeta(1691, "Zee Classic", "Movies", "Hindi", 217),
+        "zeebiskope" to ZeeChannelMeta(1745, "Zee Biskope", "Movies", "Bhojpuri", 878),
         "zeepowerhd" to ZeeChannelMeta(1746, "Zee Power HD", "Movies", "Kannada"),
         "zeepunjabi" to ZeeChannelMeta(1751, "Zee Punjabi", "Entertainment", "Punjabi"),
         "zeezesthd" to ZeeChannelMeta(2757, "Zee Zest HD", "Lifestyle", "English"),
-        "zeethirai" to ZeeChannelMeta(2256, "Zee Thirai", "Movies", "Tamil"),
-        "zeethiraihd" to ZeeChannelMeta(3051, "Zee Thirai HD", "Movies", "Tamil"),
+        "zeethirai" to ZeeChannelMeta(2256, "Zee Thirai", "Movies", "Tamil", 922),
+        "zeethiraihd" to ZeeChannelMeta(3051, "Zee Thirai HD", "Movies", "Tamil", 923),
 
         // Star Sports Channels
-        "starsportsselect1hd" to ZeeChannelMeta(460, "Star Sports Select 1 HD", "Sports", "English"),
-        "starsportsselect1" to ZeeChannelMeta(1123, "Star Sports Select 1", "Sports", "English"),
-        "starsportsselect2hd" to ZeeChannelMeta(461, "Star Sports Select 2 HD", "Sports", "English"),
-        "starsportsselect2" to ZeeChannelMeta(1114, "Star Sports Select 2", "Sports", "English"),
-        "starsports1hd" to ZeeChannelMeta(1106, "Star Sports 1 HD", "Sports", "English"),
-        "starsports1" to ZeeChannelMeta(1142, "Star Sports 1", "Sports", "English"),
-        "starsports1hindihd" to ZeeChannelMeta(1108, "Star Sports 1 Hindi HD", "Sports", "Hindi"),
-        "starsports1hindi" to ZeeChannelMeta(362, "Star Sports 1 Hindi", "Sports", "Hindi"),
-        "starsports2hd" to ZeeChannelMeta(1109, "Star Sports 2 HD", "Sports", "English"),
-        "starsports2" to ZeeChannelMeta(1141, "Star Sports 2", "Sports", "English"),
+        "starsportsselect1hd" to ZeeChannelMeta(460, "Star Sports Select 1 HD", "Sports", "English", 410),
+        "starsportsselect1" to ZeeChannelMeta(1123, "Star Sports Select 1", "Sports", "English", 409),
+        "starsportsselect2hd" to ZeeChannelMeta(461, "Star Sports Select 2 HD", "Sports", "English", 412),
+        "starsportsselect2" to ZeeChannelMeta(1114, "Star Sports Select 2", "Sports", "English", 411),
+        "starsports1hd" to ZeeChannelMeta(1106, "Star Sports 1 HD", "Sports", "English", 402),
+        "starsports1" to ZeeChannelMeta(1142, "Star Sports 1", "Sports", "English", 401),
+        "starsports1hindihd" to ZeeChannelMeta(1108, "Star Sports 1 Hindi HD", "Sports", "Hindi", 404),
+        "starsports1hindi" to ZeeChannelMeta(362, "Star Sports 1 Hindi", "Sports", "Hindi", 403),
+        "starsports2hd" to ZeeChannelMeta(1109, "Star Sports 2 HD", "Sports", "English", 406),
+        "starsports2" to ZeeChannelMeta(1141, "Star Sports 2", "Sports", "English", 405),
         "starsports2hindihd" to ZeeChannelMeta(1984, "Star Sports 2 Hindi HD", "Sports", "Hindi"),
         "starsports2hindi" to ZeeChannelMeta(1985, "Star Sports 2 Hindi", "Sports", "Hindi"),
-        "starsports3" to ZeeChannelMeta(1389, "Star Sports 3", "Sports", "Hindi"),
+        "starsports3" to ZeeChannelMeta(1389, "Star Sports 3", "Sports", "Hindi", 407),
         "starsportskhel" to ZeeChannelMeta(1998, "Star Sports Khel", "Sports", "Hindi"),
         "starsports1tamilhd" to ZeeChannelMeta(3277, "Star Sports 1 Tamil HD", "Sports", "Tamil"),
-        "starsports1tamil" to ZeeChannelMeta(1124, "Star Sports 1 Tamil", "Sports", "Tamil"),
+        "starsports1tamil" to ZeeChannelMeta(1124, "Star Sports 1 Tamil", "Sports", "Tamil", 413),
         "starsports1teluguhd" to ZeeChannelMeta(3278, "Star Sports 1 Telugu HD", "Sports", "Telugu"),
-        "starsports1telugu" to ZeeChannelMeta(1651, "Star Sports 1 Telugu", "Sports", "Telugu"),
-        "starsports1kannada" to ZeeChannelMeta(1650, "Star Sports 1 Kannada", "Sports", "Kannada"),
+        "starsports1telugu" to ZeeChannelMeta(1651, "Star Sports 1 Telugu", "Sports", "Telugu", 414),
+        "starsports1kannada" to ZeeChannelMeta(1650, "Star Sports 1 Kannada", "Sports", "Kannada", 415),
         "starsports2kannada" to ZeeChannelMeta(1122, "Star Sports 2 Kannada", "Sports", "Kannada"),
         "starsports2tamilhd" to ZeeChannelMeta(3273, "Star Sports 2 Tamil HD", "Sports", "Tamil"),
         "starsports2tamil" to ZeeChannelMeta(2853, "Star Sports 2 Tamil", "Sports", "Tamil"),
@@ -115,23 +126,93 @@ object ZeeRepository {
         "starsports2telugu" to ZeeChannelMeta(2852, "Star Sports 2 Telugu", "Sports", "Telugu"),
 
         // Sony Sports Channels
-        "sonysportsten1hd" to ZeeChannelMeta(162, "Sony Sports Ten 1 HD", "Sports", "English"),
-        "sonysportsten1" to ZeeChannelMeta(514, "Sony Sports Ten 1", "Sports", "English"),
-        "sonysportsten2hd" to ZeeChannelMeta(891, "Sony Sports Ten 2 HD", "Sports", "English"),
-        "sonysportsten2" to ZeeChannelMeta(523, "Sony Sports Ten 2", "Sports", "English"),
-        "sonysportsten3hindihd" to ZeeChannelMeta(892, "Sony Sports Ten 3 Hindi HD", "Sports", "Hindi"),
-        "sonysportsten3hindi" to ZeeChannelMeta(524, "Sony Sports Ten 3 Hindi", "Sports", "Hindi"),
-        "sonysportsten4tamil" to ZeeChannelMeta(1774, "Sony Sports Ten 4 Tamil", "Sports", "Tamil"),
-        "sonysportsten4telugu" to ZeeChannelMeta(1775, "Sony Sports Ten 4 Telugu", "Sports", "Telugu"),
-        "sonysportsten4kannada" to ZeeChannelMeta(3585, "Sony Sports Ten 4 Kannada", "Sports", "Kannada"),
-        "sonysportsten5hd" to ZeeChannelMeta(155, "Sony Sports Ten 5 HD", "Sports", "English"),
-        "sonysportsten5" to ZeeChannelMeta(525, "Sony Sports Ten 5", "Sports", "English"),
+        "sonysportsten1hd" to ZeeChannelMeta(162, "Sony Sports Ten 1 HD", "Sports", "English", 422, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_HD.png"),
+        "sonyten1hd" to ZeeChannelMeta(162, "Sony Sports Ten 1 HD", "Sports", "English", 422, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_HD.png"),
+        "ten1hd" to ZeeChannelMeta(162, "Sony Sports Ten 1 HD", "Sports", "English", 422, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_HD.png"),
 
-        // Eurosport & DD Sports Channels
-        "eurosport" to ZeeChannelMeta(1294, "Eurosport", "Sports", "English"),
-        "eurosporthd" to ZeeChannelMeta(875, "Eurosport HD", "Sports", "English"),
-        "ddsports" to ZeeChannelMeta(204, "DD Sports", "Sports", "Hindi")
+        "sonysportsten1" to ZeeChannelMeta(514, "Sony Sports Ten 1", "Sports", "English", 421, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_1.png"),
+        "sonyten1" to ZeeChannelMeta(514, "Sony Sports Ten 1", "Sports", "English", 421, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_1.png"),
+        "ten1sd" to ZeeChannelMeta(514, "Sony Sports Ten 1", "Sports", "English", 421, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_1.png"),
+        "ten1" to ZeeChannelMeta(514, "Sony Sports Ten 1", "Sports", "English", 421, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_1.png"),
+
+        "sonysportsten2hd" to ZeeChannelMeta(891, "Sony Sports Ten 2 HD", "Sports", "English", 424, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten2_HD.png"),
+        "sonyten2hd" to ZeeChannelMeta(891, "Sony Sports Ten 2 HD", "Sports", "English", 424, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten2_HD.png"),
+        "ten2hd" to ZeeChannelMeta(891, "Sony Sports Ten 2 HD", "Sports", "English", 424, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten2_HD.png"),
+
+        "sonysportsten2" to ZeeChannelMeta(523, "Sony Sports Ten 2", "Sports", "English", 423, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_2.png"),
+        "sonyten2" to ZeeChannelMeta(523, "Sony Sports Ten 2", "Sports", "English", 423, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_2.png"),
+        "ten2sd" to ZeeChannelMeta(523, "Sony Sports Ten 2", "Sports", "English", 423, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_2.png"),
+        "ten2" to ZeeChannelMeta(523, "Sony Sports Ten 2", "Sports", "English", 423, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_2.png"),
+
+        "sonysportsten3hd" to ZeeChannelMeta(892, "Sony Sports Ten 3 HD", "Sports", "Hindi", 426, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten3_HD.png"),
+        "sonyten3hd" to ZeeChannelMeta(892, "Sony Sports Ten 3 HD", "Sports", "Hindi", 426, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten3_HD.png"),
+        "ten3hd" to ZeeChannelMeta(892, "Sony Sports Ten 3 HD", "Sports", "Hindi", 426, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten3_HD.png"),
+
+        "sonysportsten3" to ZeeChannelMeta(524, "Sony Sports Ten 3", "Sports", "Hindi", 425, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_3.png"),
+        "sonyten3" to ZeeChannelMeta(524, "Sony Sports Ten 3", "Sports", "Hindi", 425, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_3.png"),
+        "ten3sd" to ZeeChannelMeta(524, "Sony Sports Ten 3", "Sports", "Hindi", 425, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_3.png"),
+        "ten3" to ZeeChannelMeta(524, "Sony Sports Ten 3", "Sports", "Hindi", 425, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_3.png"),
+
+        "sonysportsten4hd" to ZeeChannelMeta(1772, "Sony Sports Ten 4 HD", "Sports", "Tamil", 428, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png"),
+        "sonyten4hd" to ZeeChannelMeta(1772, "Sony Sports Ten 4 HD", "Sports", "Tamil", 428, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png"),
+        "ten4hd" to ZeeChannelMeta(1772, "Sony Sports Ten 4 HD", "Sports", "Tamil", 428, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png"),
+
+        "sonysportsten4" to ZeeChannelMeta(1774, "Sony Sports Ten 4", "Sports", "Tamil", 427, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png"),
+        "sonyten4" to ZeeChannelMeta(1774, "Sony Sports Ten 4", "Sports", "Tamil", 427, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png"),
+        "ten4sd" to ZeeChannelMeta(1774, "Sony Sports Ten 4", "Sports", "Tamil", 427, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png"),
+        "ten4" to ZeeChannelMeta(1774, "Sony Sports Ten 4", "Sports", "Tamil", 427, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png"),
+
+        "sonysportsten5hd" to ZeeChannelMeta(155, "Sony Sports Ten 5 HD", "Sports", "English", 430, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Six_HD.png"),
+        "sonyten5hd" to ZeeChannelMeta(155, "Sony Sports Ten 5 HD", "Sports", "English", 430, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Six_HD.png"),
+        "sonysixhd" to ZeeChannelMeta(155, "Sony Sports Ten 5 HD", "Sports", "English", 430, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Six_HD.png"),
+        "ten5hd" to ZeeChannelMeta(155, "Sony Sports Ten 5 HD", "Sports", "English", 430, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Six_HD.png"),
+
+        "sonysportsten5" to ZeeChannelMeta(525, "Sony Sports Ten 5", "Sports", "English", 429, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Six_SD.png"),
+        "sonyten5" to ZeeChannelMeta(525, "Sony Sports Ten 5", "Sports", "English", 429, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Six_SD.png"),
+        "sonysix" to ZeeChannelMeta(525, "Sony Sports Ten 5", "Sports", "English", 429, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Six_SD.png"),
+        "sonysixsd" to ZeeChannelMeta(525, "Sony Sports Ten 5", "Sports", "English", 429, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Six_SD.png"),
+        "ten5" to ZeeChannelMeta(525, "Sony Sports Ten 5", "Sports", "English", 429, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Six_SD.png"),
+
+        "ddsports" to ZeeChannelMeta(204, "DD Sports", "Sports", "Hindi", 400, "https://jiotv.catchup.cdn.jio.com/dare_images/images/DD_Sports.png"),
+
+        // Sony Entertainment & Movies
+        "sethd" to ZeeChannelMeta(291, "SET HD", "Entertainment", "Hindi", 108, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_HD.png"),
+        "set" to ZeeChannelMeta(1396, "SET", "Entertainment", "Hindi", 107, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_SD.png"),
+        "setsd" to ZeeChannelMeta(1396, "SET", "Entertainment", "Hindi", 107, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_SD.png"),
+
+        "sonysabhd" to ZeeChannelMeta(471, "Sony SAB HD", "Entertainment", "Hindi", 114, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonySAB.png"),
+        "sabhd" to ZeeChannelMeta(471, "Sony SAB HD", "Entertainment", "Hindi", 114, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonySAB.png"),
+        "sonysab" to ZeeChannelMeta(154, "Sony SAB", "Entertainment", "Hindi", 113, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_SAB.png"),
+        "sab" to ZeeChannelMeta(154, "Sony SAB", "Entertainment", "Hindi", 113, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_SAB.png"),
+        "sabsd" to ZeeChannelMeta(154, "Sony SAB", "Entertainment", "Hindi", 113, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_SAB.png"),
+
+        "sonypal" to ZeeChannelMeta(474, "Sony Pal", "Entertainment", "Hindi", 116, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyPAL.png"),
+        "sonypalsd" to ZeeChannelMeta(474, "Sony Pal", "Entertainment", "Hindi", 116, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyPAL.png"),
+
+        "sonyaath" to ZeeChannelMeta(697, "Sony Aath", "Entertainment", "Bengali", 824, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyAATH.png"),
+        "sonyaathsd" to ZeeChannelMeta(697, "Sony Aath", "Entertainment", "Bengali", 824, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyAATH.png"),
+
+        "sonymarathi" to ZeeChannelMeta(1146, "Sony Marathi", "Entertainment", "Marathi", 859, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMarathi.png"),
+        "sonymarathisd" to ZeeChannelMeta(1146, "Sony Marathi", "Entertainment", "Marathi", 859, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMarathi.png"),
+
+        "sonymaxhd" to ZeeChannelMeta(476, "Sony MAX HD", "Movies", "Hindi", 202, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMAX.png"),
+        "sonymax" to ZeeChannelMeta(289, "Sony MAX", "Movies", "Hindi", 201, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Max_SD.png"),
+        "sonymaxsd" to ZeeChannelMeta(289, "Sony MAX", "Movies", "Hindi", 201, "https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Max_SD.png"),
+        "sonymax2" to ZeeChannelMeta(483, "Sony MAX 2", "Movies", "Hindi", 212, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMAX2.png"),
+        "max2" to ZeeChannelMeta(483, "Sony MAX 2", "Movies", "Hindi", 212, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMAX2.png"),
+
+        "sonywah" to ZeeChannelMeta(1393, "Sony WAH", "Movies", "Hindi", 214, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyWAH.png"),
+
+        "sonypixhd" to ZeeChannelMeta(762, "Sony PIX HD", "Movies", "English", 252, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyPIX.png"),
+        "pixhd" to ZeeChannelMeta(762, "Sony PIX HD", "Movies", "English", 252, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyPIX.png"),
+
+        "sonybbcearthhd" to ZeeChannelMeta(852, "Sony BBC Earth HD", "Infotainment", "English", 752, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyBBCEarthEng.png"),
+        "bbcearthhd" to ZeeChannelMeta(852, "Sony BBC Earth HD", "Infotainment", "English", 752, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyBBCEarthEng.png"),
+
+        "sonyyay" to ZeeChannelMeta(872, "Sony Yay", "Kids", "Hindi", 654, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyYAYHin.png"),
+        "sonyyaysd" to ZeeChannelMeta(872, "Sony Yay", "Kids", "Hindi", 654, "https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyYAYHin.png")
     )
+
     private const val EMBEDDED_M3U = """#EXTM3U
 
 #EXTINF:-1 tvg-name="Zee TV HD" tvg-logo="https://img.media.jio.com/tvpimages/66/3/300378_1753869902174_l_medium.jpg" group-title="Entertainment", Zee TV HD
@@ -232,41 +313,7 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/ZeeThiraiHD_BTS/WDVLive/index.mpd?|cookie
 
     private const val EMBEDDED_SPORTS_M3U = """#EXTM3U
 
-#EXTINF:-1 tvg-name="Sony Sports Ten 1 HD" tvg-logo="https://img.media.jio.com/tvpimages/5/8/300256_1753198281835_l_medium.jpg" group-title="Sports", Sony Sports Ten 1 HD
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=8ef8595765be890b424ee5d99ef6f953:adcff05f3aa10995f1efd4b0bb394d49,7a94b1419d77d2e184c7adcd10afc15a:1c4ce982d24be3d88dc0b1e2e4d74368,8779aa225d6050b3094944e00a2b0059:841054a0202ce08983f696e563d12941,3525c924e54154b39533d86b1c7a428a:8548b566fc6608a7d3bd601ee5f3d889,8619386d035251ad9340fc40879a52c6:9c5fb4a4f95089d9d1a3dc19b0d06e47,81ce3115633b29fe26c88d5ccec3cde2:84b9fb91c2bf59863d06fa5e0b757a4d
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen1HDSTB_BTS/WDVLive/*~hmac=4bc1865385be2095f3c32636245411c3d9d7db835e204b5bd5f410743163aec6
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen1HDSTB_BTS/WDVLive/*~hmac=4bc1865385be2095f3c32636245411c3d9d7db835e204b5bd5f410743163aec6"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/SonySportsTen1HDSTB_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen1HDSTB_BTS/WDVLive/*~hmac=4bc1865385be2095f3c32636245411c3d9d7db835e204b5bd5f410743163aec6&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
-
-#EXTINF:-1 tvg-name="Sony Sports Ten 5 HD" tvg-logo="https://img.media.jio.com/tvpimages/31/97/300258_1753198241206_l_medium.jpg" group-title="Sports", Sony Sports Ten 5 HD
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=654c9e21b9dbe0ccfb6216779aadf143:2b2a8f6726f6520a0291d4c1218df45a,9691105db953d0bf43bd45a60daacdaa:fb21cfe47dff9693cc8b351f1aa6bbe1,42566c7287ce545d91234b03485cce8a:bd251578248e2f8df050eb81b04d056a,2b66229b90b9d2b66a0f91f62fc50bf4:dad09f9b5867be2a179d58db854f4910,8cb7b40cefe053ea91895e3194bb9912:467cf6d740b7212fcfc648644fb79943,5244667ee96e6039df792d7d7c598732:9be10de1281728dbada5b3ac36a610b8
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen5HDSTB_BTS/WDVLive/*~hmac=7cbe03b7fac47cb0c09edbe85913f3dbac7f524c55957a290343f2d2ef426412
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen5HDSTB_BTS/WDVLive/*~hmac=7cbe03b7fac47cb0c09edbe85913f3dbac7f524c55957a290343f2d2ef426412"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/SonySportsTen5HDSTB_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen5HDSTB_BTS/WDVLive/*~hmac=7cbe03b7fac47cb0c09edbe85913f3dbac7f524c55957a290343f2d2ef426412&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
-
-#EXTINF:-1 tvg-name="DD Sports" tvg-logo="https://img.media.jio.com/imagespublic/17/8/DDSports_1579505057008_tv.jpg" group-title="DD Channels", DD Sports
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=00f634f3ef7a5a8282b41a8dbe11a802:4f45c1e279595e264f1cb1578641cb7f,1bbe2053d860562ca6926fa6d3d9c4fd:5013ffb04450eb66bd33ded2fa893e8b,ef21e692f3af590b8d31064eb07f7e6c:e5a15827a8f8e47135de54f4b224ff47,dab8eeac092656bf829ba309c002c9d1:e9ac75dffbaf27a1d31d19d9878feed4,477d3698ac4555f7a3c30b3840547660:78c2ebd34df8ffdf45c30f0a684ac776
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738619~exp=1791760219~acl=/bpk-tv/DD_Sports_BTS/WDVLive/*~hmac=8523bcfb36a7cd9548a81dbc1a618f31227ba260f2b1f52a23dfebbfd159301d
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738619~exp=1791760219~acl=/bpk-tv/DD_Sports_BTS/WDVLive/*~hmac=8523bcfb36a7cd9548a81dbc1a618f31227ba260f2b1f52a23dfebbfd159301d"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/DD_Sports_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738619~exp=1791760219~acl=/bpk-tv/DD_Sports_BTS/WDVLive/*~hmac=8523bcfb36a7cd9548a81dbc1a618f31227ba260f2b1f52a23dfebbfd159301d&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
+#EXTM3U
 
 #EXTINF:-1 tvg-name="Star Sports 1 Hindi" tvg-logo="https://img.media.jio.com/tvpimages/13/81/302112_1753186300125_l_medium.jpg" group-title="Sports", Star Sports 1 Hindi
 #KODIPROP:inputstream=inputstream.adaptive
@@ -303,42 +350,6 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports_Select_HD_2_BTS/WDVLive/index
 #EXTVLCOPT:http-cookie=__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_Select_HD_1_BTS/WDVLive/*~hmac=a51dca73f473287a3c77f0263bc152d9f64f6881b52d2af62efe573057f85483
 #EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_Select_HD_1_BTS/WDVLive/*~hmac=a51dca73f473287a3c77f0263bc152d9f64f6881b52d2af62efe573057f85483"}
 https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports_Select_HD_1_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_Select_HD_1_BTS/WDVLive/*~hmac=a51dca73f473287a3c77f0263bc152d9f64f6881b52d2af62efe573057f85483&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
-
-#EXTINF:-1 tvg-name="Eurosport HD" tvg-logo="https://img.media.jio.com/tvpimages/16/0/301591_1764577876137_l_medium.jpg" group-title="Sports", Eurosport HD
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=546fc0ccb5f55930a4841bc103973655:8e42b4746f4faecad90cb4575d838480,cca1f4e1f2b35baf9c0c4ee0458bd528:de6ca32d38cf5f214c416b7dbb0bdd06,c6210817c30950769549bdb49bf6cd6e:effc83e62efc81dd4408f4d5f771fd9d,4512a52315f9581990d74250b3c997d9:95bcacafeb40ec0eb5a93097e9052483,7fb2893008d556e2be9f8895051f426d:9196d9ed0c4b6106407b23ad798cc6f6
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738625~exp=1791760225~acl=/bpk-tv/Dsports_HD_BTS/WDVLive/*~hmac=53ba700fee69fc5fcf6f7f481a0048c6679ea708cd114a51a7cc808fd2bed476
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738625~exp=1791760225~acl=/bpk-tv/Dsports_HD_BTS/WDVLive/*~hmac=53ba700fee69fc5fcf6f7f481a0048c6679ea708cd114a51a7cc808fd2bed476"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/Dsports_HD_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738625~exp=1791760225~acl=/bpk-tv/Dsports_HD_BTS/WDVLive/*~hmac=53ba700fee69fc5fcf6f7f481a0048c6679ea708cd114a51a7cc808fd2bed476&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
-
-#EXTINF:-1 tvg-name="Sony Sports Ten 2 HD" tvg-logo="https://img.media.jio.com/tvpimages/94/91/300273_1753198175927_l_medium.jpg" group-title="Sports", Sony Sports Ten 2 HD
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=91fce77f2f8056f084ed961c7ebe86ed:8214bd5eb6c21444e8ea644824affd79,7eb23fdb3765a427e5c0b0a1dcd7c7a6:fe44ecddba1ab9df11c5522d85c39127,060242b563d188a97ac529066c4dcdc3:d4a4920bb65a879b937a6cf9eb4c1592,aa0992cc96a0815c05619dd5ac448b15:24a1c23da2922264f06b2be0f24a3894,996b070e24d7d4670d4e39acdc426edd:429fd3f762e31db48cc8132ba0be525a,9eb13a589c9454e2be1f123b98ebbd09:dd503e53bc323a51d67c349f3be1993b
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen2HDSTB_BTS/WDVLive/*~hmac=ba7b3e597c0cd063b1b869769a1825539f3d266f3c8f9a25dc489940b514cac0
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen2HDSTB_BTS/WDVLive/*~hmac=ba7b3e597c0cd063b1b869769a1825539f3d266f3c8f9a25dc489940b514cac0"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/SonySportsTen2HDSTB_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen2HDSTB_BTS/WDVLive/*~hmac=ba7b3e597c0cd063b1b869769a1825539f3d266f3c8f9a25dc489940b514cac0&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
-
-#EXTINF:-1 tvg-name="Sony Sports Ten 3 Hindi HD" tvg-logo="https://img.media.jio.com/tvpimages/1/58/300255_1758886957880_l_medium.jpg" group-title="Sports", Sony Sports Ten 3 Hindi HD
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=9206064ad8c9576d290ff2a7aae70b92:840e26bca9696f6afc2dd21b54072bb9,b36a06969623c2079f1b2ab5a9d1c7c5:f2ac8463bf3ce3090632352c26a8057c,dc7a410ba231bb588bdc474288669d19:b1dd02e33b6b83e04df4b72eaabd16f6,08638117638b55649c6befa7f5cb34f6:58ddb6bbdf8d8b1e2aac2b5312e99086,111e6908b965566e97139efddf7ef459:c87903abbc052e1f21e51ebd928d9cb1,17c4a71ccf934a616c91dd002dce09f4:b6af28ce54a2a3e26856cf2b06cccdb1
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen3HinHDSTB_BTS/WDVLive/*~hmac=98a95727848e2a34225ec5f67116a119a9d90806d142265860df7bca03f5dc68
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen3HinHDSTB_BTS/WDVLive/*~hmac=98a95727848e2a34225ec5f67116a119a9d90806d142265860df7bca03f5dc68"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/SonySportsTen3HinHDSTB_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738622~exp=1791760222~acl=/bpk-tv/SonySportsTen3HinHDSTB_BTS/WDVLive/*~hmac=98a95727848e2a34225ec5f67116a119a9d90806d142265860df7bca03f5dc68&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
 
 #EXTINF:-1 tvg-name="Star Sports 1 HD" tvg-logo="https://img.media.jio.com/tvpimages/76/32/301981_1749665662917_p.jpg" group-title="Sports", Star Sports 1 HD
 #KODIPROP:inputstream=inputstream.adaptive
@@ -448,18 +459,6 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports_2_BTS/WDVLive/index.mpd?|cook
 #EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_BTS/WDVLive/*~hmac=5ab8eed968ab791559d6fc98044dc870d532b1f710538760f8ab4abc33213c0f"}
 https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports_1_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_BTS/WDVLive/*~hmac=5ab8eed968ab791559d6fc98044dc870d532b1f710538760f8ab4abc33213c0f&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
 
-#EXTINF:-1 tvg-name="Eurosport" tvg-logo="https://img.media.jio.com/tvpimages/31/7/301589_1764577915153_l_medium.jpg" group-title="Sports", Eurosport
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=389e35e8b5db5726bc56f83a9365c6ab:0a6f766f37e7c3622a4860b3c15bbc9b,6823d5fbee1857b9b5dac4e935efb6c3:72e801119a9684d336727fd4d6c1ba22,7f52f53d78805b2bb75b0f860095eb55:52f2472cff2a62100bda7d59b9db736a,7a610c65ec395eb5bd5014e6425575a9:8baa043ee2857121deff3f82874e5209,ea93cd3229e5595e9e115fce0dc576b7:cb7d0cd8b134c1b15ad9eb4a6261d9c0
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738625~exp=1791760225~acl=/bpk-tv/Dsports_BTS/WDVLive/*~hmac=9740504259cc39f7ae295359ce9345c9df04722b29db7a906baed321f489ac24
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738625~exp=1791760225~acl=/bpk-tv/Dsports_BTS/WDVLive/*~hmac=9740504259cc39f7ae295359ce9345c9df04722b29db7a906baed321f489ac24"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/Dsports_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738625~exp=1791760225~acl=/bpk-tv/Dsports_BTS/WDVLive/*~hmac=9740504259cc39f7ae295359ce9345c9df04722b29db7a906baed321f489ac24&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
-
 #EXTINF:-1 tvg-name="Star Sports 3" tvg-logo="https://img.media.jio.com/tvpimages/78/2/302117_1753186009563_l_medium.jpg" group-title="Sports", Star Sports 3
 #KODIPROP:inputstream=inputstream.adaptive
 #KODIPROP:inputstream.adaptive.manifest_type=mpd
@@ -495,18 +494,6 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports_1_Telugu_BTS/WDVLive/index.mp
 #EXTVLCOPT:http-cookie=__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_Kannada_BTS/WDVLive/*~hmac=593a055abbe6a8b08e9c39f88a3fbfb55e5bf74fee1abfe8a3ff90587e5de829
 #EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_Kannada_BTS/WDVLive/*~hmac=593a055abbe6a8b08e9c39f88a3fbfb55e5bf74fee1abfe8a3ff90587e5de829"}
 https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports_1_Kannada_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_Kannada_BTS/WDVLive/*~hmac=593a055abbe6a8b08e9c39f88a3fbfb55e5bf74fee1abfe8a3ff90587e5de829&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
-
-#EXTINF:-1 tvg-name="Sony Sports Ten 4 Telugu" tvg-logo="https://img.media.jio.com/tvpimages/69/98/301739_1758886924465_l_medium.jpg" group-title="Sports", Sony Sports Ten 4 Telugu
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=b14cdf86a8e8561bb68f98bf608d14f1:fe95ef259d5202e5471b8804c5323b8a
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738626~exp=1791760226~acl=/bpk-tv/SonySportsTen4TelSTB_BTS/WDVLive/*~hmac=68164f1a92edf3f297acf9b623ddaf111054bb1b87bb04cdf2b9ff29428c8946
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738626~exp=1791760226~acl=/bpk-tv/SonySportsTen4TelSTB_BTS/WDVLive/*~hmac=68164f1a92edf3f297acf9b623ddaf111054bb1b87bb04cdf2b9ff29428c8946"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/SonySportsTen4TelSTB_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738626~exp=1791760226~acl=/bpk-tv/SonySportsTen4TelSTB_BTS/WDVLive/*~hmac=68164f1a92edf3f297acf9b623ddaf111054bb1b87bb04cdf2b9ff29428c8946&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
 
 #EXTINF:-1 tvg-name="Star Sports 2 Hindi" tvg-logo="https://img.media.jio.com/tvpimages/57/17/302124_1760690003311_l_medium.jpg" group-title="Sports", Star Sports 2 Hindi
 #KODIPROP:inputstream=inputstream.adaptive
@@ -614,55 +601,121 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports2_Telugu_HD_BTS/WDVLive/index.
 #EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
 #EXTVLCOPT:http-cookie=__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_Telugu_HD_BTS/WDVLive/*~hmac=2c61ff0ce6756c1ddac5fdaa7ddf6168e0f6f9b4504d55a0a6a1fe1cb4f219a4
 #EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_Telugu_HD_BTS/WDVLive/*~hmac=2c61ff0ce6756c1ddac5fdaa7ddf6168e0f6f9b4504d55a0a6a1fe1cb4f219a4"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports_1_Telugu_HD_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_Telugu_HD_BTS/WDVLive/*~hmac=2c61ff0ce6756c1ddac5fdaa7ddf6168e0f6f9b4504d55a0a6a1fe1cb4f219a4&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
+https://jiotvpllive.cdn.jio.com/bpk-tv/Star_Sports_1_Telugu_HD_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738628~exp=1791760228~acl=/bpk-tv/Star_Sports_1_Telugu_HD_BTS/WDVLive/*~hmac=2c61ff0ce6756c1ddac5fdaa7ddf6168e0f6f9b4504d55a0a6a1fe1cb4f219a4&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro"""
 
-#EXTINF:-1 tvg-name="Sony Sports Ten 4 Tamil" tvg-logo="https://img.media.jio.com/tvpimages/21/10/304240_1787558465564_l_medium.jpg" group-title="Sports", Sony Sports Ten 4 Tamil
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#KODIPROP:inputstream.adaptive.license_type=clearkey
-#KODIPROP:inputstream.adaptive.license_key=fa9ae315a29652db96c335e993b8c4bf:8ac0bc132a1c277052d8b023392e1685
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738631~exp=1791760231~acl=/bpk-tv/SonySportsTen4TamSTB_BTS/WDVLive/*~hmac=835fa4a4fc6dfc6b6a8b977eddd3b5bdb77e176213b6800acc793375147f4031
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738631~exp=1791760231~acl=/bpk-tv/SonySportsTen4TamSTB_BTS/WDVLive/*~hmac=835fa4a4fc6dfc6b6a8b977eddd3b5bdb77e176213b6800acc793375147f4031"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/SonySportsTen4TamSTB_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738631~exp=1791760231~acl=/bpk-tv/SonySportsTen4TamSTB_BTS/WDVLive/*~hmac=835fa4a4fc6dfc6b6a8b977eddd3b5bdb77e176213b6800acc793375147f4031&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro
+    private const val EMBEDDED_SONY_M3U = """#EXTM3U
 
-#EXTINF:-1 tvg-name="Sony Sports Ten 4 Kannada" tvg-logo="https://img.media.jio.com/tvpimages/88/41/304241_1787558888185_l_medium.jpg" group-title="Sports", Sony Sports Ten 4 Kannada
-#KODIPROP:inputstream=inputstream.adaptive
-#KODIPROP:inputstream.adaptive.manifest_type=mpd
-#EXTVLCOPT:http-user-agent=@shoebbro
-#EXTVLCOPT:http-referrer=https://www.jiotv.com/
-#EXTVLCOPT:http-extra-headers=Origin: https://www.jiotv.com
-#EXTVLCOPT:http-cookie=__hdnea__=st=1791738631~exp=1791760231~acl=/bpk-tv/SonyTen4Kan_BTS/WDVLive/*~hmac=b4708636e982cff03c9e966ca732939b5ee5d6fe52691b8a86bf589c74f6eae9
-#EXTHTTP:{"Origin":"https://www.jiotv.com","Referer":"https://www.jiotv.com/","Cookie":"__hdnea__=st=1791738631~exp=1791760231~acl=/bpk-tv/SonyTen4Kan_BTS/WDVLive/*~hmac=b4708636e982cff03c9e966ca732939b5ee5d6fe52691b8a86bf589c74f6eae9"}
-https://jiotvpllive.cdn.jio.com/bpk-tv/SonyTen4Kan_BTS/WDVLive/index.mpd?|cookie=__hdnea__=st=1791738631~exp=1791760231~acl=/bpk-tv/SonyTen4Kan_BTS/WDVLive/*~hmac=b4708636e982cff03c9e966ca732939b5ee5d6fe52691b8a86bf589c74f6eae9&referer=https://www.jiotv.com/&origin=https://www.jiotv.com&user-agent=@shoebbro"""
+#EXTINF:-1 tvg-id="sony-ten-1-hd" tvg-name="Sony Sports Ten 1 HD" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_HD.png" tvg-language="English",Sony Sports Ten 1 HD
+https://sliv.tgaadi.workers.dev/ten1hd.m3u8
+
+#EXTINF:-1 tvg-id="sony-ten-1" tvg-name="Sony Sports Ten 1" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_1.png" tvg-language="English",Sony Sports Ten 1
+https://sliv.tgaadi.workers.dev/ten1sd.m3u8
+
+#EXTINF:-1 tvg-id="sony-ten-2-hd" tvg-name="Sony Sports Ten 2 HD" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten2_HD.png" tvg-language="English",Sony Sports Ten 2 HD
+https://sliv.tgaadi.workers.dev/ten2hd.m3u8
+
+#EXTINF:-1 tvg-id="sony-ten-2" tvg-name="Sony Sports Ten 2" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_2.png" tvg-language="English",Sony Sports Ten 2
+https://sliv.tgaadi.workers.dev/ten2sd.m3u8
+
+#EXTINF:-1 tvg-id="sony-ten-3-hd" tvg-name="Sony Sports Ten 3 HD" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten3_HD.png" tvg-language="Hindi",Sony Sports Ten 3 HD
+https://sliv.tgaadi.workers.dev/ten3hd.m3u8
+
+#EXTINF:-1 tvg-id="sony-ten-3" tvg-name="Sony Sports Ten 3" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_3.png" tvg-language="Hindi",Sony Sports Ten 3
+https://sliv.tgaadi.workers.dev/ten3sd.m3u8
+
+#EXTINF:-1 tvg-id="sony-ten-4-hd" tvg-name="Sony Sports Ten 4 HD" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png" tvg-language="Tamil",Sony Sports Ten 4 HD
+https://sliv.tgaadi.workers.dev/ten4hd.m3u8
+
+#EXTINF:-1 tvg-id="sony-ten-4" tvg-name="Sony Sports Ten 4" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_4_Tamil.png" tvg-language="Tamil",Sony Sports Ten 4
+https://sliv.tgaadi.workers.dev/ten4sd.m3u8
+
+#EXTINF:-1 tvg-id="sony-six-hd" tvg-name="Sony Sports Ten 5 HD" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Six_HD.png" tvg-language="English",Sony Sports Ten 5 HD
+https://sliv.tgaadi.workers.dev/sonysixhd.m3u8
+
+#EXTINF:-1 tvg-id="sony-six" tvg-name="Sony Sports Ten 5" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Six_SD.png" tvg-language="English",Sony Sports Ten 5
+https://sliv.tgaadi.workers.dev/sonysixsd.m3u8
+
+#EXTINF:-1 tvg-id="dd-sports" tvg-name="DD Sports" group-title="Sports" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/DD_Sports.png" tvg-language="Hindi",DD Sports
+https://d3qs3d2rkhfqrt.cloudfront.net/out/v1/b17adfe543354fdd8d189b110617cddd/index.m3u8
+
+#EXTINF:-1 tvg-id="sony-hd" tvg-name="SET HD" group-title="Entertainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_HD.png" tvg-language="Hindi",SET HD
+https://sliv.tgaadi.workers.dev/sethd.m3u8
+
+#EXTINF:-1 tvg-id="set-sd" tvg-name="SET" group-title="Entertainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_SD.png" tvg-language="Hindi",SET
+https://sliv.tgaadi.workers.dev/setsd.m3u8
+
+#EXTINF:-1 tvg-id="sony-sab-hd" tvg-name="Sony SAB HD" group-title="Entertainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonySAB.png" tvg-language="Hindi",Sony SAB HD
+https://sliv.tgaadi.workers.dev/sabhd.m3u8
+
+#EXTINF:-1 tvg-id="sony-sab" tvg-name="Sony SAB" group-title="Entertainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_SAB.png" tvg-language="Hindi",Sony SAB
+https://sliv.tgaadi.workers.dev/sabsd.m3u8
+
+#EXTINF:-1 tvg-id="sony-pal" tvg-name="Sony Pal" group-title="Entertainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyPAL.png" tvg-language="Hindi",Sony Pal
+https://sliv.tgaadi.workers.dev/sonypalsd.m3u8
+
+#EXTINF:-1 tvg-id="sony-aath" tvg-name="Sony Aath" group-title="Entertainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyAATH.png" tvg-language="Bengali",Sony Aath
+https://sliv.tgaadi.workers.dev/sonyaathsd.m3u8
+
+#EXTINF:-1 tvg-id="sony-yay" tvg-name="Sony Yay" group-title="Kids" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyYAYHin.png" tvg-language="Hindi",Sony Yay
+https://sliv.tgaadi.workers.dev/sonyyaysd.m3u8
+
+#EXTINF:-1 tvg-id="sony-max-hd" tvg-name="Sony MAX HD" group-title="Movies" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMAX.png" tvg-language="Hindi",Sony MAX HD
+https://sliv.tgaadi.workers.dev/sonymaxhd.m3u8
+
+#EXTINF:-1 tvg-id="sony-max" tvg-name="Sony MAX" group-title="Movies" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Max_SD.png" tvg-language="Hindi",Sony MAX
+https://sliv.tgaadi.workers.dev/sonymaxsd.m3u8
+
+#EXTINF:-1 tvg-id="sony-max-2" tvg-name="Sony MAX 2" group-title="Movies" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMAX2.png" tvg-language="Hindi",Sony MAX 2
+https://sliv.tgaadi.workers.dev/max2.m3u8
+
+#EXTINF:-1 tvg-id="sony-wah" tvg-name="Sony WAH" group-title="Movies" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyWAH.png" tvg-language="Hindi",Sony WAH
+https://sliv.tgaadi.workers.dev/sonywah.m3u8
+
+#EXTINF:-1 tvg-id="sony-pix-hd" tvg-name="Sony PIX HD" group-title="Movies" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyPIX.png" tvg-language="English",Sony PIX HD
+https://sliv.tgaadi.workers.dev/pixhd.m3u8
+
+#EXTINF:-1 tvg-id="sony-bbc-earth-hd" tvg-name="Sony BBC Earth HD" group-title="Infotainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyBBCEarthEng.png" tvg-language="English",Sony BBC Earth HD
+https://sliv.tgaadi.workers.dev/sonybbcearthhd.m3u8
+
+#EXTINF:-1 tvg-id="sony-marathi" tvg-name="Sony Marathi" group-title="Entertainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMarathi.png" tvg-language="Marathi",Sony Marathi
+https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
 
     suspend fun loadZeeChannels(context: Context): List<Channel> = withContext(Dispatchers.IO) {
-        val zeeContent = fetchM3uContent(context, ZEE_M3U_URL, CACHE_FILE, EMBEDDED_M3U)
-        val sportsContent = fetchM3uContent(context, STAR_SPORTS_M3U_URL, SPORTS_CACHE_FILE, EMBEDDED_SPORTS_M3U)
+        val zeeContent = fetchM3uContent(context, ZEE_M3U_URL, ZEE_M3U_CACHE_FILE, EMBEDDED_M3U)
+        val sonyContent = fetchM3uContent(context, SONY_M3U_URL, SONY_M3U_CACHE_FILE, EMBEDDED_SONY_M3U)
 
         val combinedChannels = mutableListOf<ZeeChannel>()
         combinedChannels.addAll(parseM3u(zeeContent))
-        combinedChannels.addAll(parseM3u(sportsContent))
+        combinedChannels.addAll(parseM3u(sonyContent))
+        combinedChannels.addAll(parseM3u(EMBEDDED_SPORTS_M3U))
 
         // Also merge any missing embedded channels from fallback M3Us so they are guaranteed present
         val embeddedZee = parseM3u(EMBEDDED_M3U)
-        val embeddedSports = parseM3u(EMBEDDED_SPORTS_M3U)
+        val embeddedSony = parseM3u(EMBEDDED_SONY_M3U)
         val existingNumbers = combinedChannels.map { it.channelNumber }.toMutableSet()
-        for (ec in (embeddedZee + embeddedSports)) {
+        for (ec in embeddedZee + embeddedSony) {
             if (ec.channelNumber !in existingNumbers) {
                 combinedChannels.add(ec)
                 existingNumbers.add(ec.channelNumber)
             }
         }
 
-        val channels = mutableListOf<Channel>()
         val newMap = mutableMapOf<String, ZeeChannel>()
         combinedChannels.forEach { zc ->
             newMap[zc.id] = zc
             newMap[zc.channelNumber.toString()] = zc
             newMap["zee_${zc.channelNumber}"] = zc
+        }
+        zeeChannelsMap.putAll(newMap)
+
+        // Fetch live tokens from active online source and update channels
+        fetchLiveTokens(context)
+
+        val channels = mutableListOf<Channel>()
+        val seenNumbers = mutableSetOf<Int>()
+        for (zc in zeeChannelsMap.values) {
+            if (zc.channelNumber in seenNumbers) continue
+            seenNumbers.add(zc.channelNumber)
             channels.add(
                 Channel(
                     id = zc.id,
@@ -670,7 +723,7 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/SonyTen4Kan_BTS/WDVLive/index.mpd?|cookie
                     logoUrl = zc.logoUrl,
                     group = zc.group,
                     streamUrl = zc.streamUrl,
-                    isDrm = true,
+                    isDrm = zc.licenseKey.isNotEmpty(),
                     channelNumber = zc.channelNumber,
                     licenseUrl = if (zc.licenseKey.isNotEmpty()) "jwk:" + clearKeyToJwkJson(zc.licenseKey) else null,
                     language = zc.language,
@@ -678,16 +731,172 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/SonyTen4Kan_BTS/WDVLive/index.mpd?|cookie
                 )
             )
         }
-        zeeChannelsMap.putAll(newMap)
+        channels.sortBy { it.channelNumber }
         channels
     }
 
     fun getZeeChannel(channelId: String): ZeeChannel? {
-        return zeeChannelsMap[channelId]
+        val cleanId = channelId.removePrefix("zee_")
+        return zeeChannelsMap[channelId] ?: zeeChannelsMap[cleanId]
     }
 
     fun isZeeChannel(channelId: String): Boolean {
-        return zeeChannelsMap.containsKey(channelId) || channelId.startsWith("zee_")
+        val cleanId = channelId.removePrefix("zee_")
+        if (zeeChannelsMap.containsKey(channelId) || zeeChannelsMap.containsKey(cleanId)) return true
+        val idNum = cleanId.toIntOrNull()
+        if (idNum != null && CHANNEL_METADATA.values.any { it.channelId == idNum }) return true
+        return false
+    }
+
+    /**
+     * Checks if Akamai token (__hdnea__) in streamUrl or cookie is expired or expiring within 2 minutes.
+     */
+    fun isTokenExpired(streamUrl: String?, cookie: String?): Boolean {
+        val token = when {
+            !streamUrl.isNullOrEmpty() && streamUrl.contains("__hdnea__=") ->
+                streamUrl.substringAfter("__hdnea__=").substringBefore("&")
+            !cookie.isNullOrEmpty() && cookie.contains("__hdnea__=") ->
+                cookie.substringAfter("__hdnea__=").substringBefore(";")
+            else -> return false // Not a token-managed stream, don't trigger refresh
+        }
+        val expMatch = Regex("""exp=(\d+)""").find(token) ?: return false
+        val expSec = expMatch.groupValues[1].toLongOrNull() ?: return false
+        val nowSec = System.currentTimeMillis() / 1000L
+        return nowSec >= (expSec - 120L)
+    }
+
+    /**
+     * Fetches live Akamai tokens from active cookie source and updates in-memory channels.
+     */
+    fun fetchLiveTokens(context: Context): Int {
+        var count = 0
+        var rawJson: String? = null
+        try {
+            val url = URL(LIVE_COOKIE_URL)
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 6000
+            conn.readTimeout = 6000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+            if (conn.responseCode in 200..299) {
+                rawJson = conn.inputStream.bufferedReader().use { it.readText() }
+                try {
+                    File(context.filesDir, COOKIE_CACHE_FILE).writeText(rawJson)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to write cookie cache: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch live tokens from $LIVE_COOKIE_URL: ${e.message}")
+        }
+
+        if (rawJson.isNullOrEmpty()) {
+            try {
+                val file = File(context.filesDir, COOKIE_CACHE_FILE)
+                if (file.exists()) {
+                    rawJson = file.readText()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to read cached tokens file: ${e.message}")
+            }
+        }
+
+        if (!rawJson.isNullOrEmpty()) {
+            try {
+                val root = JSONObject(rawJson)
+                val items = mutableListOf<JSONObject>()
+                val failedArr = root.optJSONArray("failed_results")
+                if (failedArr != null) {
+                    for (i in 0 until failedArr.length()) {
+                        failedArr.optJSONObject(i)?.let { items.add(it) }
+                    }
+                }
+                val successArr = root.optJSONArray("successful_results")
+                if (successArr != null) {
+                    for (i in 0 until successArr.length()) {
+                        successArr.optJSONObject(i)?.let { items.add(it) }
+                    }
+                }
+
+                for (item in items) {
+                    val cid = item.optString("channel_id")
+                    if (cid.isEmpty()) continue
+                    val errDetails = item.optJSONObject("error_details")
+                    val furl = errDetails?.optString("final_url").takeIf { !it.isNullOrEmpty() }
+                        ?: item.optString("final_url")
+                    if (!furl.contains("__hdnea__=")) continue
+
+                    val token = furl.substringAfter("__hdnea__=").substringBefore("&")
+                    val cookieStr = "__hdnea__=$token"
+                    val expMatch = Regex("""exp=(\d+)""").find(token)
+                    val expSec = expMatch?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+
+                    liveTokensMap[cid] = LiveTokenInfo(furl, cookieStr, expSec)
+
+                    // Update existing channel if loaded
+                    val existing = zeeChannelsMap[cid]
+                    if (existing != null) {
+                        val updated = existing.copy(streamUrl = furl, cookie = cookieStr)
+                        zeeChannelsMap[existing.id] = updated
+                        zeeChannelsMap[existing.channelNumber.toString()] = updated
+                        zeeChannelsMap["zee_${existing.channelNumber}"] = updated
+                        count++
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to parse cookie json: ${e.message}")
+            }
+        }
+        return count
+    }
+
+    /**
+     * Retrieves stream data for playback, automatically refreshing tokens on-demand if expired or retry requested.
+     */
+    suspend fun getStreamDataForChannel(
+        context: Context,
+        channelId: String,
+        forceRefresh: Boolean = false
+    ): StreamData? = withContext(Dispatchers.IO) {
+        val cleanId = channelId.removePrefix("zee_")
+        var zc = zeeChannelsMap[channelId] ?: zeeChannelsMap[cleanId]
+        if (zc == null) {
+            loadZeeChannels(context)
+            zc = zeeChannelsMap[channelId] ?: zeeChannelsMap[cleanId]
+        }
+        if (zc == null) return@withContext null
+
+        val expired = isTokenExpired(zc.streamUrl, zc.cookie)
+        val isManagedToken = zc.streamUrl.contains("jiotvpllive.cdn.jio.com") || zc.cookie.contains("__hdnea__=")
+        if ((forceRefresh || expired) && isManagedToken) {
+            Log.i(TAG, "Refreshing token for ${zc.name} (id=$channelId, force=$forceRefresh, expired=$expired)...")
+            fetchLiveTokens(context)
+            zc = zeeChannelsMap[channelId] ?: zeeChannelsMap[cleanId] ?: zc
+
+            // Check if liveTokensMap has an update for this channel ID
+            val liveTok = liveTokensMap[zc.channelNumber.toString()] ?: liveTokensMap[zc.id]
+            if (liveTok != null && liveTok.streamUrl != zc.streamUrl) {
+                zc = zc.copy(streamUrl = liveTok.streamUrl, cookie = liveTok.cookie)
+                zeeChannelsMap[zc.id] = zc
+                zeeChannelsMap[zc.channelNumber.toString()] = zc
+                zeeChannelsMap["zee_${zc.channelNumber}"] = zc
+            }
+        }
+
+        val jwkJson = if (zc.licenseKey.isNotEmpty()) clearKeyToJwkJson(zc.licenseKey) else ""
+        val headers = mutableMapOf<String, String>()
+        if (zc.userAgent.isNotEmpty()) headers["User-Agent"] = zc.userAgent
+        if (zc.referer.isNotEmpty()) headers["Referer"] = zc.referer
+        if (zc.origin.isNotEmpty()) headers["Origin"] = zc.origin
+        if (zc.cookie.isNotEmpty()) headers["Cookie"] = zc.cookie
+
+        StreamData(
+            streamUrl = zc.streamUrl,
+            licenseUrl = if (jwkJson.isNotEmpty()) "jwk:$jwkJson" else "",
+            isMpd = zc.isMpd,
+            headers = headers,
+            licenseHeaders = headers
+        )
     }
 
     private fun fetchM3uContent(
@@ -717,7 +926,6 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/SonyTen4Kan_BTS/WDVLive/index.mpd?|cookie
             Log.w(TAG, "Failed to fetch remote M3U ($urlStr): ${e.message}")
         }
 
-        // Try reading cached file
         try {
             val file = File(context.filesDir, cacheFileName)
             if (file.exists()) {
@@ -739,11 +947,11 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/SonyTen4Kan_BTS/WDVLive/index.mpd?|cookie
         var currentGroupTitle = ""
         var currentLangTag = ""
         var currentLicenseKey = ""
-        var currentUserAgent = "@shoebbro"
-        var currentReferer = "https://www.jiotv.com/"
-        var currentOrigin = "https://www.jiotv.com"
+        var currentUserAgent = ""
+        var currentReferer = ""
+        var currentOrigin = ""
         var currentCookie = ""
-        var currentManifestType = "mpd"
+        var currentManifestType = ""
 
         val lines = m3uContent.lines()
         var index = 1
@@ -795,14 +1003,20 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/SonyTen4Kan_BTS/WDVLive/index.mpd?|cookie
                 if (cleanUrl.endsWith("?")) cleanUrl = cleanUrl.dropLast(1)
                 cleanUrl = cleanUrl.replace("://jiotvpllive.cdn.jio.com//bpk-tv/", "://jiotvpllive.cdn.jio.com/bpk-tv/")
 
-                // If stream url doesn't have hdnea query param but cookie is present, attach cookie query with param name
                 if (!cleanUrl.contains("__hdnea__") && currentCookie.contains("__hdnea__=")) {
                     val token = currentCookie.substringAfter("__hdnea__=")
                     cleanUrl += if (cleanUrl.contains("?")) "&__hdnea__=$token" else "?__hdnea__=$token"
                 }
 
-                val key = currentName.lowercase().replace(Regex("[^a-z0-9]"), "")
-                val meta = CHANNEL_METADATA[key]
+                val isJioCdn = cleanUrl.contains("jiotvpllive.cdn.jio.com") || cleanUrl.contains("jio.com")
+                val finalUserAgent = if (currentUserAgent.isNotEmpty()) currentUserAgent else if (isJioCdn) "@shoebbro" else "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                val finalReferer = if (currentReferer.isNotEmpty()) currentReferer else if (isJioCdn) "https://www.jiotv.com/" else ""
+                val finalOrigin = if (currentOrigin.isNotEmpty()) currentOrigin else if (isJioCdn) "https://www.jiotv.com" else ""
+
+                val keyByName = currentName.lowercase().replace(Regex("[^a-z0-9]"), "")
+                val keyById = currentId.lowercase().replace(Regex("[^a-z0-9]"), "")
+                val meta = CHANNEL_METADATA[keyByName] ?: CHANNEL_METADATA[keyById]
+
                 val channelIdNum = meta?.channelId
                     ?: currentId.toIntOrNull()
                     ?: (9000 + index)
@@ -810,19 +1024,26 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/SonyTen4Kan_BTS/WDVLive/index.mpd?|cookie
                 val finalGroup = meta?.group ?: currentGroupTitle.ifEmpty { "Sports" }
                 val finalLang = meta?.language ?: currentLangTag.ifEmpty { "Hindi" }
                 val finalStb = meta?.stbNumber ?: 0
+                val finalLogo = if (meta?.logoUrl?.isNotEmpty() == true) {
+                    meta.logoUrl
+                } else if (currentLogo.isNotEmpty() && !currentLogo.contains("sonypicturesnetworks.com")) {
+                    currentLogo
+                } else {
+                    meta?.logoUrl ?: currentLogo
+                }
 
                 list.add(
                     ZeeChannel(
                         id = channelIdNum.toString(),
                         name = finalName,
-                        logoUrl = currentLogo,
+                        logoUrl = finalLogo,
                         group = finalGroup,
                         channelNumber = channelIdNum,
                         streamUrl = cleanUrl,
                         cookie = currentCookie,
-                        userAgent = currentUserAgent,
-                        referer = currentReferer,
-                        origin = currentOrigin,
+                        userAgent = finalUserAgent,
+                        referer = finalReferer,
+                        origin = finalOrigin,
                         licenseKey = currentLicenseKey,
                         isMpd = currentManifestType.equals("mpd", ignoreCase = true) || cleanUrl.contains(".mpd"),
                         language = finalLang,
@@ -837,11 +1058,11 @@ https://jiotvpllive.cdn.jio.com/bpk-tv/SonyTen4Kan_BTS/WDVLive/index.mpd?|cookie
                 currentGroupTitle = ""
                 currentLangTag = ""
                 currentLicenseKey = ""
-                currentUserAgent = "@shoebbro"
-                currentReferer = "https://www.jiotv.com/"
-                currentOrigin = "https://www.jiotv.com"
+                currentUserAgent = ""
+                currentReferer = ""
+                currentOrigin = ""
                 currentCookie = ""
-                currentManifestType = "mpd"
+                currentManifestType = ""
                 index++
             }
         }

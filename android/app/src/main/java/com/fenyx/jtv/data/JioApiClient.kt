@@ -846,22 +846,12 @@ object JioApiClient {
                 }
             }
             if (ZeeRepository.isZeeChannel(channelId)) {
-                val zc = ZeeRepository.getZeeChannel(channelId)
-                if (zc != null) {
-                    val jwkJson = ZeeRepository.clearKeyToJwkJson(zc.licenseKey)
-                    val headers = mapOf(
-                        "User-Agent" to zc.userAgent,
-                        "Referer" to zc.referer,
-                        "Origin" to zc.origin,
-                        "Cookie" to zc.cookie
-                    )
-                    val streamData = StreamData(
-                        streamUrl = zc.streamUrl,
-                        licenseUrl = if (jwkJson.isNotEmpty()) "jwk:$jwkJson" else "",
-                        isMpd = zc.isMpd,
-                        headers = headers,
-                        licenseHeaders = headers
-                    )
+                val streamData = ZeeRepository.getStreamDataForChannel(
+                    context = context,
+                    channelId = channelId,
+                    forceRefresh = allowRefreshRetry
+                )
+                if (streamData != null) {
                     return@withContext Result.success(streamData)
                 }
             }
