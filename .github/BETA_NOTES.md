@@ -1,20 +1,22 @@
-# JTV 2.0 beta 17
+# JTV 2.0 beta 18
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.17.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.18.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 17
+## New in beta 18
+- **Full Sony Sports & Entertainment Channels.** Restored high-availability live HLS streams for Sony Sports Ten 1, 2, 3, 4, 5 (HD/SD), SET HD/SD, Sony SAB HD/SD, Sony MAX HD/SD, Sony MAX 2, Sony WAH, Sony PIX HD, Sony BBC Earth HD, Sony Yay, and DD Sports. Dynamic auto-token rotation and native AES-128 HLS decrypt ensure reliable streaming on all login methods without depending on Jio SIM authentication.
+- **Auto-renewing tokens for Zee & Star Sports.** Integrated automated background token refresh from the live Akamai cookie source whenever tokens approach expiration, eliminating 48–72h playback cutoffs.
+- **Accurate JioTV categorization & logos.** All Zee, Star Sports, and Sony channels are mapped into their official JioTV categories (Sports, Entertainment, Movies, News, Kids, Infotainment) with official channel numbers, STB numbers, and official high-resolution Jio CDN logos.
+
+---
+
+## Earlier betas
+
+### Beta 17
 - **Channel language filter.** Added a dedicated **Channel languages** setting (**Settings → Channels → Channel languages**): multi-select which languages you want to watch with channel counts, and show or hide channels language-wise across the entire app (Home, Categories, Guide, Search, and Player).
 - **Fixed double audio & decoder stability.** Fixed ghost audio and channel playback stops caused by multiple background player instances and preference flow re-triggers when switching preview/picture settings (display fit, stretch, aspect ratio); background playback is now cleanly paused when entering Settings or other screens.
 - **Live Star Sports & Sony Sports playback.** Updated sports streams upstream to an auto-renewing live feed (`mjelo`), resolving expired token errors (HTTP 403) across all Star Sports (Star Sports 1, 2, 3, Select 1/2 in English, Hindi, Tamil, Telugu, Kannada) and Sony Sports channels.
 - **Added Zee Thirai & Zee Thirai HD.** Added Tamil movie channel Zee Thirai and Zee Thirai HD with ClearKey DRM playback.
 - **Credits & Acknowledgments.** Huge thanks to [rathee-ashish/zee-playlist](https://github.com/rathee-ashish/zee-playlist) and community playlist contributors for channel stream metadata and Zee/sports playlist feeds.
-
-## Known limits
-- Some long Hindi labels on TV may be shortened with "…". Please send a screenshot if something looks cut off.
-
----
-
-## Earlier betas
 
 ### Beta 16
 - **Added Star Sports & Sony Sports channels.** Added all 23 Star Sports channels (Star Sports 1, 2, 3, Select 1, Select 2 in English, Hindi, Tamil, Telugu, Kannada) and Sony Sports channels (Sony Sports Ten 1, 2, 3, 4, 5 HD/SD, Eurosport, DD Sports) with ClearKey DRM streams.
