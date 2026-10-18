@@ -10,6 +10,8 @@
     <string name="player_aspect_fit">पूरा दिखाएँ</string>
     <string name="player_aspect_stretch">खींचें</string>
     <string name="player_aspect_zoom">ज़ूम</string>
+    <string name="player_aspect_4_3">4:3</string>
+    <string name="player_aspect_16_9">16:9</string>
     <string name="player_voice_low">थोड़ा</string>
     <string name="player_voice_medium">मध्यम</string>
     <string name="player_voice_high">ज़्यादा</string>

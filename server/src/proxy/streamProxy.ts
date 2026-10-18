@@ -3,6 +3,7 @@ import type { AuthData } from "../jio/types";
 import { extractHdneaToken, extractTokenExpiryEpochSec } from "../jio/hdnea";
 import { refreshNow } from "../refresh";
 import { getStoredCredentials, saveStreamMode } from "../store/db";
+import { isExtraChannel, getExtraChannel } from "../jio/extraChannels";
 
 interface CachedStream {
   key: string;
@@ -191,17 +192,26 @@ export function isJioUpstream(raw: string): boolean {
   try { u = new URL(raw); } catch { return false; }
   if (u.protocol !== "https:" && u.protocol !== "http:") return false;
   const h = u.hostname.toLowerCase();
-  return h === "jio.com" || h.endsWith(".jio.com") || h.endsWith(".jiocdn.com");
+  return (
+    h === "jio.com" ||
+    h.endsWith(".jio.com") ||
+    h.endsWith(".jiocdn.com") ||
+    h.endsWith(".workers.dev") ||
+    h.endsWith(".pages.dev") ||
+    h.endsWith(".cloudfront.net") ||
+    h.endsWith(".allinonereborn2.online") ||
+    h.endsWith("githubusercontent.com")
+  );
 }
 
 /** A live channel id ("154") or a catch-up key ("cu.<base64url>"); anything else is rejected. */
 export function isValidStreamKey(key: string): boolean {
-  return /^\d{1,7}$/.test(key) || /^cu\.[A-Za-z0-9_-]{1,2048}$/.test(key);
+  return /^\d{1,7}$/.test(key) || /^cu\.[A-Za-z0-9_-]{1,2048}$/.test(key) || /^zee_[A-Za-z0-9_.-]+$/i.test(key) || isExtraChannel(key);
 }
 
-/** fetch() that follows redirects only while they stay on Jio hosts (credentials ride along). */
+/** fetch() that follows redirects only while they stay on allowed hosts (credentials ride along). */
 async function fetchJio(url: string, init: RequestInit, hops = 3): Promise<Response> {
-  if (!isJioUpstream(url)) throw new Error("Refusing to fetch a non-Jio URL through the stream proxy");
+  if (!isJioUpstream(url)) throw new Error("Refusing to fetch an untrusted URL through the stream proxy");
   const res = await fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(SEGMENT_TIMEOUT_MS) });
   const loc = res.headers.get("location");
   if (res.status >= 300 && res.status < 400 && loc && hops > 0) {
@@ -212,7 +222,7 @@ async function fetchJio(url: string, init: RequestInit, hops = 3): Promise<Respo
 
 /**
  * Proxies one upstream request (manifest or segment) with a fresh token + the stream headers, so the
- * browser never talks to the Jio CDN directly (defeats CORS) and never sees an expired token.
+ * browser never talks to the CDN directly (defeats CORS) and never sees an expired token.
  */
 export async function proxyUpstream(
   channelId: string,
@@ -220,7 +230,19 @@ export async function proxyUpstream(
   rangeHeader?: string
 ): Promise<Response> {
   if (!isValidStreamKey(channelId)) throw new Error("Invalid channel id");
-  if (!isJioUpstream(targetUrl)) throw new Error("Refusing to fetch a non-Jio URL through the stream proxy");
+  if (!isJioUpstream(targetUrl)) throw new Error("Refusing to fetch an untrusted URL through the stream proxy");
+
+  if (isExtraChannel(channelId)) {
+    const ch = await getExtraChannel(channelId);
+    const headers: Record<string, string> = {};
+    if (ch?.userAgent) headers["User-Agent"] = ch.userAgent;
+    if (ch?.referer) headers["Referer"] = ch.referer;
+    if (ch?.origin) headers["Origin"] = ch.origin;
+    if (ch?.cookie) headers["Cookie"] = ch.cookie;
+    if (rangeHeader) headers["Range"] = rangeHeader;
+    return fetchJio(targetUrl, { headers });
+  }
+
   const c = await getStream(channelId);
   const url = withFreshToken(targetUrl, c.hdnea);
   // The AES-128 key for the non-DRM "Fallback" HLS lives on tv.media.jio.com and authenticates like
@@ -349,6 +371,20 @@ export function rewriteManifest(
 
 /** The real manifest URL + DRM flags the web player needs to configure Shaka. `key` is the cid. */
 export async function getPlaybackInfo(key: string) {
+  if (isExtraChannel(key)) {
+    const ch = await getExtraChannel(key);
+    if (ch) {
+      return {
+        channelId: key,
+        isMpd: ch.isMpd,
+        manifestUrl: ch.streamUrl,
+        hasDrm: ch.isMpd && !!ch.licenseKey,
+        licenseKey: ch.licenseKey,
+        entitled: true,
+      };
+    }
+  }
+
   const c = await getStream(key);
   // "PayWall" in the URL = not subscribed. (A plain "Fallback" is a real non-DRM stream — entitled.)
   const entitled = !/paywall/i.test(c.data.streamUrl);

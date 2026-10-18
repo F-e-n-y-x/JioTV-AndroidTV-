@@ -55,8 +55,10 @@
     <string name="settings_picture_size">Picture size</string>
     <string name="settings_size_fit">Fit the screen (default)</string>
     <string name="settings_size_fit_short">Fit the screen</string>
-    <string name="settings_size_fill">Fill the screen (crops edges)</string>
-    <string name="settings_size_zoom">Zoom</string>
+    <string name="settings_size_fill">Stretch / Fill</string>
+    <string name="settings_size_zoom">Zoom (Crop black bars)</string>
+    <string name="settings_size_4_3">4:3 (Pillarbox)</string>
+    <string name="settings_size_16_9">16:9 (Widescreen)</string>
     <string name="settings_size_stretch_width">Stretch to width</string>
     <string name="settings_size_stretch_height">Stretch to height</string>
     <string name="settings_buffer">Smooth playback</string>

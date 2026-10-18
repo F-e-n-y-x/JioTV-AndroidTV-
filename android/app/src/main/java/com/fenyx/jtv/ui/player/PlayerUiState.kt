@@ -111,7 +111,13 @@ internal val QUALITY_OPTIONS = listOf(
     "auto" to R.string.player_quality_auto, "high" to R.string.player_quality_high,
     "medium" to R.string.player_quality_medium, "low" to R.string.player_quality_low,
 )
-internal val ASPECT_OPTIONS = listOf(0 to R.string.player_aspect_fit, 3 to R.string.player_aspect_stretch, 4 to R.string.player_aspect_zoom)
+internal val ASPECT_OPTIONS = listOf(
+    0 to R.string.player_aspect_fit,
+    3 to R.string.player_aspect_stretch,
+    4 to R.string.player_aspect_zoom,
+    5 to R.string.player_aspect_4_3,
+    6 to R.string.player_aspect_16_9
+)
 internal val VOICE_OPTIONS = listOf(
     0 to R.string.common_off, 1 to R.string.player_voice_low, 2 to R.string.player_voice_medium,
     3 to R.string.player_voice_high, 4 to R.string.player_voice_most,

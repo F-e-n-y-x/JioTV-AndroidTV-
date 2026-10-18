@@ -55,8 +55,10 @@
     <string name="settings_picture_size">पिक्चर का साइज़</string>
     <string name="settings_size_fit">स्क्रीन में फ़िट (डिफ़ॉल्ट)</string>
     <string name="settings_size_fit_short">स्क्रीन में फ़िट</string>
-    <string name="settings_size_fill">पूरी स्क्रीन भरें (किनारे कटेंगे)</string>
-    <string name="settings_size_zoom">ज़ूम</string>
+    <string name="settings_size_fill">खींचें / पूरी स्क्रीन</string>
+    <string name="settings_size_zoom">ज़ूम (काली पट्टियाँ हटाएँ)</string>
+    <string name="settings_size_4_3">4:3</string>
+    <string name="settings_size_16_9">16:9</string>
     <string name="settings_size_stretch_width">चौड़ाई तक खींचें</string>
     <string name="settings_size_stretch_height">ऊँचाई तक खींचें</string>
     <string name="settings_buffer">बिना रुकावट चलना</string>

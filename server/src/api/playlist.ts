@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { getChannels, type Channel } from "../jio/channels";
 import { getNativeEpg } from "../jio/epg";
 import { getPlaybackInfo, proxyUpstream, rewriteManifest } from "../proxy/streamProxy";
+import { isExtraChannel, getExtraChannelSync, getExtraChannel } from "../jio/extraChannels";
 import { getFavorites, hasCode, getDrmOnlyChannelIds } from "../store/db";
 import { filterPlaylistChannels } from "./playlistFilter";
 import { isAuthEnabled, envServerToken, getEpgConfig } from "../store/settings";
@@ -78,12 +79,21 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     lines.push(header);
 
     for (const c of channels) {
-      const streamUrl = `${base}/live/${encodeURIComponent(c.id)}.m3u8?ts=1${codeQ}${qualityQ}`;
+      const extra = isExtraChannel(c.id) ? getExtraChannelSync(c.id) : undefined;
+      const isMpd = extra ? extra.isMpd : false;
+      const streamExt = isMpd ? "mpd" : "m3u8";
+      const streamUrl = `${base}/live/${encodeURIComponent(c.id)}.${streamExt}?ts=1${codeQ}${qualityQ}`;
       // Only channels Jio actually keeps a catch-up archive for get the catch-up attributes.
       const catchupAttr = enableCatchup && c.isCatchup
         ? `catchup="default" catchup-days="7" catchup-source="${base}/live/${encodeURIComponent(c.id)}.m3u8?utc={utc}&lutc={lutc}${codeQ}${qualityQ}" `
         : "";
       const chnoAttr = c.stbNumber ? `tvg-chno="${c.stbNumber}" ` : "";
+      if (extra && extra.licenseKey) {
+        lines.push("#KODIPROP:inputstream=inputstream.adaptive");
+        lines.push("#KODIPROP:inputstream.adaptive.manifest_type=mpd");
+        lines.push("#KODIPROP:inputstream.adaptive.license_type=clearkey");
+        lines.push(`#KODIPROP:inputstream.adaptive.license_key=${extra.licenseKey}`);
+      }
       lines.push(
         `#EXTINF:-1 tvg-id="${attr(c.id)}" tvg-name="${attr(c.name)}" ${chnoAttr}tvg-logo="${attr(c.logoUrl)}" ` +
           `group-title="${attr(c.group)}" tvg-language="${attr(c.language)}" ${catchupAttr},${c.name}`
@@ -105,6 +115,25 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     const utcRaw = String(q.utc ?? q.lutc ?? "").trim();
 
     let key = rawId;
+
+    if (isExtraChannel(rawId)) {
+      try {
+        const extra = await getExtraChannel(rawId);
+        if (!extra) return reply.code(404).send("# Extra channel not found");
+
+        const upstream = await proxyUpstream(rawId, extra.streamUrl);
+        const ct = upstream.headers.get("content-type") ?? (extra.isMpd ? "application/dash+xml" : "application/vnd.apple.mpegurl");
+        const text = await upstream.text();
+        const codeQ = code ? `&code=${encodeURIComponent(code)}` : "";
+        const segPrefix = `${baseUrl(req)}/seg?cid=${encodeURIComponent(rawId)}${codeQ}&u=`;
+        const rewritten = rewriteManifest(text, ct, extra.streamUrl, segPrefix, maxHeight) ?? text;
+        reply.header("content-type", ct);
+        return reply.send(rewritten);
+      } catch (err) {
+        return reply.code(502).send(`# ${(err as Error).message}`);
+      }
+    }
+
     if (utcRaw) {
       // Catch-up replay requested via IPTV {utc} parameter
       const utcNum = Number(utcRaw);

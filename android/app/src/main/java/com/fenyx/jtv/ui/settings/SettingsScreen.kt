@@ -156,6 +156,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         0 to stringResource(R.string.settings_size_fit),
         3 to stringResource(R.string.settings_size_fill),
         4 to stringResource(R.string.settings_size_zoom),
+        5 to stringResource(R.string.settings_size_4_3),
+        6 to stringResource(R.string.settings_size_16_9),
         1 to stringResource(R.string.settings_size_stretch_width),
         2 to stringResource(R.string.settings_size_stretch_height)
     )

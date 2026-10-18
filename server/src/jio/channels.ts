@@ -1,4 +1,5 @@
 import { jio } from "../config";
+import { getExtraChannels } from "./extraChannels";
 
 export interface Channel {
   id: string;
@@ -15,6 +16,8 @@ export interface Channel {
   isPremium?: boolean;
   /** v3.1 `plan_type` ("free", "premium", "guest"...). */
   planType?: string;
+  streamUrl?: string;
+  licenseKey?: string;
 }
 
 /**
@@ -121,6 +124,16 @@ export async function getChannels(force = false): Promise<Channel[]> {
     fetchChannelPage(V14_URL, categoryMap, v14),
   ]);
   const merged = mergeChannelLists(v31, v14);
+
+  // Merge high-availability live extra channels (Zee, Star Sports, Sony Sports & Entertainment)
+  try {
+    const extraChannels = await getExtraChannels();
+    for (const ec of extraChannels) {
+      merged.set(ec.channelNumber, ec);
+    }
+  } catch (err) {
+    console.warn("[channels] failed to load extra channels:", (err as Error).message);
+  }
 
   if (merged.size === 0) {
     if (cache) return cache.channels; // serve stale on a transient failure

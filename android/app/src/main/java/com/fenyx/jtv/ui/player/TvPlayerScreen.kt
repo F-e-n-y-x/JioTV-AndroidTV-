@@ -44,6 +44,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.layout.layout
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
@@ -52,6 +54,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.fenyx.jtv.data.Channel
 import com.fenyx.jtv.data.SettingsManager
@@ -281,6 +284,15 @@ fun TvPlayerScreen(
             maxBufferSec = bufferSecPref,
             dialogueProcessor = dialogueProcessor
         )
+    }
+
+    LaunchedEffect(resizeMode, exoPlayer) {
+        val targetScaling = if (resizeMode == 3 || resizeMode == 4 || resizeMode == 5 || resizeMode == 6) {
+            C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        } else {
+            C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        }
+        exoPlayer.videoScalingMode = targetScaling
     }
 
     // Deterministic audio session id: generate one and bind the player to it so audio-effect
@@ -1819,21 +1831,37 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
         (ctx0.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 &&
             java.io.File(ctx0.getExternalFilesDir(null), "novideo").exists()
     }
-    androidx.compose.foundation.layout.Box(modifier) {
+    val (exoResizeMode, exoScalingMode) = when (resizeMode) {
+        3 -> AspectRatioFrameLayout.RESIZE_MODE_FILL to C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        4 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM to C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        1 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH to C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        2 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT to C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        5, 6 -> AspectRatioFrameLayout.RESIZE_MODE_FILL to C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        else -> AspectRatioFrameLayout.RESIZE_MODE_FIT to C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+    }
+
+    androidx.compose.foundation.layout.Box(
+        modifier = modifier.clipToBounds(),
+        contentAlignment = Alignment.Center
+    ) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = if (noVideo) null else player
                     useController = false
                     keepScreenOn = true
+                    this.resizeMode = exoResizeMode
                     // Letterbox black comes from the view itself: nothing opaque may be drawn over the
                     // surface by Compose (the portrait page sits above it and is transparent there).
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
             update = { view ->
-                if (view.resizeMode != resizeMode) {
-                    view.resizeMode = resizeMode
+                if (view.resizeMode != exoResizeMode) {
+                    view.resizeMode = exoResizeMode
+                }
+                if (player.videoScalingMode != exoScalingMode) {
+                    player.videoScalingMode = exoScalingMode
                 }
                 // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
                 if (!noVideo && view.player !== player) {
@@ -1843,7 +1871,47 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
             onRelease = { view ->
                 view.player = null
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .layout { measurable, constraints ->
+                    val containerWidth = constraints.maxWidth
+                    val containerHeight = constraints.maxHeight
+                    val (targetWidth, targetHeight) = when (resizeMode) {
+                        4 -> { // Zoom (1.33x scale to crop 16:9 pillarbox or 2.35:1 letterbox)
+                            (containerWidth * 1.3333f).toInt() to (containerHeight * 1.3333f).toInt()
+                        }
+                        5 -> { // 4:3 forced
+                            val w = (containerHeight * (4.0f / 3.0f)).toInt()
+                            w to containerHeight
+                        }
+                        6 -> { // 16:9 forced
+                            val h = (containerWidth * (9.0f / 16.0f)).toInt()
+                            if (h <= containerHeight) {
+                                containerWidth to h
+                            } else {
+                                (containerHeight * (16.0f / 9.0f)).toInt() to containerHeight
+                            }
+                        }
+                        else -> {
+                            containerWidth to containerHeight
+                        }
+                    }
+
+                    val placeable = measurable.measure(
+                        constraints.copy(
+                            minWidth = targetWidth,
+                            maxWidth = targetWidth,
+                            minHeight = targetHeight,
+                            maxHeight = targetHeight,
+                        )
+                    )
+
+                    layout(containerWidth, containerHeight) {
+                        val x = (containerWidth - targetWidth) / 2
+                        val y = (containerHeight - targetHeight) / 2
+                        placeable.place(x, y)
+                    }
+                },
         )
         if (noVideo) {
             // Screenshot stand-in for channel video: a frame from "Big Buck Bunny" (CC BY 3.0, Blender

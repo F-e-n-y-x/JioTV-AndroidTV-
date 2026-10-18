@@ -12,6 +12,8 @@
     <string name="player_aspect_fit">Fit</string>
     <string name="player_aspect_stretch">Stretch</string>
     <string name="player_aspect_zoom">Zoom</string>
+    <string name="player_aspect_4_3">4:3</string>
+    <string name="player_aspect_16_9">16:9</string>
     <string name="player_voice_low">Low</string>
     <string name="player_voice_medium">Medium</string>
     <string name="player_voice_high">High</string>

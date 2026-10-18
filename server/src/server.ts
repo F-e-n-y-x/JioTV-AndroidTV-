@@ -9,6 +9,7 @@ import { registerRoutes } from "./api/routes";
 import { registerPlayRoutes } from "./api/play";
 import { registerPlaylistRoutes } from "./api/playlist";
 import { startRefreshScheduler, stopRefreshScheduler } from "./refresh";
+import { initExtraChannels, stopExtraChannelsScheduler } from "./jio/extraChannels";
 import { isAdminConfigured } from "./store/settings";
 import { ensureCert } from "./https";
 import { redactUrl } from "./util/redact";
@@ -113,6 +114,7 @@ async function shutdown(signal: string): Promise<void> {
     process.exit(0);
   }, 10_000).unref();
   stopRefreshScheduler();
+  stopExtraChannelsScheduler();
   await Promise.allSettled(apps.map((a) => a.close()));
   closeDb();
   process.exit(0);
@@ -126,6 +128,7 @@ async function main() {
   }
 
   startRefreshScheduler();
+  initExtraChannels();
   const discovery = startDiscovery();
   if (discovery) process.once("exit", () => discovery.close());
 
