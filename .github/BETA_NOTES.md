@@ -1,17 +1,19 @@
-# JTV 2.0 beta 18
+# JTV 2.0 beta 19
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.18.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.19.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 18
+## New in beta 19
 - **Aspect Ratio & Picture Size Controls Fixed.** Restored functional aspect ratio handling across both Settings (**Settings → Picture & sound → Picture size**) and the Player Sidebar (**Options → Aspect**). Resolves ExoPlayer hardware decoder (`MediaCodec`) scaling restrictions and `AspectRatioFrameLayout` bypass by applying active container measurement transforms for Zoom (1.33× letterbox/pillarbox crop), Stretch / Fill (full screen), 4:3 (pillarbox), and 16:9 widescreen.
 - **Server Extra Channels & M3U Sharing.** The companion `server/` now automatically fetches, plays, and shares extra channels (Zee, Star Sports, Sony Sports & Entertainment) with automatic playlist updates from GitHub, token auto-renewal from live Akamai cookies, and built-in offline fallbacks. Serves M3U playlists with all extra channels directly to external IPTV players (VLC, TiviMate, OTT Navigator, Kodi) and in the web player.
-- **Full Sony Sports & Entertainment Channels.** Restored high-availability live HLS streams for Sony Sports Ten 1, 2, 3, 4, 5 (HD/SD), SET HD/SD, Sony SAB HD/SD, Sony MAX HD/SD, Sony MAX 2, Sony WAH, Sony PIX HD, Sony BBC Earth HD, Sony Yay, and DD Sports. Dynamic auto-token rotation and native AES-128 HLS decrypt ensure reliable streaming on all login methods without depending on Jio SIM authentication.
-- **Auto-renewing tokens for Zee & Star Sports.** Integrated automated background token refresh from the live Akamai cookie source whenever tokens approach expiration, eliminating 48–72h playback cutoffs.
-- **Accurate JioTV categorization & logos.** All Zee, Star Sports, and Sony channels are mapped into their official JioTV categories (Sports, Entertainment, Movies, News, Kids, Infotainment) with official channel numbers, STB numbers, and official high-resolution Jio CDN logos.
 
 ---
 
 ## Earlier betas
+
+### Beta 18
+- **Full Sony Sports & Entertainment Channels.** Restored high-availability live HLS streams for Sony Sports Ten 1, 2, 3, 4, 5 (HD/SD), SET HD/SD, Sony SAB HD/SD, Sony MAX HD/SD, Sony MAX 2, Sony WAH, Sony PIX HD, Sony BBC Earth HD, Sony Yay, and DD Sports. Dynamic auto-token rotation and native AES-128 HLS decrypt ensure reliable streaming on all login methods without depending on Jio SIM authentication.
+- **Auto-renewing tokens for Zee & Star Sports.** Integrated automated background token refresh from the live Akamai cookie source whenever tokens approach expiration, eliminating 48–72h playback cutoffs.
+- **Accurate JioTV categorization & logos.** All Zee, Star Sports, and Sony channels are mapped into their official JioTV categories (Sports, Entertainment, Movies, News, Kids, Infotainment) with official channel numbers, STB numbers, and official high-resolution Jio CDN logos.
 
 ### Beta 17
 - **Channel language filter.** Added a dedicated **Channel languages** setting (**Settings → Channels → Channel languages**): multi-select which languages you want to watch with channel counts, and show or hide channels language-wise across the entire app (Home, Categories, Guide, Search, and Player).
