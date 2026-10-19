@@ -1864,11 +1864,8 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
                     clipChildren = false
                     clipToPadding = false
                     setBackgroundColor(android.graphics.Color.BLACK)
-                    val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                        applyAspectRatio(this, player, resizeMode)
-                    }
-                    addOnLayoutChangeListener(layoutListener)
                     playerViewRef = this
+                    post { applyAspectRatio(this, player, resizeMode) }
                 }
             },
             update = { view ->
@@ -1912,9 +1909,6 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
     val rawH = videoSize.height
     val par = if (videoSize.pixelWidthHeightRatio > 0f) videoSize.pixelWidthHeightRatio else 1.0f
     val streamAspect = if (rawW > 0 && rawH > 0) (rawW * par) / rawH.toFloat() else (16f / 9f)
-    val isNative43 = streamAspect < 1.5f
-    // Standard Definition broadcast channels (576p, 480p) like Zee Talkies, Zee Marathi, DD Sports
-    val isSd = rawH in 1..576
 
     view.clipChildren = false
     view.clipToPadding = false
@@ -1922,44 +1916,40 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
     contentFrame.clipToPadding = false
 
     when (resizeMode) {
-        0 -> { // Fit (natural presentation)
+        0 -> { // Fit (Original view / Natural presentation)
             contentFrame.layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER
             )
+            contentFrame.setAspectRatio(streamAspect)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
         }
-        3 -> { // Stretch / Fill
-            // For native 4:3 or SD 16:9 with embedded pillarboxes (like Zee Talkies 1024x576):
-            // Stretch width by 4/3 to fill the 16:9 screen horizontally, zero black bars!
-            val targetW = if (isNative43) parentWidth else if (isSd) (parentWidth * (4.0f / 3.0f)).toInt() else parentWidth
-            val targetH = parentHeight
+        3 -> { // Stretch / Fill (Full screen)
             contentFrame.layoutParams = FrameLayout.LayoutParams(
-                targetW,
-                targetH,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER
             )
+            contentFrame.setAspectRatio(streamAspect)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
         }
-        4 -> { // Zoom (crop black bars while preserving proportion)
-            // Zoom in uniformly by 1.333x: crops out the left/right pillarbox bars
-            val targetW = (parentWidth * (4.0f / 3.0f)).toInt()
-            val targetH = (parentHeight * (4.0f / 3.0f)).toInt()
+        4 -> { // Zoom (Crop to fill)
             contentFrame.layoutParams = FrameLayout.LayoutParams(
-                targetW,
-                targetH,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER
             )
-            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
-            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            contentFrame.setAspectRatio(streamAspect)
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
         }
-        5 -> { // 4:3 forced
+        5 -> { // 4:3 Forced (Classic television box format)
             val targetW = (parentHeight * (4.0f / 3.0f)).toInt()
             val targetH = parentHeight
             contentFrame.layoutParams = FrameLayout.LayoutParams(
@@ -1967,18 +1957,20 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
                 targetH,
                 Gravity.CENTER
             )
+            contentFrame.setAspectRatio(4.0f / 3.0f)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
         }
-        6 -> { // 16:9 forced
-            val targetW = if (isNative43) parentWidth else if (isSd) (parentWidth * (4.0f / 3.0f)).toInt() else parentWidth
-            val targetH = parentHeight
+        6 -> { // 16:9 Forced (Widescreen format)
+            val targetW = parentWidth
+            val targetH = (parentWidth * (9.0f / 16.0f)).toInt().coerceAtMost(parentHeight)
             contentFrame.layoutParams = FrameLayout.LayoutParams(
                 targetW,
                 targetH,
                 Gravity.CENTER
             )
+            contentFrame.setAspectRatio(16.0f / 9.0f)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
@@ -1989,6 +1981,7 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER
             )
+            contentFrame.setAspectRatio(streamAspect)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
@@ -1996,7 +1989,6 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
     }
 
     contentFrame.requestLayout()
-    view.requestLayout()
 }
 
 private fun android.content.Context.findActivity(): ComponentActivity? {

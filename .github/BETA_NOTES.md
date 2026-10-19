@@ -1,18 +1,22 @@
-# JTV 2.0 beta 20
+# JTV 2.0 beta 21
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.20.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.21.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 20
-- **Aspect Ratio Fixed for Zee Talkies & SD Channels.** Fixed picture size controls (**Settings → Picture & sound → Picture size** and Player **Options → Aspect**) for SD channels (such as Zee Talkies, Zee Marathi SD, Zee Cinema SD, Sony Wah, DD Sports) where classic 4:3 movies and programmes are broadcast with embedded pillarbox black bars inside 16:9 streams.
-  - **Stretch / Fill**: Dynamically stretches SD channels to fill the entire 16:9 TV screen with zero black bars.
-  - **Zoom**: Zooms uniformly by 1.333×, cropping off the side pillarboxes while preserving the natural aspect ratio of actors and scenes.
-  - **Force 4:3 & 16:9**: Accurately constrains or expands the picture to classic 4:3 or widescreen format.
-  - Directly manages the internal Media3 `contentFrame` and hardware `SurfaceView` layout parameters, bypassing the decoder's aspect-ratio deformation bypass that previously ignored resize commands on 16:9 streams.
-- **Dynamic Video Size Listener.** Automatically applies the active aspect ratio mode immediately when zapping channels, even if the stream changes between 1080p HD, 720p, and 576p SD.
+## New in beta 21
+- **Accurate Original View & Standard Aspect Presets.** Fully resolved aspect ratio detection and geometry on channels like Zee Talkies, eliminating layout loops and distorted crops:
+  - **Fit (Original view)**: Accurately displays the native stream proportions from edge to edge without cutting off content or overscanning.
+  - **4:3 (Force classic ratio)**: For classic movies and SD broadcasts shown stretched wide, forces true 4:3 box format so actors and scenes appear natural and proportional.
+  - **Stretch (Full screen)**: Stretches the video across the 16:9 TV screen with zero black bars.
+  - **Zoom (Uniform crop)**: Zooms in uniformly to fill the container without horizontal distortion.
+  - **16:9 (Widescreen)**: Standardizes widescreen display format.
+  - Removed recursive layout listeners that caused render instability and jitter during aspect ratio transitions.
 
 ---
 
 ## Earlier betas
+
+### Beta 20
+- **Aspect Ratio Fixed for Zee Talkies & SD Channels.** Direct `contentFrame` and hardware `SurfaceView` layout parameters for aspect ratio adjustments.
 
 ### Beta 19
 - **Aspect Ratio & Picture Size Controls Fixed.** Restored functional aspect ratio handling across both Settings and the Player Sidebar.
