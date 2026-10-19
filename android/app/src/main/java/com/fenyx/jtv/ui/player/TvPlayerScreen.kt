@@ -44,6 +44,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.view.Gravity
+import android.view.View
+import android.widget.FrameLayout
 import androidx.compose.ui.layout.layout
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -287,7 +290,7 @@ fun TvPlayerScreen(
     }
 
     LaunchedEffect(resizeMode, exoPlayer) {
-        val targetScaling = if (resizeMode == 3 || resizeMode == 4 || resizeMode == 5 || resizeMode == 6) {
+        val targetScaling = if (resizeMode == 3 || resizeMode == 4 || resizeMode == 6) {
             C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
         } else {
             C.VIDEO_SCALING_MODE_SCALE_TO_FIT
@@ -1831,13 +1834,21 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
         (ctx0.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 &&
             java.io.File(ctx0.getExternalFilesDir(null), "novideo").exists()
     }
-    val (exoResizeMode, exoScalingMode) = when (resizeMode) {
-        3 -> AspectRatioFrameLayout.RESIZE_MODE_FILL to C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-        4 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM to C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-        1 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH to C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-        2 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT to C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-        5, 6 -> AspectRatioFrameLayout.RESIZE_MODE_FILL to C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-        else -> AspectRatioFrameLayout.RESIZE_MODE_FIT to C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+
+    DisposableEffect(player, resizeMode) {
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                playerViewRef?.let { view ->
+                    view.post { applyAspectRatio(view, player, resizeMode) }
+                }
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+        }
     }
 
     androidx.compose.foundation.layout.Box(
@@ -1850,68 +1861,28 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
                     this.player = if (noVideo) null else player
                     useController = false
                     keepScreenOn = true
-                    this.resizeMode = exoResizeMode
-                    // Letterbox black comes from the view itself: nothing opaque may be drawn over the
-                    // surface by Compose (the portrait page sits above it and is transparent there).
+                    clipChildren = false
+                    clipToPadding = false
                     setBackgroundColor(android.graphics.Color.BLACK)
+                    val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                        applyAspectRatio(this, player, resizeMode)
+                    }
+                    addOnLayoutChangeListener(layoutListener)
+                    playerViewRef = this
                 }
             },
             update = { view ->
-                if (view.resizeMode != exoResizeMode) {
-                    view.resizeMode = exoResizeMode
-                }
-                if (player.videoScalingMode != exoScalingMode) {
-                    player.videoScalingMode = exoScalingMode
-                }
-                // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
+                playerViewRef = view
                 if (!noVideo && view.player !== player) {
                     view.player = player
                 }
+                applyAspectRatio(view, player, resizeMode)
             },
             onRelease = { view ->
+                if (playerViewRef === view) playerViewRef = null
                 view.player = null
             },
-            modifier = Modifier
-                .fillMaxSize()
-                .layout { measurable, constraints ->
-                    val containerWidth = constraints.maxWidth
-                    val containerHeight = constraints.maxHeight
-                    val (targetWidth, targetHeight) = when (resizeMode) {
-                        4 -> { // Zoom (1.33x scale to crop 16:9 pillarbox or 2.35:1 letterbox)
-                            (containerWidth * 1.3333f).toInt() to (containerHeight * 1.3333f).toInt()
-                        }
-                        5 -> { // 4:3 forced
-                            val w = (containerHeight * (4.0f / 3.0f)).toInt()
-                            w to containerHeight
-                        }
-                        6 -> { // 16:9 forced
-                            val h = (containerWidth * (9.0f / 16.0f)).toInt()
-                            if (h <= containerHeight) {
-                                containerWidth to h
-                            } else {
-                                (containerHeight * (16.0f / 9.0f)).toInt() to containerHeight
-                            }
-                        }
-                        else -> {
-                            containerWidth to containerHeight
-                        }
-                    }
-
-                    val placeable = measurable.measure(
-                        constraints.copy(
-                            minWidth = targetWidth,
-                            maxWidth = targetWidth,
-                            minHeight = targetHeight,
-                            maxHeight = targetHeight,
-                        )
-                    )
-
-                    layout(containerWidth, containerHeight) {
-                        val x = (containerWidth - targetWidth) / 2
-                        val y = (containerHeight - targetHeight) / 2
-                        placeable.place(x, y)
-                    }
-                },
+            modifier = Modifier.fillMaxSize()
         )
         if (noVideo) {
             // Screenshot stand-in for channel video: a frame from "Big Buck Bunny" (CC BY 3.0, Blender
@@ -1928,6 +1899,104 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
             ) else androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().drawBehind { drawRect(androidx.compose.ui.graphics.Color(0xFF17171A)) })
         }
     }
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: Int) {
+    val contentFrame = view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame) ?: return
+    val parentWidth = view.width.takeIf { it > 0 } ?: view.resources.displayMetrics.widthPixels
+    val parentHeight = view.height.takeIf { it > 0 } ?: view.resources.displayMetrics.heightPixels
+
+    val videoSize = player.videoSize
+    val rawW = videoSize.width
+    val rawH = videoSize.height
+    val par = if (videoSize.pixelWidthHeightRatio > 0f) videoSize.pixelWidthHeightRatio else 1.0f
+    val streamAspect = if (rawW > 0 && rawH > 0) (rawW * par) / rawH.toFloat() else (16f / 9f)
+    val isNative43 = streamAspect < 1.5f
+    // Standard Definition broadcast channels (576p, 480p) like Zee Talkies, Zee Marathi, DD Sports
+    val isSd = rawH in 1..576
+
+    view.clipChildren = false
+    view.clipToPadding = false
+    contentFrame.clipChildren = false
+    contentFrame.clipToPadding = false
+
+    when (resizeMode) {
+        0 -> { // Fit (natural presentation)
+            contentFrame.layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER
+            )
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        }
+        3 -> { // Stretch / Fill
+            // For native 4:3 or SD 16:9 with embedded pillarboxes (like Zee Talkies 1024x576):
+            // Stretch width by 4/3 to fill the 16:9 screen horizontally, zero black bars!
+            val targetW = if (isNative43) parentWidth else if (isSd) (parentWidth * (4.0f / 3.0f)).toInt() else parentWidth
+            val targetH = parentHeight
+            contentFrame.layoutParams = FrameLayout.LayoutParams(
+                targetW,
+                targetH,
+                Gravity.CENTER
+            )
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        }
+        4 -> { // Zoom (crop black bars while preserving proportion)
+            // Zoom in uniformly by 1.333x: crops out the left/right pillarbox bars
+            val targetW = (parentWidth * (4.0f / 3.0f)).toInt()
+            val targetH = (parentHeight * (4.0f / 3.0f)).toInt()
+            contentFrame.layoutParams = FrameLayout.LayoutParams(
+                targetW,
+                targetH,
+                Gravity.CENTER
+            )
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        }
+        5 -> { // 4:3 forced
+            val targetW = (parentHeight * (4.0f / 3.0f)).toInt()
+            val targetH = parentHeight
+            contentFrame.layoutParams = FrameLayout.LayoutParams(
+                targetW,
+                targetH,
+                Gravity.CENTER
+            )
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        }
+        6 -> { // 16:9 forced
+            val targetW = if (isNative43) parentWidth else if (isSd) (parentWidth * (4.0f / 3.0f)).toInt() else parentWidth
+            val targetH = parentHeight
+            contentFrame.layoutParams = FrameLayout.LayoutParams(
+                targetW,
+                targetH,
+                Gravity.CENTER
+            )
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        }
+        else -> {
+            contentFrame.layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER
+            )
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        }
+    }
+
+    contentFrame.requestLayout()
+    view.requestLayout()
 }
 
 private fun android.content.Context.findActivity(): ComponentActivity? {

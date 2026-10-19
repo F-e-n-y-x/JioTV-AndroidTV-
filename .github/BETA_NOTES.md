@@ -1,14 +1,22 @@
-# JTV 2.0 beta 19
+# JTV 2.0 beta 20
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.19.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.20.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 19
-- **Aspect Ratio & Picture Size Controls Fixed.** Restored functional aspect ratio handling across both Settings (**Settings → Picture & sound → Picture size**) and the Player Sidebar (**Options → Aspect**). Resolves ExoPlayer hardware decoder (`MediaCodec`) scaling restrictions and `AspectRatioFrameLayout` bypass by applying active container measurement transforms for Zoom (1.33× letterbox/pillarbox crop), Stretch / Fill (full screen), 4:3 (pillarbox), and 16:9 widescreen.
-- **Server Extra Channels & M3U Sharing.** The companion `server/` now automatically fetches, plays, and shares extra channels (Zee, Star Sports, Sony Sports & Entertainment) with automatic playlist updates from GitHub, token auto-renewal from live Akamai cookies, and built-in offline fallbacks. Serves M3U playlists with all extra channels directly to external IPTV players (VLC, TiviMate, OTT Navigator, Kodi) and in the web player.
+## New in beta 20
+- **Aspect Ratio Fixed for Zee Talkies & SD Channels.** Fixed picture size controls (**Settings → Picture & sound → Picture size** and Player **Options → Aspect**) for SD channels (such as Zee Talkies, Zee Marathi SD, Zee Cinema SD, Sony Wah, DD Sports) where classic 4:3 movies and programmes are broadcast with embedded pillarbox black bars inside 16:9 streams.
+  - **Stretch / Fill**: Dynamically stretches SD channels to fill the entire 16:9 TV screen with zero black bars.
+  - **Zoom**: Zooms uniformly by 1.333×, cropping off the side pillarboxes while preserving the natural aspect ratio of actors and scenes.
+  - **Force 4:3 & 16:9**: Accurately constrains or expands the picture to classic 4:3 or widescreen format.
+  - Directly manages the internal Media3 `contentFrame` and hardware `SurfaceView` layout parameters, bypassing the decoder's aspect-ratio deformation bypass that previously ignored resize commands on 16:9 streams.
+- **Dynamic Video Size Listener.** Automatically applies the active aspect ratio mode immediately when zapping channels, even if the stream changes between 1080p HD, 720p, and 576p SD.
 
 ---
 
 ## Earlier betas
+
+### Beta 19
+- **Aspect Ratio & Picture Size Controls Fixed.** Restored functional aspect ratio handling across both Settings and the Player Sidebar.
+- **Server Extra Channels & M3U Sharing.** The companion `server/` now automatically fetches, plays, and shares extra channels (Zee, Star Sports, Sony Sports & Entertainment) with automatic playlist updates from GitHub, token auto-renewal from live Akamai cookies, and built-in offline fallbacks. Serves M3U playlists with all extra channels directly to external IPTV players (VLC, TiviMate, OTT Navigator, Kodi) and in the web player.
 
 ### Beta 18
 - **Full Sony Sports & Entertainment Channels.** Restored high-availability live HLS streams for Sony Sports Ten 1, 2, 3, 4, 5 (HD/SD), SET HD/SD, Sony SAB HD/SD, Sony MAX HD/SD, Sony MAX 2, Sony WAH, Sony PIX HD, Sony BBC Earth HD, Sony Yay, and DD Sports. Dynamic auto-token rotation and native AES-128 HLS decrypt ensure reliable streaming on all login methods without depending on Jio SIM authentication.
