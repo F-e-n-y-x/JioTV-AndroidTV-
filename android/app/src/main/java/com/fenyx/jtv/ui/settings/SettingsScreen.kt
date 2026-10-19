@@ -158,8 +158,6 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         4 to stringResource(R.string.settings_size_zoom),
         5 to stringResource(R.string.settings_size_4_3),
         6 to stringResource(R.string.settings_size_16_9),
-        1 to stringResource(R.string.settings_size_stretch_width),
-        2 to stringResource(R.string.settings_size_stretch_height)
     )
     val themes = listOf(
         "system" to stringResource(R.string.settings_theme_system),
@@ -239,7 +237,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         add(SRow.Item("quality", stringResource(R.string.settings_quality), value = qualities.find { it.first == quality }?.second ?: qualities[0].second) { sheet = Sheet.Quality })
         add(SRow.Item("language", stringResource(R.string.settings_sound_language), value = languages.find { it.first == language }?.second ?: language,
             description = stringResource(R.string.settings_sound_language_desc)) { sheet = Sheet.Language })
-        add(SRow.Item("resize", stringResource(R.string.settings_picture_size), value = resizeModes.find { it.first == playerResizeMode }?.second ?: stringResource(R.string.settings_size_fit_short)) { sheet = Sheet.PictureSize })
+        val effectiveResizeMode = when (playerResizeMode) { 1 -> 3; 2 -> 4; else -> playerResizeMode }
+        add(SRow.Item("resize", stringResource(R.string.settings_picture_size), value = resizeModes.find { it.first == effectiveResizeMode }?.second ?: stringResource(R.string.settings_size_fit_short)) { sheet = Sheet.PictureSize })
         add(SRow.Item("buffer", stringResource(R.string.settings_buffer), value = bufferOptions.find { it.first == playbackBufferSec }?.second
             ?: pluralStringResource(R.plurals.settings_buffer_seconds, playbackBufferSec, playbackBufferSec),
             description = stringResource(R.string.settings_buffer_desc)) { sheet = Sheet.Buffer })
@@ -473,9 +472,12 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
             Sheet.Language -> PickerDialog(stringResource(R.string.settings_sound_language), languages, language,
                 onSelect = { v -> scope.launch { settingsManager.setDefaultLanguage(v) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
-            Sheet.PictureSize -> PickerDialog(stringResource(R.string.settings_picture_size), resizeModes.map { it.first.toString() to it.second }, playerResizeMode.toString(),
-                onSelect = { v -> scope.launch { settingsManager.setPlayerResizeMode(v.toInt()) }; sheet = Sheet.None },
-                onDismiss = { sheet = Sheet.None })
+            Sheet.PictureSize -> {
+                val effectiveMode = when (playerResizeMode) { 1 -> 3; 2 -> 4; else -> playerResizeMode }
+                PickerDialog(stringResource(R.string.settings_picture_size), resizeModes.map { it.first.toString() to it.second }, effectiveMode.toString(),
+                    onSelect = { v -> scope.launch { settingsManager.setPlayerResizeMode(v.toInt()) }; sheet = Sheet.None },
+                    onDismiss = { sheet = Sheet.None })
+            }
             Sheet.Buffer -> PickerDialog(stringResource(R.string.settings_buffer), bufferOptions.map { it.first.toString() to it.second }, playbackBufferSec.toString(),
                 onSelect = { v -> scope.launch { settingsManager.setPlaybackBufferSec(v.toInt()) }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })

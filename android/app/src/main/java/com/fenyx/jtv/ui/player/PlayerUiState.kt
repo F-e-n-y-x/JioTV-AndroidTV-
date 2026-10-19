@@ -130,7 +130,7 @@ internal fun voiceLabelRes(v: Int) = VOICE_OPTIONS.firstOrNull { it.first == v }
 @Composable
 internal fun qualityLabel(q: String) = stringResource(QUALITY_OPTIONS.firstOrNull { it.first == q }?.second ?: R.string.player_quality_auto)
 @Composable
-internal fun aspectLabel(m: Int) = stringResource(ASPECT_OPTIONS.firstOrNull { it.first == m }?.second ?: R.string.player_aspect_fit)
+internal fun aspectLabel(m: Int) = stringResource(ASPECT_OPTIONS.firstOrNull { it.first == (when (m) { 1 -> 3; 2 -> 4; else -> m }) }?.second ?: R.string.player_aspect_fit)
 @Composable
 internal fun voiceLabel(v: Int) = stringResource(voiceLabelRes(v))
 

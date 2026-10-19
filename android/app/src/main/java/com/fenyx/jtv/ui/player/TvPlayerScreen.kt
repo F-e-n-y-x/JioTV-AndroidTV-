@@ -1910,81 +1910,97 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
     val par = if (videoSize.pixelWidthHeightRatio > 0f) videoSize.pixelWidthHeightRatio else 1.0f
     val streamAspect = if (rawW > 0 && rawH > 0) (rawW * par) / rawH.toFloat() else (16f / 9f)
 
-    view.clipChildren = false
-    view.clipToPadding = false
-    contentFrame.clipChildren = false
-    contentFrame.clipToPadding = false
+    val is43Stream = streamAspect < 1.5f
+    val isSdStream = (rawH in 1..576) || (rawW in 1..1024 && rawH in 1..600)
+
+    val pX = if (contentFrame.width > 0) contentFrame.width / 2f else parentWidth / 2f
+    val pY = if (contentFrame.height > 0) contentFrame.height / 2f else parentHeight / 2f
+    contentFrame.pivotX = pX
+    contentFrame.pivotY = pY
+    contentFrame.translationX = 0f
+    contentFrame.translationY = 0f
+
+    contentFrame.layoutParams = FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        Gravity.CENTER
+    )
 
     when (resizeMode) {
         0 -> { // Fit (Original view / Natural presentation)
-            contentFrame.layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER
-            )
             contentFrame.setAspectRatio(streamAspect)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            contentFrame.scaleX = 1.0f
+            contentFrame.scaleY = 1.0f
         }
-        3 -> { // Stretch / Fill (Full screen)
-            contentFrame.layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER
-            )
+        1, 3 -> { // Stretch / Fill (Full screen)
             contentFrame.setAspectRatio(streamAspect)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            if (is43Stream || isSdStream) {
+                // Stretch 4:3 broadcast content horizontally to fill the 16:9 screen
+                contentFrame.scaleX = (16.0f / 9.0f) / (4.0f / 3.0f) // ~1.3333334f
+                contentFrame.scaleY = 1.0f
+            } else {
+                contentFrame.scaleX = 1.0f
+                contentFrame.scaleY = 1.0f
+            }
         }
-        4 -> { // Zoom (Crop to fill)
-            contentFrame.layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER
-            )
+        2, 4 -> { // Zoom (Crop black bars)
             contentFrame.setAspectRatio(streamAspect)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            if (is43Stream || isSdStream) {
+                // SD channels broadcasting in 16:9 windowbox/letterbox (like Zee Talkies 1024x576)
+                // Scaling both X and Y by 1.34x crops both pillarbox and letterbox black bars,
+                // displaying the widescreen movie full-screen with 100% natural proportions.
+                val zoomFactor = 1.34f
+                contentFrame.scaleX = zoomFactor
+                contentFrame.scaleY = zoomFactor
+            } else {
+                // HD stream zoom to crop cinema letterboxes (2.35:1)
+                contentFrame.scaleX = 1.15f
+                contentFrame.scaleY = 1.15f
+            }
         }
         5 -> { // 4:3 Forced (Classic television box format)
-            val targetW = (parentHeight * (4.0f / 3.0f)).toInt()
-            val targetH = parentHeight
-            contentFrame.layoutParams = FrameLayout.LayoutParams(
-                targetW,
-                targetH,
-                Gravity.CENTER
-            )
             contentFrame.setAspectRatio(4.0f / 3.0f)
-            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
-            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            if (is43Stream) {
+                contentFrame.scaleX = 1.0f
+                contentFrame.scaleY = 1.0f
+            } else {
+                // Squeeze 16:9 wide frame to 4:3 (75% width centered)
+                contentFrame.scaleX = (4.0f / 3.0f) / (16.0f / 9.0f) // 0.75f
+                contentFrame.scaleY = 1.0f
+            }
         }
         6 -> { // 16:9 Forced (Widescreen format)
-            val targetW = parentWidth
-            val targetH = (parentWidth * (9.0f / 16.0f)).toInt().coerceAtMost(parentHeight)
-            contentFrame.layoutParams = FrameLayout.LayoutParams(
-                targetW,
-                targetH,
-                Gravity.CENTER
-            )
             contentFrame.setAspectRatio(16.0f / 9.0f)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            if (is43Stream) {
+                contentFrame.scaleX = (16.0f / 9.0f) / (4.0f / 3.0f) // ~1.3333334f
+                contentFrame.scaleY = 1.0f
+            } else {
+                contentFrame.scaleX = 1.0f
+                contentFrame.scaleY = 1.0f
+            }
         }
         else -> {
-            contentFrame.layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER
-            )
             contentFrame.setAspectRatio(streamAspect)
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            contentFrame.scaleX = 1.0f
+            contentFrame.scaleY = 1.0f
         }
     }
 

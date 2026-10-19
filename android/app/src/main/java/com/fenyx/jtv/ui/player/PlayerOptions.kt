@@ -192,7 +192,7 @@ internal fun OptionsPanel(
                 val (choices, cur) = when (page) {
                     OptionsPage.Language -> model.langChoices to model.langCurrent
                     OptionsPage.Quality -> QUALITY_OPTIONS.map { it.first to stringResource(it.second) } to model.quality
-                    OptionsPage.Aspect -> ASPECT_OPTIONS.map { it.first.toString() to stringResource(it.second) } to model.aspect.toString()
+                    OptionsPage.Aspect -> ASPECT_OPTIONS.map { it.first.toString() to stringResource(it.second) } to (when (model.aspect) { 1 -> 3; 2 -> 4; else -> model.aspect }).toString()
                     OptionsPage.Voice -> VOICE_OPTIONS.map { it.first.toString() to stringResource(it.second) } to model.voice.toString()
                     OptionsPage.Sleep -> SLEEP_OPTIONS.map { it.toString() to sleepLabel(it) } to model.sleep.toString()
                     OptionsPage.Main -> emptyList<Pair<String, String>>() to ""

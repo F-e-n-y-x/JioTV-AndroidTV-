@@ -1,19 +1,23 @@
-# JTV 2.0 beta 21
+# JTV 2.0 beta 22
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.21.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.22.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 21
-- **Accurate Original View & Standard Aspect Presets.** Fully resolved aspect ratio detection and geometry on channels like Zee Talkies, eliminating layout loops and distorted crops:
-  - **Fit (Original view)**: Accurately displays the native stream proportions from edge to edge without cutting off content or overscanning.
-  - **4:3 (Force classic ratio)**: For classic movies and SD broadcasts shown stretched wide, forces true 4:3 box format so actors and scenes appear natural and proportional.
-  - **Stretch (Full screen)**: Stretches the video across the 16:9 TV screen with zero black bars.
-  - **Zoom (Uniform crop)**: Zooms in uniformly to fill the container without horizontal distortion.
-  - **16:9 (Widescreen)**: Standardizes widescreen display format.
-  - Removed recursive layout listeners that caused render instability and jitter during aspect ratio transitions.
+## New in beta 22
+- **Hardware-Accelerated Scaling & Full Aspect Ratio Fix for Zee Talkies & SD Channels:**
+  - After examining and decoding the authentic live broadcast frames of Zee Talkies (`1024x576`), resolved the windowboxing (postage-stamp) and aspect ratio limitations on Android TV:
+  - **Zoom (Crop Black Bars)**: Eliminates both the top/bottom letterbox bars and left/right pillarbox bars on SD movie channels like Zee Talkies, scaling the picture symmetrically to fill the 16:9 screen with 100% natural, undistorted proportions.
+  - **Stretch (Full Screen)**: Anamorphically stretches 4:3 broadcast content horizontally to completely fill 16:9 widescreen with zero black bars.
+  - **4:3 (Classic Box)**: Accurately squeezes wide streams into a centered 4:3 box ($1440 \times 1080$) for legacy content broadcast wide.
+  - **Fit (Original View)**: Clean, uncropped 1.0x native presentation.
+  - **16:9 (Widescreen)**: Forces full widescreen format.
+  - **Unified Picture Size Controls**: Settings and Player Sidebar are now 100% synchronized with identical options and immediate visual feedback.
 
 ---
 
 ## Earlier betas
+
+### Beta 21
+- **Accurate Original View & Standard Aspect Presets.** Initial aspect ratio adjustments for Zee Talkies and removed recursive layout listeners.
 
 ### Beta 20
 - **Aspect Ratio Fixed for Zee Talkies & SD Channels.** Direct `contentFrame` and hardware `SurfaceView` layout parameters for aspect ratio adjustments.
