@@ -97,6 +97,11 @@ export async function getStreamData(
     body,
   });
 
+  // Sony-backed channels (Sony Yay, Vizha...) key a replay by its srno: Jio answers the showId with
+  // "Sony Srno data is not mapped". Retry once with programId = srno.
+  if (res.status === 403 && opts.catchup && opts.catchup.programId !== opts.catchup.srno && /Srno data is not mapped/i.test(res.text)) {
+    return getStreamData(channelId, auth, { ...opts, catchup: { ...opts.catchup, programId: opts.catchup.srno } });
+  }
   if (res.status === 401 || res.status === 403 || res.status === 419) throw new GeturlAuthError(res.status);
   if (res.status < 200 || res.status >= 300) throw new Error(`geturl failed (HTTP ${res.status})`);
   const json = JSON.parse(res.text) as any;

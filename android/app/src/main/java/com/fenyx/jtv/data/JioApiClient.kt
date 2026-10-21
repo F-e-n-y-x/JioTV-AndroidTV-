@@ -547,7 +547,7 @@ object JioApiClient {
         else
             "Your Jio sign-in has expired. Open Settings → Logout and sign in again with OTP."
 
-    private const val CHANNEL_CACHE_FILE = "channels_cache.json"
+    private const val CHANNEL_CACHE_FILE = "channels_cache_v2.json" // v2: older caches lost catch-up on third-party-overridden channels
     const val CHANNEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000L // 24 hours
 
     private fun channelCacheFile(context: android.content.Context): java.io.File {
@@ -593,7 +593,7 @@ object JioApiClient {
             val zeeChannels = ZeeRepository.loadZeeChannels(context)
             val zeeMap = zeeChannels.associateBy { it.channelNumber }
             // Replace matching channels in cache so they get the working M3U stream and ClearKey DRM
-            val updated = channels.map { ch -> zeeMap[ch.channelNumber] ?: ch }.toMutableList()
+            val updated = channels.map { ch -> zeeMap[ch.channelNumber]?.copy(isCatchup = ch.isCatchup) ?: ch }.toMutableList()
             val existingNumbers = updated.mapTo(HashSet()) { it.channelNumber }
             zeeChannels.forEach { zc ->
                 if (zc.channelNumber !in existingNumbers) {
@@ -744,7 +744,8 @@ object JioApiClient {
                 launch(Dispatchers.IO) { zee.addAll(ZeeRepository.loadZeeChannels(context)) }
             }
             finalChannelsMap.putAll(ChannelSources.merge(v31, v14))
-            zee.forEach { zc -> finalChannelsMap[zc.channelNumber] = zc }
+            // A third-party stream replaces Jio's entry for live, but the channel still has Jio catch-up.
+            zee.forEach { zc -> finalChannelsMap[zc.channelNumber] = zc.copy(isCatchup = finalChannelsMap[zc.channelNumber]?.isCatchup ?: zc.isCatchup) }
 
             if (finalChannelsMap.isEmpty()) {
                 // Network produced nothing — fall back to whatever we have on disk (even if stale)
@@ -850,7 +851,8 @@ object JioApiClient {
                     return@withContext Result.success(it)
                 }
             }
-            if (ZeeRepository.isZeeChannel(channelId)) {
+            // Catch-up always goes through Jio's geturl: the third-party feed is live only.
+            if (catchup == null && ZeeRepository.isZeeChannel(channelId)) {
                 val streamData = ZeeRepository.getStreamDataForChannel(
                     context = context,
                     channelId = channelId,
@@ -928,6 +930,13 @@ object JioApiClient {
             // 403 from geturl is per channel: Jio refuses this one (e.g. most Zee Entertainment
             // channels since Jio dropped them). No refresh or retry can fix it.
             if (responseCode == 403) {
+                // Sony-backed channels (Sony Yay, Vizha...) key a replay by its srno: Jio answers the
+                // showId with "Sony Srno data is not mapped". Retry once with programId = srno.
+                if (catchup != null && catchup.programId != catchup.srno &&
+                    readResponseBody(connection, isError = true).contains("Srno data is not mapped", ignoreCase = true)) {
+                    return@withContext getStreamUrl(context, channelId, authData, allowRefreshRetry = false,
+                        catchup = catchup.copy(programId = catchup.srno), useCache = false)
+                }
                 if (catchup == null) refusedInARow.add(channelId)
                 if (catchup == null && refusedInARow.size >= REFUSED_CHANNELS_LIMIT) {
                     if (allowRefreshRetry) {
