@@ -7,9 +7,7 @@ import android.util.Log
  * Loudness makeup attached to the player's audio session.
  *
  * - **Auto Volume (normalize)** lifts quiet channels/dialogue to a more consistent level.
- * - When **Voice Boost** / **Reduce Background** are on, a little makeup gain compensates for the
- *   energy removed by the [DialogueAudioProcessor]'s background attenuation, so the result is clearer
- *   *and* loud enough.
+ * - Voice Boost adds no gain here: [DialogueAudioProcessor] matches its own output loudness to its input.
  *
  * [LoudnessEnhancer] has a built-in target-loudness limiter, so it lifts level without hard clipping.
  * Creation is guarded — it is device-dependent and must never crash playback. The center-channel
@@ -27,7 +25,8 @@ class AudioEnhancer {
 
         var gainMb = 0
         if (normalize) gainMb += 500              // ~+5 dB
-        gainMb += voiceBoost.coerceIn(0, 4) * 150 // makeup for the side attenuation, scales with level
+        // No Voice Boost gain here: DialogueAudioProcessor keeps its output as loud as its input, so
+        // lifting here too would only raise the background again.
 
         // ALWAYS attach the effect (even at 0 gain / everything off). Two reasons:
         //  1) 0 mB is inaudible, so there's no downside.
