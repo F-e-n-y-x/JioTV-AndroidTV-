@@ -1,8 +1,17 @@
-# JTV 2.0 beta 23
+# JTV 2.0 beta 24
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.23.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.24.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 23
+## New in beta 24
+- **Right channel from Favourites and global search.** Tapping a favourite in the Guide, or using **Start with → Last channel** after watching from Favourites or a global search, could open a different channel. Fixed. Favourites in a hidden language now play from the Guide too.
+- **Player label.** A channel opened from global search shows "All 1000+ Channels" instead of a raw code.
+- **Channel languages.** The in-stream multi-audio list is limited to Hungama, Super Hungama, Disney Channel, Disney Junior, Pogo, Sonic, Nickelodeon, Cartoon Network and Sony Yay, and the counts in **Settings → Channel languages** include them.
+
+---
+
+## Earlier betas
+
+### Beta 23
 - **Global Search across all 1000+ Channels (#12):**
   - Added a search scope toggle in the Search screen: toggle between searching all 1000+ channels globally or searching within your active language filters.
   - Channels selected from global search launch directly with seamless navigation.
@@ -14,7 +23,7 @@
   - The player now recognizes Jio's declared 4:3 aspect ratio and standard PAL SD dimensions, accurately framing the picture in true 4:3 proportions without distortion.
 - **Sony YAY Tamil Catch-up & Multi-Audio Channel Filtering (#10):**
   - Fixed catch-up replay for Sony YAY and other Sony channels by automatically falling back to Widevine DRM DASH streams when clear HLS catch-up manifests are missing or 404 on Jio's CDN.
-  - Channels broadcast with multi-language in-stream audio (Hungama, Disney Channel, Super Hungama, Pogo, Sonic, Nickelodeon, Cartoon Network, Discovery, Animal Planet, etc.) remain visible when filtering by Tamil, Telugu, or other supported audio languages.
+  - Channels broadcast with multi-language in-stream audio (Hungama, Super Hungama, Disney Channel, Disney Junior, Pogo, Sonic, Nickelodeon, Cartoon Network, Sony Yay) remain visible when filtering by Tamil, Telugu, or other supported audio languages.
 
 ---
 
