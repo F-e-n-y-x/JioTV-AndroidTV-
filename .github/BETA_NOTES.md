@@ -1,8 +1,16 @@
-# JTV 2.0 beta 25
+# JTV 2.0 beta 26
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.25.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.26.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 25
+## New in beta 26
+- **Replay on Sony channels.** Sony Yay (Hindi, Tamil, Telugu), SET, SET HD, Sony SAB, MAX, Pal, Aath, PIX, BBC Earth, Marathi and WAH had replay greyed out or failing with "This show can't be replayed right now". Replay now works on all of them. The first start after updating takes a little longer while the channel list is rebuilt once.
+- **Sony Vizha.** Replay works for the shows Jio has made available. Many Vizha shows are still not on Jio's side, and those stay unavailable.
+
+---
+
+## Earlier betas
+
+### Beta 25
 - **Grid view for Live TV.** Switch between **List** and **Grid** with the toggle at the top of the Live TV page, or in **Settings → General → Channel view**. Each card shows the logo, number, full channel name and the show on now with a progress bar. A bar under the grid shows what's on and what's next for the channel you're on. Moving favourites around works in the grid too.
 - **New channel browser in the player.** Press **←** while watching to open a two-pane list: categories on the left, channels on the right with the show on now. **↑ ↓** move through channels, **←** goes to the categories, **OK** watches. Prefer the old strip? Choose it in **Settings → Channel browser**.
 - **No more "Ends 9:00 PM" pill** on the Live TV channel rows.
