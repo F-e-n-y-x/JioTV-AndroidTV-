@@ -149,4 +149,31 @@ class CatchupRequestTest {
         assertEquals(-6, Catchup.dayOffset(now - 9 * day, now, ist))
         assertEquals(0, Catchup.dayOffset(now + day, now, ist))
     }
+
+    @Test
+    fun startOver_onlyWhileAiringAndAfterTwoMinutes() {
+        assertNull(Catchup.startOver(ch, prog, now = start - 1))
+        assertNull(Catchup.startOver(ch, prog, now = start + 119_999)) // just started
+        assertNull(Catchup.startOver(ch, prog, now = stop)) // over: that's a normal replay
+        assertNull(Catchup.startOver(ch.copy(isCatchup = false), prog, now = start + 600_000))
+        assertNull(Catchup.startOver(ch, prog.copy(catchup = false), now = start + 600_000))
+        assertNull(Catchup.startOver(ch, prog.copy(srno = null), now = start + 600_000))
+        assertNotNull(Catchup.startOver(ch, prog, now = start + 120_000))
+    }
+
+    @Test
+    fun startOver_asksJioUpToAMinuteAgo_butKeepsTheShowTimes() {
+        val now = start + 19 * 60_000
+        val r = Catchup.startOver(ch, prog, now)!!
+        assertTrue(r.isStartOver)
+        assertEquals(start, r.startMs)
+        assertEquals(stop, r.stopMs) // the UI still shows the real time range
+        assertTrue(r.isFor(prog))
+        val params = JioApiClient.geturlBody("143", r.toParams())
+            .split('&').associate { it.substringBefore('=') to it.substringAfter('=') }
+        assertEquals(start.toString(), params["begin"])
+        assertEquals((now - 60_000).toString(), params["end"])
+        // A normal replay is unchanged.
+        assertFalse(Catchup.request(ch, prog, now = stop + 1)!!.isStartOver)
+    }
 }

@@ -8,7 +8,6 @@ import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -169,10 +168,7 @@ class EpgRepository(private val context: Context) {
                     } else {
                         buffered
                     }
-                    val outputStream = FileOutputStream(cacheFile)
-                    inputStream.copyTo(outputStream)
-                    outputStream.close()
-                    inputStream.close()
+                    inputStream.use { input -> cacheFile.writeAtomically { input.copyTo(it) } }
                     Log.d(TAG, "EPG downloaded and saved (gzip=$isGzip)")
                 } else {
                     Log.e(TAG, "Failed to download EPG: ${connection?.responseCode}")

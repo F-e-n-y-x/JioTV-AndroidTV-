@@ -194,12 +194,15 @@ internal fun BrowsePanel(ui: PlayerUi, d: OverlayData, modifier: Modifier = Modi
     }
 
     fun route(key: PanelKey) {
+        // A category previewed < 120 ms ago is still pending: commit it first, so Right enters it.
+        pending?.let { if (it != ui.browseGroup) commit(it) }
         val to = panelColumnAfter(col, key)
         if (to == col) return
+        val g = ui.browseGroup ?: MainViewModel.GROUP_ALL
         if (to == BrowseCol.Categories) {
             col = to
-            runCatching { catReq[bGroup]?.requestFocus() }
-        } else if (list.isNotEmpty()) {
+            runCatching { catReq[g]?.requestFocus() }
+        } else if (d.resolveGroup(g).isNotEmpty()) {
             col = to
             enterTok++
         }
@@ -220,7 +223,9 @@ internal fun BrowsePanel(ui: PlayerUi, d: OverlayData, modifier: Modifier = Modi
     val onChanClick = remember(bGroup) { { i: Int -> act.tune(bGroup, i) } }
     val onChanHold = remember(ui) { { ui.overlay = PlayerOverlay.Menu } }
     val onCatFocus = remember(cats) { { id: String -> col = BrowseCol.Categories; pending = id; catIdx = cats.indexOfFirst { it.id == id } } }
-    val onCatClick = remember(cats) { { id: String -> if (id != ui.browseGroup) commit(id); route(PanelKey.Ok) } }
+    // Remembered for skippable rows, but always calls this composition's commit/route (not the first one's).
+    val catClick = rememberUpdatedState { id: String -> if (id != ui.browseGroup) commit(id); route(PanelKey.Ok) }
+    val onCatClick = remember { { id: String -> catClick.value(id) } }
 
     Column(
         modifier.width(PanelWidth).fillMaxHeight().background(StrapBg)

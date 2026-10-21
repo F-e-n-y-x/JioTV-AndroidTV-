@@ -74,7 +74,7 @@ internal val CatchupRequestSaver = Saver<CatchupRequest?, Any>(
 
 /** The inverse of the saver's list (also used by the phone/tablet player session). */
 internal fun catchupToList(r: CatchupRequest?): List<Any?> =
-    if (r == null) emptyList() else listOf(r.channelId, r.channelNumber, r.srno, r.showId, r.startMs, r.stopMs, r.showtime, r.title)
+    if (r == null) emptyList() else listOf(r.channelId, r.channelNumber, r.srno, r.showId, r.startMs, r.stopMs, r.showtime, r.title, r.untilMs)
 
 internal fun catchupFromList(l: List<*>): CatchupRequest? {
     if (l.size < 8) return null
@@ -82,6 +82,7 @@ internal fun catchupFromList(l: List<*>): CatchupRequest? {
         CatchupRequest(
             channelId = l[0] as String, channelNumber = l[1] as Int, srno = l[2] as String, showId = l[3] as String,
             startMs = l[4] as Long, stopMs = l[5] as Long, showtime = l[6] as String, title = l[7] as String,
+            untilMs = l.getOrNull(8) as? Long ?: 0L,
         )
     }.getOrNull()
 }

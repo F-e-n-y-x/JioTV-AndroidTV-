@@ -32,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -189,6 +188,8 @@ fun JtvClickable(
 
 // ───────────────────────── Channel bits ─────────────────────────
 
+private val PlateShape = RoundedCornerShape(4.dp)
+
 /** Logo on a fixed dark plate (logos are made for dark backgrounds, so the plate stays dark in light mode). */
 @Composable
 fun ChannelPlate(logoUrl: String, width: Dp, height: Dp, modifier: Modifier = Modifier) {
@@ -197,8 +198,10 @@ fun ChannelPlate(logoUrl: String, width: Dp, height: Dp, modifier: Modifier = Mo
     val request = remember(logoUrl, px) {
         ImageRequest.Builder(ctx).data(logoUrl).size(px.first, px.second).crossfade(false).build()
     }
+    // Rounded background, no clip: the logo sits inset (84% x 78%) so it never reaches the corners, and a
+    // clip would give every row/card its own extra layer to draw.
     Box(
-        modifier.size(width, height).clip(RoundedCornerShape(4.dp)).background(Jtv.colors.plate),
+        modifier.size(width, height).background(Jtv.colors.plate, PlateShape),
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
@@ -236,7 +239,7 @@ fun JtvProgress(
 
 @Composable
 fun EndsSoonPill(stopMs: Long, modifier: Modifier = Modifier, fontSize: TextUnit = 13.sp) {
-    Box(modifier.clip(RoundedCornerShape(4.dp)).background(Jtv.colors.acc).padding(horizontal = 8.dp, vertical = 2.dp)) {
+    Box(modifier.background(Jtv.colors.acc, PlateShape).padding(horizontal = 8.dp, vertical = 2.dp)) {
         Text(stringResource(R.string.time_ends_at, formatTime(stopMs)), style = textStyle(fontSize, FontWeight.SemiBold), color = Jtv.colors.accTx, maxLines = 1)
     }
 }

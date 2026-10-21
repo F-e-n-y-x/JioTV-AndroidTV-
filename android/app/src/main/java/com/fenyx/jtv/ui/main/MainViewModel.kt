@@ -196,26 +196,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val mode = settingsManager.setupModeFlow.first()
             if (mode == "server" || mode == "jtv") {
                 while (true) {
-                    syncServerCredentialsQuietly()
+                    // Signed out since the last pass: don't pull credentials back in.
+                    if (settingsManager.authDataFlow.first() != null) syncServerCredentialsQuietly()
                     kotlinx.coroutines.delay(3 * 60 * 60 * 1000L) // every 3h while the app is open
                 }
             }
         }
 
-        // Quiet background update check on app launch
+        // Quiet background update check, late enough that its pop-up doesn't land on the user while
+        // they're still finding a channel right after launch.
         viewModelScope.launch {
-            kotlinx.coroutines.delay(5000L)
+            kotlinx.coroutines.delay(30_000L)
             checkForUpdates(manual = false)
         }
     }
 
     private suspend fun syncServerCredentialsQuietly() {
+        if (settingsManager.authDataFlow.first() == null) return // signed out
         val mode = settingsManager.setupModeFlow.first()
         val urls = com.fenyx.jtv.data.ServerClient.candidateUrls(mode, settingsManager.serverUrlFlow.first())
         if (urls.all { it.isBlank() }) return
         val tok = settingsManager.serverTokenFlow.first()
+        // A server without the credentials endpoint (404) answers the same every time: remember that
+        // for this server + token and stop asking on every launch. A new server or token tries again.
+        val serverKey = (urls + tok).joinToString("|").hashCode().toString()
+        val flags = getApplication<Application>().getSharedPreferences("server_sync", android.content.Context.MODE_PRIVATE)
+        if (flags.getString("creds_404_for", null) == serverKey) return
         com.fenyx.jtv.data.ServerClient.fetchCredentials(urls, tok)
             .onSuccess { settingsManager.saveAuthData(it) }
+            .onFailure { e ->
+                if (e.message?.contains("404") == true) flags.edit().putString("creds_404_for", serverKey).apply()
+            }
     }
 
     /**
@@ -371,6 +382,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _isLoading.value = false
+
+            // 3) The fresh cache was built from the saved third-party playlists/tokens; refresh those
+            // now that the list is on screen, and re-publish only if something changed.
+            if (cached != null && cacheFresh) {
+                val current = _allChannels.value
+                val refreshed = runCatching { JioApiClient.refreshThirdPartyChannels(app, current) }.getOrNull()
+                if (refreshed != null && refreshed != current && _allChannels.value === current) publishChannels(refreshed)
+            }
         }
     }
 

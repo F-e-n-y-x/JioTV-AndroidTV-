@@ -3,6 +3,7 @@ package com.fenyx.jtv.data
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -46,6 +47,7 @@ object ZeeRepository {
 
     private val liveTokensMap = ConcurrentHashMap<String, LiveTokenInfo>()
     private val zeeChannelsMap = ConcurrentHashMap<String, ZeeChannel>()
+    @Volatile private var lastExpiredRefreshMs = 0L
 
     data class ZeeChannelMeta(
         val channelId: Int,
@@ -680,9 +682,18 @@ https://sliv.tgaadi.workers.dev/sonybbcearthhd.m3u8
 #EXTINF:-1 tvg-id="sony-marathi" tvg-name="Sony Marathi" group-title="Entertainment" tvg-logo="https://jiotv.catchup.cdn.jio.com/dare_images/images/SonyMarathi.png" tvg-language="Marathi",Sony Marathi
 https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
 
-    suspend fun loadZeeChannels(context: Context): List<Channel> = withContext(Dispatchers.IO) {
-        val zeeContent = fetchM3uContent(context, ZEE_M3U_URL, ZEE_M3U_CACHE_FILE, EMBEDDED_M3U)
-        val sonyContent = fetchM3uContent(context, SONY_M3U_URL, SONY_M3U_CACHE_FILE, EMBEDDED_SONY_M3U)
+    /**
+     * Builds the third-party channels. [network] = false uses only the on-disk copies of the playlists
+     * and live tokens (or the embedded fallback), for a startup that never waits on the network; true
+     * downloads both playlists and the live tokens concurrently first.
+     */
+    suspend fun loadZeeChannels(context: Context, network: Boolean = true): List<Channel> = withContext(Dispatchers.IO) {
+        val (zeeContent, sonyContent, tokensJson) = kotlinx.coroutines.coroutineScope {
+            val zee = async { fetchM3uContent(context, ZEE_M3U_URL, ZEE_M3U_CACHE_FILE, EMBEDDED_M3U, network) }
+            val sony = async { fetchM3uContent(context, SONY_M3U_URL, SONY_M3U_CACHE_FILE, EMBEDDED_SONY_M3U, network) }
+            val tokens = async { readLiveTokensJson(context, network) }
+            Triple(zee.await(), sony.await(), tokens.await())
+        }
 
         val combinedChannels = mutableListOf<ZeeChannel>()
         combinedChannels.addAll(parseM3u(zeeContent))
@@ -708,14 +719,14 @@ https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
         }
         zeeChannelsMap.putAll(newMap)
 
-        // Fetch live tokens from active online source and update channels
-        fetchLiveTokens(context)
+        applyLiveTokens(tokensJson)
 
         val channels = mutableListOf<Channel>()
         val seenNumbers = mutableSetOf<Int>()
         for (zc in zeeChannelsMap.values) {
             if (zc.channelNumber in seenNumbers) continue
             seenNumbers.add(zc.channelNumber)
+            val jwk = if (zc.licenseKey.isNotEmpty()) clearKeyToJwkJson(zc.licenseKey) else ""
             channels.add(
                 Channel(
                     id = zc.id,
@@ -723,9 +734,9 @@ https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
                     logoUrl = zc.logoUrl,
                     group = zc.group,
                     streamUrl = zc.streamUrl,
-                    isDrm = zc.licenseKey.isNotEmpty(),
+                    isDrm = jwk.isNotEmpty(),
                     channelNumber = zc.channelNumber,
-                    licenseUrl = if (zc.licenseKey.isNotEmpty()) "jwk:" + clearKeyToJwkJson(zc.licenseKey) else null,
+                    licenseUrl = if (jwk.isNotEmpty()) "jwk:$jwk" else null,
                     language = zc.language,
                     stbNumber = zc.stbNumber
                 )
@@ -740,13 +751,13 @@ https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
         return zeeChannelsMap[channelId] ?: zeeChannelsMap[cleanId]
     }
 
-    fun isZeeChannel(channelId: String): Boolean {
-        val cleanId = channelId.removePrefix("zee_")
-        if (zeeChannelsMap.containsKey(channelId) || zeeChannelsMap.containsKey(cleanId)) return true
-        val idNum = cleanId.toIntOrNull()
-        if (idNum != null && CHANNEL_METADATA.values.any { it.channelId == idNum }) return true
-        return false
-    }
+    /**
+     * True only for channels a third-party playlist actually carries. The metadata table also lists
+     * Jio-served channels (Zee News 504, Zee Business 657, ...); answering true for those made every
+     * zap on them reload all third-party playlists before falling back to Jio.
+     */
+    fun isZeeChannel(channelId: String): Boolean =
+        zeeChannelsMap.containsKey(channelId) || zeeChannelsMap.containsKey(channelId.removePrefix("zee_"))
 
     /**
      * Checks if Akamai token (__hdnea__) in streamUrl or cookie is expired or expiring within 2 minutes.
@@ -761,46 +772,46 @@ https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
         }
         val expMatch = Regex("""exp=(\d+)""").find(token) ?: return false
         val expSec = expMatch.groupValues[1].toLongOrNull() ?: return false
-        val nowSec = System.currentTimeMillis() / 1000L
+        val nowSec = JioClock.nowMs() / 1000L
         return nowSec >= (expSec - 120L)
     }
 
-    /**
-     * Fetches live Akamai tokens from active cookie source and updates in-memory channels.
-     */
-    fun fetchLiveTokens(context: Context): Int {
-        var count = 0
-        var rawJson: String? = null
-        try {
-            val url = URL(LIVE_COOKIE_URL)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.connectTimeout = 6000
-            conn.readTimeout = 6000
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-            if (conn.responseCode in 200..299) {
-                rawJson = conn.inputStream.bufferedReader().use { it.readText() }
-                try {
-                    File(context.filesDir, COOKIE_CACHE_FILE).writeText(rawJson)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to write cookie cache: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch live tokens from $LIVE_COOKIE_URL: ${e.message}")
-        }
+    /** Fetches live Akamai tokens from the cookie source and updates in-memory channels. */
+    fun fetchLiveTokens(context: Context): Int = applyLiveTokens(readLiveTokensJson(context, network = true))
 
-        if (rawJson.isNullOrEmpty()) {
+    /** The live-token JSON: downloaded (and saved) when [network], else / on failure the saved copy. */
+    private fun readLiveTokensJson(context: Context, network: Boolean): String? {
+        val file = File(context.filesDir, COOKIE_CACHE_FILE)
+        if (network) {
             try {
-                val file = File(context.filesDir, COOKIE_CACHE_FILE)
-                if (file.exists()) {
-                    rawJson = file.readText()
+                val conn = URL(LIVE_COOKIE_URL).openConnection() as HttpURLConnection
+                conn.connectTimeout = 6000
+                conn.readTimeout = 6000
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                if (conn.responseCode in 200..299) {
+                    val rawJson = conn.inputStream.bufferedReader().use { it.readText() }
+                    try {
+                        file.writeTextAtomically(rawJson)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to write cookie cache: ${e.message}")
+                    }
+                    if (rawJson.isNotEmpty()) return rawJson
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to read cached tokens file: ${e.message}")
+                Log.w(TAG, "Failed to fetch live tokens from $LIVE_COOKIE_URL: ${e.message}")
             }
         }
+        return try {
+            if (file.exists()) file.readText() else null
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read cached tokens file: ${e.message}")
+            null
+        }
+    }
 
+    private fun applyLiveTokens(rawJson: String?): Int {
+        var count = 0
         if (!rawJson.isNullOrEmpty()) {
             try {
                 val root = JSONObject(rawJson)
@@ -868,7 +879,11 @@ https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
 
         val expired = isTokenExpired(zc.streamUrl, zc.cookie)
         val isManagedToken = zc.streamUrl.contains("jiotvpllive.cdn.jio.com") || zc.cookie.contains("__hdnea__=")
-        if ((forceRefresh || expired) && isManagedToken) {
+        // An expired token re-fetches the live tokens at most once a minute: when the source itself
+        // only has expired tokens (xplor HD 300322), the caller gets a clear error instead of a loop.
+        val now = System.currentTimeMillis()
+        if (isManagedToken && (forceRefresh || (expired && now - lastExpiredRefreshMs > 60_000L))) {
+            if (!forceRefresh) lastExpiredRefreshMs = now
             Log.i(TAG, "Refreshing token for ${zc.name} (id=$channelId, force=$forceRefresh, expired=$expired)...")
             fetchLiveTokens(context)
             zc = zeeChannelsMap[channelId] ?: zeeChannelsMap[cleanId] ?: zc
@@ -903,9 +918,10 @@ https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
         context: Context,
         urlStr: String,
         cacheFileName: String,
-        fallbackM3u: String
+        fallbackM3u: String,
+        network: Boolean
     ): String {
-        try {
+        if (network) try {
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = 8000
@@ -915,7 +931,7 @@ https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
                 val text = conn.inputStream.bufferedReader().use { it.readText() }
                 if (text.contains("#EXTM3U")) {
                     try {
-                        File(context.filesDir, cacheFileName).writeText(text)
+                        File(context.filesDir, cacheFileName).writeTextAtomically(text)
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to write M3U cache ($cacheFileName): ${e.message}")
                     }
@@ -1090,31 +1106,31 @@ https://sliv.tgaadi.workers.dev/sonymarathi.m3u8"""
         return if (secondQuote != -1) jsonStr.substring(firstQuote + 1, secondQuote) else ""
     }
 
+    /**
+     * ClearKey `kid:key,kid:key` -> JWK JSON. Pairs that aren't two 32-hex-char values are skipped, so
+     * one bad third-party key can't break the channel; returns "" when no pair is valid (no license).
+     */
     fun clearKeyToJwkJson(clearKeyStr: String): String {
-        val pairs = clearKeyStr.split(",")
-        val encoder = java.util.Base64.getUrlEncoder().withoutPadding()
-        val keyEntries = mutableListOf<String>()
-        for (pair in pairs) {
-            val parts = pair.trim().split(":")
-            if (parts.size == 2) {
-                val keyIdBytes = hexToBytes(parts[0])
-                val keyBytes = hexToBytes(parts[1])
-                val kidB64 = encoder.encodeToString(keyIdBytes)
-                val kB64 = encoder.encodeToString(keyBytes)
-                keyEntries.add("""{"kty":"oct","kid":"$kidB64","k":"$kB64"}""")
-            }
+        val flags = android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP
+        val keyEntries = validClearKeyPairs(clearKeyStr).map { (kid, key) ->
+            val kidB64 = android.util.Base64.encodeToString(hexToBytes(kid), flags)
+            val kB64 = android.util.Base64.encodeToString(hexToBytes(key), flags)
+            """{"kty":"oct","kid":"$kidB64","k":"$kB64"}"""
         }
+        if (keyEntries.isEmpty()) return ""
         return """{"keys":[${keyEntries.joinToString(",")}],"type":"temporary"}"""
     }
 
-    private fun hexToBytes(hex: String): ByteArray {
-        val len = hex.length
-        val data = ByteArray(len / 2)
-        var i = 0
-        while (i < len) {
-            data[i / 2] = ((Character.digit(hex[i], 16) shl 4) + Character.digit(hex[i + 1], 16)).toByte()
-            i += 2
+    private val HEX_128 = Regex("[0-9a-fA-F]{32}")
+
+    /** The `kid:key` pairs of [clearKeyStr] whose kid and key are both 32 hex chars (16 bytes). */
+    internal fun validClearKeyPairs(clearKeyStr: String): List<Pair<String, String>> =
+        clearKeyStr.split(",").mapNotNull { pair ->
+            val parts = pair.trim().split(":").map { it.trim() }
+            if (parts.size == 2 && HEX_128.matches(parts[0]) && HEX_128.matches(parts[1])) parts[0] to parts[1]
+            else null.also { if (pair.isNotBlank()) Log.w(TAG, "Skipping malformed ClearKey pair") }
         }
-        return data
-    }
+
+    private fun hexToBytes(hex: String): ByteArray =
+        ByteArray(hex.length / 2) { i -> ((Character.digit(hex[2 * i], 16) shl 4) + Character.digit(hex[2 * i + 1], 16)).toByte() }
 }

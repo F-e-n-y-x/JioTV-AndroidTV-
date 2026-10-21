@@ -210,9 +210,11 @@ fun MainNavigation() {
                             }
                         }
                         val channelIndex = allChannels.indexOfFirst { it.id == lastChannelId }
-                        if (channelIndex != -1 && session.value == null) {
+                        // A favourite/global channel may be absent from displayChannels (e.g. language filter): still open it.
+                        val idx = inGroup ?: channelIndex.takeIf { it >= 0 }
+                        if (idx != null && session.value == null) {
                             // Group no longer holds the channel (e.g. unfavourited): play it from all.
-                            if (inGroup != null) openPlayer(inGroup, lastChannelGroup) else openPlayer(channelIndex, null)
+                            openPlayer(idx, if (inGroup != null) lastChannelGroup else null)
                         }
                     }
                     // Load finished but produced no channels (e.g. offline first run) -> fall through

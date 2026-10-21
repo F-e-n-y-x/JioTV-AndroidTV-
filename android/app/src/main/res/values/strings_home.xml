@@ -143,7 +143,7 @@
     <string name="guide_detail_line">%1$s · %2$s – %3$s · %4$s</string>
     <string name="guide_no_programme_info">No programme information.</string>
     <string name="guide_watch_live">Watch channel live</string>
-    <string name="guide_watch_from_start">Watch from start</string>
+    <string name="guide_watch_from_start">Watch from the start</string>
     <string name="guide_close">Close</string>
 
     <!-- Search -->

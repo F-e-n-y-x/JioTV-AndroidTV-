@@ -65,7 +65,16 @@ object AutoStart {
 }
 
 class BootReceiver : BroadcastReceiver() {
+    private companion object {
+        val BOOT_ACTIONS = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            "android.intent.action.QUICKBOOT_POWERON",
+            "com.htc.intent.action.QUICKBOOT_POWERON",
+        )
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action !in BOOT_ACTIONS) return
         val pending = goAsync()
         val app = context.applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {

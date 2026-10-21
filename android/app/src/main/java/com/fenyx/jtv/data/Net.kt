@@ -1,9 +1,24 @@
 package com.fenyx.jtv.data
 
 import okhttp3.ConnectionPool
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import java.net.Inet4Address
 import java.util.concurrent.TimeUnit
+
+/**
+ * Jio's time: the box clock corrected by the offset learned from Jio's HTTP `Date` header. Cheap TV
+ * boxes often run minutes off, and the 2-minute stream tokens (`__hdnea__` exp) and the access-token
+ * expiry are Jio times: compared with a wrong box clock they looked expired (a geturl every 5 s, no
+ * prefetch) or never expiring (no refresh ahead of time).
+ */
+object JioClock {
+    @Volatile private var offsetMs = 0L
+    fun nowMs(): Long = System.currentTimeMillis() + offsetMs
+    /** [serverDateMs] = HttpURLConnection.date (0 when the header is missing). */
+    fun learn(serverDateMs: Long) { if (serverDateMs > 0) offsetMs = serverDateMs - System.currentTimeMillis() }
+}
 
 /**
  * The app's single OkHttp client, shared by the player (manifests, segments, AES keys via
@@ -25,6 +40,11 @@ object Net {
             .readTimeout(15, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            // IPv4 first: OkHttp 4 has no fast fallback, and a broken IPv6 route (common on Jio
+            // hotspots / JioFiber) stalled each new connection until connectTimeout.
+            .dns(object : Dns {
+                override fun lookup(hostname: String) = Dns.SYSTEM.lookup(hostname).sortedBy { it !is Inet4Address }
+            })
             .followRedirects(true)
             .followSslRedirects(true)
             .addInterceptor { chain ->
@@ -49,6 +69,15 @@ object Net {
     fun warmUp() {
         val hosts = listOf("https://jiotvbpkmob.cdn.jio.com/", "https://jiotvmblive.cdn.jio.com/", "https://jiotvimages.cdn.jio.com/")
         Thread {
+            // geturl runs on HttpURLConnection (its own pool), so warm that host there; its Date header
+            // also sets JioClock before the first stream token is checked.
+            runCatching {
+                val c = java.net.URL("https://jiotvapi.media.jio.com/").openConnection() as java.net.HttpURLConnection
+                c.requestMethod = "HEAD"; c.connectTimeout = 5000; c.readTimeout = 5000
+                c.responseCode
+                JioClock.learn(c.date)
+                c.inputStream.close()
+            }
             hosts.forEach { url ->
                 runCatching {
                     client.newCall(okhttp3.Request.Builder().url(url).head().build()).execute().close()
@@ -57,3 +86,19 @@ object Net {
         }.apply { isDaemon = true; name = "jtv-net-warmup" }.start()
     }
 }
+
+/**
+ * Writes via a temp file + rename so a crash or power cut mid-write never leaves a truncated file
+ * (a half-written cache used to be read back as garbage on the next start).
+ */
+internal fun java.io.File.writeAtomically(write: (java.io.OutputStream) -> Unit) {
+    val tmp = java.io.File(parentFile, "$name.tmp")
+    try {
+        tmp.outputStream().use(write)
+        if (!tmp.renameTo(this)) throw java.io.IOException("rename to $name failed")
+    } finally {
+        tmp.delete() // no-op after a successful rename
+    }
+}
+
+internal fun java.io.File.writeTextAtomically(text: String) = writeAtomically { it.write(text.toByteArray()) }

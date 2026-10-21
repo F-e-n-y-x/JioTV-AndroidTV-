@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,7 +63,7 @@ fun SearchScreen(
     val displayChannels by viewModel.displayChannels.collectAsState()
     val rawAllChannels by viewModel.allChannels.collectAsState()
 
-    var globalSearch by remember { mutableStateOf(true) }
+    var globalSearch by rememberSaveable { mutableStateOf(true) }
 
     val activeChannels = remember(globalSearch, rawAllChannels, displayChannels) {
         if (globalSearch && rawAllChannels.isNotEmpty()) rawAllChannels.sortedBy { it.channelNumber } else displayChannels
@@ -102,7 +103,7 @@ fun SearchScreen(
         }
     }
 
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     val results = remember(query, activeChannels) {
         val q = query.trim()
         if (q.isEmpty()) emptyList()

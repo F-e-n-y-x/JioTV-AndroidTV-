@@ -534,7 +534,11 @@ fun GuideScreen(
                 details = null
                 indexOf(ch.id)?.let { onPlay(it, playGroup) }
             },
-            onWatchFromStart = req.prog?.let { p -> Catchup.request(ch, p, now) }?.let { cu ->
+            // On now: from its start up to a minute ago (Jio has no recording of the future yet).
+            onWatchFromStart = req.prog?.let { p ->
+                val t = com.fenyx.jtv.data.JioClock.nowMs()
+                if (t < p.stopMs) Catchup.startOver(ch, p, t) else Catchup.request(ch, p, now)
+            }?.let { cu ->
                 {
                     details = null
                     indexOf(ch.id)?.let { onReplay(it, playGroup, cu) }

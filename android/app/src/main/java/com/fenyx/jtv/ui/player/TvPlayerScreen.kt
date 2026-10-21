@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -141,7 +142,16 @@ fun TvPlayerScreen(
         else -> allChannelsByGroup[g] ?: vm?.getChannelsByGroup(g) ?: emptyList()
     }
     val currentChannels = remember(currentGroup, allChannelsByGroup, channels) { resolveGroup(currentGroup) }
+    // The list can change under the saved index (a favourite removed, a language hidden, a refresh):
+    // stay on the channel being watched; the old index is kept only when that channel is gone.
+    var playingId by rememberSaveable { mutableStateOf<String?>(null) }
+    remember(currentChannels) {
+        val id = Snapshot.withoutReadObservation { playingId }
+        val i = if (id == null) -1 else currentChannels.indexOfFirst { it.id == id }
+        if (i >= 0 && i != Snapshot.withoutReadObservation { currentIndex }) currentIndex = i
+    }
     val currentChannel = remember(currentIndex, currentChannels) { currentChannels.getOrNull(currentIndex) }
+    SideEffect { currentChannel?.id?.let { if (it != playingId) playingId = it } }
 
     // Collapsed per-language feeds for the channel on screen (empty when it isn't a language family).
     val currentVariants = remember(currentChannel) { currentChannel?.let { variantsFor(it.id) } ?: emptyList() }
@@ -162,6 +172,9 @@ fun TvPlayerScreen(
     val replayResume = remember { object { var req: com.fenyx.jtv.data.CatchupRequest? = null } }
     // ── end catch-up state ──
 
+    // True when the user paused (quick menu "Pause" or the Play/Pause key).
+    var userPaused by remember { mutableStateOf(false) }
+
     // A channel opened again from outside (mini player host): retune this same player.
     var seenOpenToken by rememberSaveable { mutableIntStateOf(openToken) }
     LaunchedEffect(openToken) {
@@ -169,6 +182,7 @@ fun TvPlayerScreen(
             seenOpenToken = openToken
             currentGroup = initialGroup
             currentIndex = initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            userPaused = false
             replay = catchup // catch-up
             replayEnded = false
         }
@@ -210,6 +224,7 @@ fun TvPlayerScreen(
         currentVariants.firstOrNull { it.langCode == language }?.channel
     }
     val playingChannel = langOverride ?: preferredVariant ?: currentChannel
+    val playingRef = rememberUpdatedState(playingChannel)
     
 
     // Real audio tracks exposed by the current stream (for reliable language switching).
@@ -244,8 +259,11 @@ fun TvPlayerScreen(
 
     // Player state
     var isBuffering by remember { mutableStateOf(true) }
-    // True when the user paused (quick menu "Pause" or the Play/Pause key).
-    var userPaused by remember { mutableStateOf(false) }
+    // A load may finish after Home / Settings: it must not start the sound then (read in the load effect).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val isActiveState = rememberUpdatedState(isActive)
+    // Held CH+/CH-/Up/Down: the zap came from a key repeat, so the load waits for the hold to end.
+    val zapHold = remember { object { var repeat = false } }
     // Non-null only when playback has failed and auto-recovery has been exhausted.
     var playbackError by remember { mutableStateOf<PlayerError?>(null) }
 
@@ -263,9 +281,11 @@ fun TvPlayerScreen(
     // Player-affecting prefs. Read reactively (NEVER block the main thread here — doing so caused
     // jank/black-screen on entry). Tunneling is applied live via track-selection params below; the
     // hardware-decoder mode can only be set at construction, so the player is keyed on it.
-    val tunnelingPref by settingsManager.tunnelingFlow.collectAsState(initial = false)
-    val hardwareOnlyPref by settingsManager.hardwareDecoderFlow.collectAsState(initial = true)
-    val bufferSecPref by settingsManager.playbackBufferSecFlow.collectAsState(initial = 60)
+    // null until DataStore answers: the player is built once, with the saved values (building it with
+    // defaults first meant a second ExoPlayer and a second stream load on every open).
+    val tunnelingPref by settingsManager.tunnelingFlow.collectAsState(initial = null)
+    val hardwareOnlyPref by settingsManager.hardwareDecoderFlow.collectAsState(initial = null)
+    val bufferSecPref by settingsManager.playbackBufferSecFlow.collectAsState(initial = null)
 
     // Audio enhancement settings + the effect engine.
     val voiceBoost by settingsManager.voiceBoostFlow.collectAsState(initial = 2)
@@ -273,6 +293,13 @@ fun TvPlayerScreen(
     // LoudnessEnhancer handles makeup loudness; the dialogue processor does center-channel voice
     // isolation. Keyed on player build settings so rebuilt players get their own processor instance.
     val audioEnhancer = remember { com.fenyx.jtv.player.AudioEnhancer() }
+    val tunnelingOn = tunnelingPref
+    val hardwareOnly = hardwareOnlyPref
+    val bufferSec = bufferSecPref
+    if (tunnelingOn == null || hardwareOnly == null || bufferSec == null) {
+        Box(modifier.fillMaxSize().background(Color.Black))
+        return
+    }
     val dialogueProcessor = remember(hardwareOnlyPref, tunnelingPref, bufferSecPref) {
         com.fenyx.jtv.player.DialogueAudioProcessor()
     }
@@ -284,9 +311,9 @@ fun TvPlayerScreen(
         com.fenyx.jtv.player.JioExoPlayerFactory.create(
             context,
             language,
-            tunneling = tunnelingPref,
-            hardwareOnly = hardwareOnlyPref,
-            maxBufferSec = bufferSecPref,
+            tunneling = tunnelingOn,
+            hardwareOnly = hardwareOnly,
+            maxBufferSec = bufferSec,
             dialogueProcessor = dialogueProcessor
         )
     }
@@ -473,9 +500,12 @@ fun TvPlayerScreen(
                     // Small backoff so a flapping CDN doesn't get hammered. Driven via the
                     // streamRefreshTrigger LaunchedEffect which re-fetches the stream URL.
                     val backoffMs = 800L * retryCount.intValue
+                    // Only for the stream that failed: a zap in the meantime already loads afresh (a
+                    // stale bump here re-ran the new channel's load ~0.6 s after the zap).
+                    val failed = playingRef.value
                     scope.launch {
                         delay(backoffMs)
-                        streamRefreshTrigger++
+                        if (playingRef.value == failed) streamRefreshTrigger++
                     }
                 } else {
                     // Auto-recovery exhausted: stop the spinner and show an actionable message
@@ -523,10 +553,16 @@ fun TvPlayerScreen(
                 lastId?.let { settingsManager.setLastChannelId(it) }
                 settingsManager.setLastChannelGroup(lastGroup)
             }
-            isBuffering = true
+            // Held zap: only the banner follows each step; the stream loads once the keys stop.
+            if (zapHold.repeat) {
+                delay(ZapHoldSettleMs)
+                zapHold.repeat = false
+            }
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
-            
+            // After stop/clear: their (synchronous) IDLE callback would clear it again.
+            isBuffering = true
+
             val authData = settingsManager.authDataFlow.first()
             
             if (authData == null) {
@@ -556,7 +592,7 @@ fun TvPlayerScreen(
                 replayEnded = false
                 keyHeadersHolder.set(if (streamData.isMpd) emptyMap() else streamData.licenseHeaders)
 
-                android.util.Log.d("TvPlayer", "Loading stream: $finalUrl (isMpd: ${streamData.isMpd})")
+                android.util.Log.d("TvPlayer", "Loading stream: ${finalUrl.substringBefore('?')} (isMpd: ${streamData.isMpd})")
 
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(finalUrl)
@@ -612,9 +648,10 @@ fun TvPlayerScreen(
                     exoPlayer.setMediaSource(mediaSource)
                     if (resumeMs > 0) exoPlayer.seekTo(resumeMs) // catch-up: same replay, same place
                     exoPlayer.prepare()
-                    exoPlayer.playWhenReady = true
-                    userPaused = false // a new channel always starts playing
-                    ts.paused = false
+                    // Never un-pause the user, nor start sound behind Settings/Guide or in the background.
+                    exoPlayer.playWhenReady = !userPaused && isActiveState.value &&
+                        lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                    ts.paused = userPaused
                 }
                 persistLastChannel()
             } else {
@@ -717,7 +754,7 @@ fun TvPlayerScreen(
         while (true) {
             val token = tokenHolder.get()
             val expSec = com.fenyx.jtv.data.JioApiClient.extractTokenExpiryEpochSec(token)
-            val nowSec = System.currentTimeMillis() / 1000
+            val nowSec = com.fenyx.jtv.data.JioClock.nowMs() / 1000
             // Refresh 15s before expiry; if we can't read an expiry, re-check in 60s.
             val waitMs = if (expSec > 0) ((expSec - nowSec - 15) * 1000).coerceIn(5_000, 110_000)
                          else 60_000L
@@ -781,7 +818,7 @@ fun TvPlayerScreen(
         if (ids.isEmpty() || vm == null) return@LaunchedEffect
         ids.forEach { vm.fetchNativeEpgIfMissing(it) }
         fun programme(m: Map<String, List<com.fenyx.jtv.data.EpgProgram>>): com.fenyx.jtv.data.EpgProgram? {
-            val now = System.currentTimeMillis()
+            val now = com.fenyx.jtv.data.JioClock.nowMs()
             return ids.firstNotNullOfOrNull { id -> m[id]?.firstOrNull { it.startMs <= now && now < it.stopMs } }
         }
         val p = kotlinx.coroutines.withTimeoutOrNull(15_000) { vm.epgData.first { programme(it) != null } }
@@ -793,7 +830,7 @@ fun TvPlayerScreen(
         } ?: false
         ts.scheduleStartMs = p.startMs
         if (ready) {
-            val target = System.currentTimeMillis() - p.startMs
+            val target = com.fenyx.jtv.data.JioClock.nowMs() - p.startMs
             val dur = exoPlayer.duration
             if (dur != androidx.media3.common.C.TIME_UNSET && target in 5_000 until dur - 5_000 &&
                 kotlin.math.abs(exoPlayer.currentPosition - target) > 5_000) {
@@ -803,7 +840,7 @@ fun TvPlayerScreen(
             ts.update(exoPlayer)
         }
         // (b) The programme's end (+2 s): fetch the next programme's file.
-        val wait = p.stopMs + 2_000 - System.currentTimeMillis()
+        val wait = p.stopMs + 2_000 - com.fenyx.jtv.data.JioClock.nowMs()
         if (wait > 0) delay(wait)
         android.util.Log.d("TvPlayer", "Schedule: programme over, loading the next one")
         streamRefreshTrigger++
@@ -812,7 +849,7 @@ fun TvPlayerScreen(
     // Apply audio enhancements whenever the session id or any audio setting changes.
     // - dialogueProcessor: center-channel voice isolation (live, no rebuild needed), level 0..4
     // - audioEnhancer: LoudnessEnhancer makeup/normalize bound to the session id
-    LaunchedEffect(voiceBoost) {
+    LaunchedEffect(dialogueProcessor, voiceBoost) {
         dialogueProcessor.setLevel(voiceBoost)
     }
     LaunchedEffect(audioSessionId, voiceBoost, audioNormalize, audioKick) {
@@ -844,7 +881,6 @@ fun TvPlayerScreen(
 
     // Stop playback when the app is backgrounded (Home / app switch) so audio doesn't keep playing in
     // the background, and resume when it returns to the foreground (unless the user had paused).
-    val lifecycleOwner = LocalLifecycleOwner.current
     val userPausedState = rememberUpdatedState(userPaused)
     DisposableEffect(lifecycleOwner, exoPlayer) {
         val observer = LifecycleEventObserver { _, event ->
@@ -980,7 +1016,8 @@ fun TvPlayerScreen(
     LaunchedEffect(currentChannel?.id) { if (currentChannel != null) ui.showBanner() }
     // Catch-up: the strap ("Replay · …") on every replay start too; the end panel only while expanded.
     LaunchedEffect(activeReplay) { if (activeReplay != null && !mini) ui.showBanner() }
-    val replayEndShown = replayEnded && activeReplay != null && !mini && playbackError == null
+    // A start-over (the show on now, from its start) has no end panel: it goes back to live instead.
+    val replayEndShown = replayEnded && activeReplay != null && !activeReplay.isStartOver && !mini && playbackError == null
 
     fun setPaused(p: Boolean) {
         if (p) { exoPlayer.pause(); userPaused = true } else { exoPlayer.play(); userPaused = false }
@@ -1040,6 +1077,19 @@ fun TvPlayerScreen(
         replayEnded = false
         ui.showBanner()
     }
+
+    /** "Watch from the start": the show on now, replayed from its start up to a minute ago. */
+    fun doWatchFromStart(p: com.fenyx.jtv.data.EpgProgram) {
+        val req = currentChannel?.let { com.fenyx.jtv.data.Catchup.startOver(it, p) } ?: return
+        replay = req
+        replayEnded = false
+        playbackError = null
+        retryCount.intValue = 0
+        ui.showBanner()
+    }
+
+    // The start-over recording caught up with the broadcast: carry on live (the show is still on).
+    LaunchedEffect(replayEnded) { if (replayEnded && activeReplay?.isStartOver == true) exitReplay() }
     // ── end catch-up actions ──
 
     fun doGoLive() {
@@ -1060,10 +1110,13 @@ fun TvPlayerScreen(
         ui.bannerToken++
     }
 
-    fun doZap(delta: Int) {
+    /** [held]: from a key repeat; the stream then loads only once the hold ends. */
+    fun doZap(delta: Int, held: Boolean = false) {
         val n = currentChannels.size
         if (n == 0) return
+        zapHold.repeat = held
         replay = null; replayEnded = false // catch-up: a zap goes to the live neighbour
+        userPaused = false // a channel the user picked always starts playing
         currentIndex = ((currentIndex + delta) % n + n) % n
         ui.showBanner()
     }
@@ -1072,6 +1125,8 @@ fun TvPlayerScreen(
         val list = if (group == currentGroup) currentChannels else resolveGroup(group)
         if (list.isEmpty()) return
         replay = null; replayEnded = false // catch-up: tuning anywhere is live
+        userPaused = false
+        zapHold.repeat = false
         currentGroup = group
         currentIndex = index.coerceIn(0, list.size - 1)
         ui.overlay = PlayerOverlay.Banner
@@ -1271,6 +1326,7 @@ fun TvPlayerScreen(
         override fun fullScreen(on: Boolean) = setFullScreen(on)
         override fun seekTo(ms: Long) = commitSeek(ms)
         override fun goLive() = doGoLive()
+        override fun watchFromStart(p: com.fenyx.jtv.data.EpgProgram) = doWatchFromStart(p)
     }
     val actionsState = rememberUpdatedState<PlayerActions>(actions)
 
@@ -1627,7 +1683,8 @@ fun TvPlayerScreen(
 
                     if (k == Key.Back || k == Key.Escape) {
                         press.lastKeyBack = android.os.SystemClock.uptimeMillis()
-                        backLadder()
+                        // Held Back: one step only (repeats would run the whole ladder and leave).
+                        if (ev.nativeKeyEvent.repeatCount == 0) backLadder()
                         return@onPreviewKeyEvent true
                     }
 
@@ -1670,10 +1727,11 @@ fun TvPlayerScreen(
                         ui.pointerChrome = false
                     }
                     val panel = ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu
+                    val held = ev.nativeKeyEvent.repeatCount > 0
 
                     when (k) {
-                        Key.ChannelUp, Key.MediaNext, Key.PageUp -> { if (!panel) doZap(1); true }
-                        Key.ChannelDown, Key.MediaPrevious, Key.PageDown -> { if (!panel) doZap(-1); true }
+                        Key.ChannelUp, Key.MediaNext, Key.PageUp -> { if (!panel) doZap(1, held); true }
+                        Key.ChannelDown, Key.MediaPrevious, Key.PageDown -> { if (!panel) doZap(-1, held); true }
                         Key.MediaPlayPause -> {
                             setPaused(!userPaused)
                             if (isTv) ui.openControls() else if (userPaused) ui.showBanner()
@@ -1700,12 +1758,12 @@ fun TvPlayerScreen(
                             // Strip: Up/Down switch category. Panel: its own columns take the arrows.
                             PlayerOverlay.Browse -> if (browserPanel) false else { browseCategory(-1); true }
                             PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
-                            else -> { doZap(if (upIsNext) 1 else -1); true }
+                            else -> { doZap(if (upIsNext) 1 else -1, held); true }
                         }
                         Key.DirectionDown -> when (ov) {
                             PlayerOverlay.Browse -> if (browserPanel) false else { browseCategory(1); true }
                             PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
-                            else -> { doZap(if (upIsNext) -1 else 1); true }
+                            else -> { doZap(if (upIsNext) -1 else 1, held); true }
                         }
                         Key.DirectionLeft -> when (ov) {
                             PlayerOverlay.Browse, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
@@ -1915,6 +1973,11 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
 
     val is43Stream = streamAspect < 1.5f
     val isSdStream = (rawH in 1..576) || (rawW in 1..1024 && rawH in 1..600)
+    // FILL already stretches the decoded frame to the view. The extra 4:3 -> 16:9 widening is only for a
+    // wide frame carrying 4:3 picture with burned-in side bars (e.g. Zee Talkies 1024x576); on a frame
+    // that is itself 4:3 it pushed ~12.5% of the picture off each side.
+    val wideFrame = isWideFrame(rawW, rawH, videoSize.pixelWidthHeightRatio)
+    val fillWiden = (16.0f / 9.0f) / (4.0f / 3.0f) // ~1.3333334f
 
     val pX = if (contentFrame.width > 0) contentFrame.width / 2f else parentWidth / 2f
     val pY = if (contentFrame.height > 0) contentFrame.height / 2f else parentHeight / 2f
@@ -1943,9 +2006,9 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-            if (is43Stream || isSdStream) {
-                // Stretch 4:3 broadcast content horizontally to fill the 16:9 screen
-                contentFrame.scaleX = (16.0f / 9.0f) / (4.0f / 3.0f) // ~1.3333334f
+            if ((is43Stream || isSdStream) && wideFrame) {
+                // Stretch 4:3 broadcast content (pillarboxed in a 16:9 frame) horizontally to fill the screen
+                contentFrame.scaleX = fillWiden
                 contentFrame.scaleY = 1.0f
             } else {
                 contentFrame.scaleX = 1.0f
@@ -1989,8 +2052,8 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
             contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
             view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-            if (is43Stream) {
-                contentFrame.scaleX = (16.0f / 9.0f) / (4.0f / 3.0f) // ~1.3333334f
+            if (is43Stream && wideFrame) {
+                contentFrame.scaleX = fillWiden
                 contentFrame.scaleY = 1.0f
             } else {
                 contentFrame.scaleX = 1.0f
@@ -2036,3 +2099,13 @@ private fun TvPausedBadge(ui: PlayerUi, modifier: Modifier) {
 /** Jio's recorded-schedule channels hand out a SonyLIV programme file instead of a live stream. */
 private fun isScheduleFileUrl(url: String): Boolean =
     url.contains("slivcdn.com", ignoreCase = true) || url.contains("partner=jiotvvod", ignoreCase = true)
+
+/** A held zap loads the stream once no further zap came for this long. */
+private const val ZapHoldSettleMs = 300L
+
+/** The decoded frame is 16:9-shaped (unknown size counts as wide). Decides the FILL modes' 4:3 widening. */
+internal fun isWideFrame(rawW: Int, rawH: Int, pixelAspect: Float): Boolean {
+    if (rawW <= 0 || rawH <= 0) return true
+    val par = if (pixelAspect > 0f) pixelAspect else 1f
+    return rawW * par / rawH >= 1.5f
+}

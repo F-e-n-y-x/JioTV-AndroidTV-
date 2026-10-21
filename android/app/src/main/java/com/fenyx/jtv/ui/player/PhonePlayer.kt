@@ -213,7 +213,7 @@ internal fun BoxScope.PlayerSheets(ui: PlayerUi, d: OverlayData, sheetMaxWidth: 
     if (ov == PlayerOverlay.Options) {
         val maxH = (LocalConfiguration.current.screenHeightDp * 0.75f).dp
         OptionsPanel(
-            page = ui.optionsPage, entry = ui.optionsEntry, model = d.model, channel = d.playing,
+            page = ui.optionsPage, entry = ui.optionsEntry, model = d.model, channel = d.playing, epg = d.epg,
             actions = d.actions, touch = true,
             onPage = { ui.optionsPage = it }, onClose = { ui.overlay = PlayerOverlay.None },
             modifier = Modifier.align(Alignment.BottomCenter).widthIn(max = sheetMaxWidth).fillMaxWidth()

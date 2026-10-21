@@ -134,6 +134,7 @@
     <string name="player_replay_line">रीप्ले · %1$s · %2$s · %3$s</string>
     <string name="player_replay_ended">%s खत्म हो गया।</string>
     <string name="player_replay_next">इसके बाद: %1$s · %2$s</string>
+    <string name="player_started_at">%1$s पर शुरू हुआ</string>
     <string name="player_watch_next">अगला प्रोग्राम देखें</string>
     <string name="player_key_ok_right">OK / दाएँ</string>
     <string name="player_hint_categories">कैटेगरी</string>

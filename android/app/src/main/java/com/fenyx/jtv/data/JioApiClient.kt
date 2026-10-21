@@ -244,6 +244,7 @@ object JioApiClient {
             
             val url = URL("https://jiotvapi.media.jio.com/userservice/apis/v1/loginotp/send")
             val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000; connection.readTimeout = 15000
             connection.requestMethod = "POST"
             connection.setRequestProperty("user-agent", USER_AGENT)
             connection.setRequestProperty("os", OS)
@@ -284,6 +285,7 @@ object JioApiClient {
 
             val url = URL("https://jiotvapi.media.jio.com/userservice/apis/v1/loginotp/verify")
             val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000; connection.readTimeout = 15000
             connection.requestMethod = "POST"
             connection.setRequestProperty("user-agent", USER_AGENT)
             connection.setRequestProperty("os", OS)
@@ -353,6 +355,7 @@ object JioApiClient {
 
             val url = URL("https://auth.media.jio.com/tokenservice/apis/v1/refreshtoken?langId=6")
             val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000; connection.readTimeout = 15000
             connection.requestMethod = "POST"
             connection.setRequestProperty("ssotoken", authData.ssoToken)
             // The CURRENT access token must ride along as a header, or Jio always answers "refresh token
@@ -530,7 +533,7 @@ object JioApiClient {
         val settingsManager = com.fenyx.jtv.data.SettingsManager(context)
         val auth = settingsManager.authDataFlow.first() ?: return null
         val exp = jwtExpirySec(auth.authToken)
-        val nowMs = System.currentTimeMillis()
+        val nowMs = JioClock.nowMs()
         if (exp > 0 && exp - nowMs / 1000 < ACCESS_TOKEN_REFRESH_LEAD_SEC &&
             nowMs - lastProactiveRefreshMs > PROACTIVE_RETRY_GAP_MS) {
             lastProactiveRefreshMs = nowMs
@@ -589,30 +592,42 @@ object JioApiClient {
             // Clean up any legacy dummy Zee channels (e.g. "zee_9001" or group "Zee") from previous builds
             channels.removeAll { it.id.startsWith("zee_") || it.group == "Zee" }
 
-            // Load Zee channels with official channel numbers and categories
-            val zeeChannels = ZeeRepository.loadZeeChannels(context)
-            val zeeMap = zeeChannels.associateBy { it.channelNumber }
-            // Replace matching channels in cache so they get the working M3U stream and ClearKey DRM
-            val updated = channels.map { ch -> zeeMap[ch.channelNumber]?.copy(isCatchup = ch.isCatchup) ?: ch }.toMutableList()
-            val existingNumbers = updated.mapTo(HashSet()) { it.channelNumber }
-            zeeChannels.forEach { zc ->
-                if (zc.channelNumber !in existingNumbers) {
-                    updated.add(zc)
-                }
-            }
-            updated.sortBy { it.channelNumber }
-            updated.ifEmpty { null }
+            // Third-party channels from the on-disk playlist/token copies only: startup never waits on
+            // the network. [refreshThirdPartyChannels] updates them in the background afterwards.
+            mergeThirdParty(channels, ZeeRepository.loadZeeChannels(context, network = false)).ifEmpty { null }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read channel cache", e)
             null
         }
     }
 
+    /**
+     * [channels] with each third-party channel replacing the entry of the same number (keeping that
+     * entry's Jio catch-up flag) and the rest added, sorted by number.
+     */
+    private fun mergeThirdParty(channels: List<Channel>, thirdParty: List<Channel>): List<Channel> {
+        val byNumber = thirdParty.associateBy { it.channelNumber }
+        val merged = channels.map { ch -> byNumber[ch.channelNumber]?.copy(isCatchup = ch.isCatchup) ?: ch }.toMutableList()
+        val existing = merged.mapTo(HashSet()) { it.channelNumber }
+        thirdParty.filterTo(merged) { it.channelNumber !in existing }
+        return merged.sortedBy { it.channelNumber }
+    }
+
+    /**
+     * Downloads the third-party playlists + live tokens (concurrently) and merges them into [channels].
+     * Run in the background after a cached list is shown; the caller re-publishes when the result differs.
+     */
+    suspend fun refreshThirdPartyChannels(context: android.content.Context, channels: List<Channel>): List<Channel> =
+        mergeThirdParty(channels, ZeeRepository.loadZeeChannels(context, network = true))
+
     /** True if a cache exists and is younger than the TTL. */
     fun isChannelCacheFresh(context: android.content.Context): Boolean {
         val cacheFile = channelCacheFile(context)
         return cacheFile.exists() && System.currentTimeMillis() - cacheFile.lastModified() < CHANNEL_CACHE_TTL_MS
     }
+
+    /** Jio's v3.1 list came back empty: an outage, never something to cache as the channel list. */
+    internal fun useStaleCache(v31Count: Int): Boolean = v31Count == 0
 
     /**
      * @param forceNetwork when true, skip the fresh-cache shortcut and always fetch from the network
@@ -633,6 +648,7 @@ object JioApiClient {
             try {
                 val dictUrl = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/dictionary/dictionary?langId=6")
                 val dictConn = dictUrl.openConnection() as HttpURLConnection
+                dictConn.connectTimeout = 10000; dictConn.readTimeout = 15000
                 dictConn.requestMethod = "GET"
                 dictConn.setRequestProperty("User-Agent", USER_AGENT)
                 if (dictConn.responseCode in 200..299) {
@@ -664,6 +680,7 @@ object JioApiClient {
             fun parseChannels(urlStr: String, into: MutableMap<Int, Channel>) {
                 try {
                     val conn = URL(urlStr).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 10000; conn.readTimeout = 15000
                     conn.requestMethod = "GET"
                     conn.setRequestProperty("User-Agent", USER_AGENT)
                     if (conn.responseCode in 200..299) {
@@ -741,20 +758,31 @@ object JioApiClient {
             kotlinx.coroutines.coroutineScope {
                 launch(Dispatchers.IO) { parseChannels(ChannelSources.V31_URL, v31) }
                 launch(Dispatchers.IO) { parseChannels(ChannelSources.V14_URL, v14) }
-                launch(Dispatchers.IO) { zee.addAll(ZeeRepository.loadZeeChannels(context)) }
+                launch(Dispatchers.IO) {
+                    // A third-party failure must never cancel the Jio list loading next to it.
+                    try {
+                        zee.addAll(ZeeRepository.loadZeeChannels(context))
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        Log.e(TAG, "Third-party channels failed to load", e)
+                    }
+                }
             }
             finalChannelsMap.putAll(ChannelSources.merge(v31, v14))
             // A third-party stream replaces Jio's entry for live, but the channel still has Jio catch-up.
             zee.forEach { zc -> finalChannelsMap[zc.channelNumber] = zc.copy(isCatchup = finalChannelsMap[zc.channelNumber]?.isCatchup ?: zc.isCatchup) }
 
-            if (finalChannelsMap.isEmpty()) {
-                // Network produced nothing — fall back to whatever we have on disk (even if stale)
-                // so a transient outage doesn't wipe the channel list.
+            if (useStaleCache(v31.size)) {
+                // Jio's list failed (the third-party channels alone would still fill the map, and were
+                // once cached as a fresh 24 h list). Serve whatever is on disk, even if stale, and leave
+                // the cache file untouched so the next start tries Jio again.
                 readChannelCache(context)?.let {
                     Log.w(TAG, "Channel fetch empty; serving stale cache (${it.size} channels)")
                     return@withContext Result.success(it)
                 }
-                return@withContext Result.failure(Exception("Failed to fetch channels from endpoints"))
+                // No cache either: show what did load (third-party / v1.4), but don't save it.
+                if (finalChannelsMap.isEmpty()) return@withContext Result.failure(Exception("Failed to fetch channels from endpoints"))
+                return@withContext Result.success(finalChannelsMap.values.sortedBy { it.channelNumber })
             }
 
             val finalChannels = finalChannelsMap.values.sortedBy { it.channelNumber }
@@ -780,7 +808,7 @@ object JioApiClient {
                     ch.licenseUrl?.let { obj.put("licenseUrl", it) }
                     jsonArray.put(obj)
                 }
-                cacheFile.writeText(jsonArray.toString())
+                cacheFile.writeTextAtomically(jsonArray.toString())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to write cache", e)
             }
@@ -807,6 +835,14 @@ object JioApiClient {
         val m = Regex("exp=(\\d+)").find(token) ?: return 0
         return m.groupValues[1].toLongOrNull() ?: 0
     }
+
+    /** True when [url]'s `__hdnea__` token has an `exp` that is already past (Jio time). No token = false. */
+    fun isStreamTokenExpired(url: String, nowSec: Long = JioClock.nowMs() / 1000): Boolean =
+        extractTokenExpiryEpochSec(extractHdneaToken(url)) in 1..nowSec
+
+    private const val STREAM_EXPIRED_MESSAGE =
+        "This channel's stream link has expired at its source and no fresh one is available right now. " +
+        "Try again in a few minutes or pick another channel."
 
     /**
      * The form body of a geturl request. Live: `stream_type=Live&channel_id=…`. Catch-up: the same
@@ -853,12 +889,17 @@ object JioApiClient {
             }
             // Catch-up always goes through Jio's geturl: the third-party feed is live only.
             if (catchup == null && ZeeRepository.isZeeChannel(channelId)) {
+                // No forced refresh: getStreamDataForChannel re-fetches the live tokens itself once the
+                // token is expired. Forcing it on every zap reloaded all third-party playlists each time.
                 val streamData = ZeeRepository.getStreamDataForChannel(
                     context = context,
                     channelId = channelId,
-                    forceRefresh = allowRefreshRetry
+                    forceRefresh = false
                 )
                 if (streamData != null) {
+                    if (isStreamTokenExpired(streamData.streamUrl)) {
+                        return@withContext Result.failure(ChannelUnavailableException(STREAM_EXPIRED_MESSAGE))
+                    }
                     return@withContext Result.success(streamData)
                 }
             }
@@ -904,6 +945,7 @@ object JioApiClient {
             writer.close()
 
             val responseCode = connection.responseCode
+            JioClock.learn(connection.date)
             
             val tokenExpired = responseCode == 401 || responseCode == 419
             if (tokenExpired && allowRefreshRetry) {
@@ -1022,6 +1064,9 @@ object JioApiClient {
 
                 val isMpd = useMpd
                 val streamUrl = if (isMpd) mpdUrl else hlsUrl
+                if (isStreamTokenExpired(streamUrl)) {
+                    return@withContext Result.failure(ChannelUnavailableException(STREAM_EXPIRED_MESSAGE))
+                }
                 val licenseUrl = if (isMpd) mpdKey else ""
 
                 // Extract cookie from response or headers

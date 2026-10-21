@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -22,8 +21,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.isSpecified
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.composed
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.PointerInputModifierNode
+import androidx.compose.ui.node.requireLayoutCoordinates
+import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.launch
 import androidx.tv.material3.ClickableSurfaceBorder
 import androidx.tv.material3.ClickableSurfaceColors
@@ -39,27 +42,27 @@ private var lastHoverFocusAt = androidx.compose.ui.geometry.Offset.Unspecified
  * Hovering an item focuses it, but only when the pointer itself moved. Focusing scrolls the list,
  * which slides a new item under a still pointer and fires another Enter; following that one too
  * made lists scroll on their own (air mouse / mouse on TV).
+ * A plain pointer node: the row's window position is read only on an Enter event, so scrolling
+ * costs nothing per row (an onGloballyPositioned + state write ran on every row every frame).
  */
-@OptIn(ExperimentalComposeUiApi::class)
-fun Modifier.mouseHoverToFocus(focusRequester: FocusRequester): Modifier = composed {
-    var coords by remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
-    this
-        .focusRequester(focusRequester)
-        .onGloballyPositioned { coords = it }
-        .pointerInput(Unit) {
-            awaitPointerEventScope {
-                while (true) {
-                    val event = awaitPointerEvent()
-                    if (event.type != PointerEventType.Enter) continue
-                    val c = coords?.takeIf { it.isAttached } ?: continue
-                    val at = c.localToWindow(event.changes.first().position)
-                    val last = lastHoverFocusAt
-                    if (last.isSpecified && (at - last).getDistance() < 2f) continue // list moved, pointer didn't
-                    lastHoverFocusAt = at
-                    focusRequester.requestFocus()
-                }
-            }
-        }
+fun Modifier.mouseHoverToFocus(focusRequester: FocusRequester): Modifier =
+    focusRequester(focusRequester) then HoverFocusElement(focusRequester)
+
+private data class HoverFocusElement(val fr: FocusRequester) : ModifierNodeElement<HoverFocusNode>() {
+    override fun create() = HoverFocusNode(fr)
+    override fun update(node: HoverFocusNode) { node.fr = fr }
+}
+
+private class HoverFocusNode(var fr: FocusRequester) : Modifier.Node(), PointerInputModifierNode {
+    override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
+        if (pass != PointerEventPass.Main || pointerEvent.type != PointerEventType.Enter) return
+        val at = requireLayoutCoordinates().localToWindow(pointerEvent.changes.first().position)
+        val last = lastHoverFocusAt
+        if (last.isSpecified && (at - last).getDistance() < 2f) return // list moved, pointer didn't
+        lastHoverFocusAt = at
+        fr.requestFocus()
+    }
+    override fun onCancelPointerInput() {}
 }
 
 @Composable

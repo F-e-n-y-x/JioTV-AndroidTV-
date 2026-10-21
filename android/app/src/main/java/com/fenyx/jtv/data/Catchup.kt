@@ -25,9 +25,18 @@ data class CatchupRequest(
     val stopMs: Long,
     val showtime: String,
     val title: String,
+    /**
+     * "Watch from the start" of a show that is still on: the end sent to geturl (Jio rejects a
+     * future end, so it's "now - 1 min" when the request was made). 0 = a finished show (end = [stopMs]).
+     */
+    val untilMs: Long = 0L,
 ) {
-    fun toParams(): JioApiClient.CatchupParams =
-        JioApiClient.CatchupParams(srno = srno, programId = showId, beginMs = startMs, endMs = stopMs, showtime = showtime)
+    /** A start-over of the airing show: when the recording ends, the player goes back to live. */
+    val isStartOver: Boolean get() = untilMs > 0
+
+    fun toParams(): JioApiClient.CatchupParams = JioApiClient.CatchupParams(
+        srno = srno, programId = showId, beginMs = startMs, endMs = if (isStartOver) untilMs else stopMs, showtime = showtime,
+    )
 
     /** True when this request is for [p] (same channel guide entry). */
     fun isFor(p: EpgProgram): Boolean = p.startMs == startMs && (p.srno ?: "") == srno
@@ -65,6 +74,21 @@ object Catchup {
             showtime = p.showtime.orEmpty(),
             title = p.title,
         )
+    }
+
+    /** Jio needs the show to have run a little before it has a recording to serve. */
+    const val START_OVER_MIN_RUN_MS = 2L * 60 * 1000
+
+    /** Jio rejects a geturl end in the future; it serves the recording up to a minute ago. */
+    const val START_OVER_LAG_MS = 60_000L
+
+    /**
+     * "Watch from the start" for [p] while it is on: a replay from its start up to a minute ago, or
+     * null when Jio can't replay it or it began less than [START_OVER_MIN_RUN_MS] ago.
+     */
+    fun startOver(ch: Channel, p: EpgProgram, now: Long = JioClock.nowMs()): CatchupRequest? {
+        if (now >= p.stopMs || now - p.startMs < START_OVER_MIN_RUN_MS) return null
+        return request(ch, p, now)?.copy(untilMs = now - START_OVER_LAG_MS)
     }
 
     /** The programme right after [after] in [programs] (sorted by start), or null. */

@@ -54,7 +54,8 @@ class JioTvApplication : Application(), ImageLoaderFactory {
         return ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.20) // 20% of RAM — a bit more headroom keeps logos hot while scrolling
+                    // Fixed cap: a percent of largeHeap (~100 MB at 20%) starved the player on weak boxes.
+                    .maxSizeBytes(40 * 1024 * 1024)
                     .build()
             }
             .diskCache {

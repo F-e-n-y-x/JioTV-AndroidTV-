@@ -411,6 +411,7 @@ internal fun OptionsAndMenu(ui: PlayerUi, d: OverlayData, touch: Boolean, panelW
                 entry = ui.optionsEntry,
                 model = d.model,
                 channel = d.playing,
+                epg = d.epg,
                 actions = d.actions,
                 touch = touch,
                 onPage = { ui.optionsPage = it },

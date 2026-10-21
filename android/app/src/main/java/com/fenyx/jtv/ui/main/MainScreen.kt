@@ -235,13 +235,20 @@ fun MainScreen(
     var digits by remember { mutableStateOf("") }
     LaunchedEffect(digits) {
         if (digits.isEmpty()) return@LaunchedEffect
-        delay(1500)
+        // Wait for another digit only while a longer number in the list could still match (15 → 150, 1500…).
+        val reachable = (shown.asSequence() + displayChannels.asSequence()).map { it.channelNumber } +
+            (if (isFavoritesGroup) (1..shown.size).asSequence() else emptySequence())
+        if (numberEntryCanGrow(digits, reachable.asIterable())) delay(1500)
         val n = digits.toIntOrNull()
         digits = ""
         // In Favourites the numbers are positions (1, 2, 3…), so 2 is the second favourite (#7).
         val target = (if (isFavoritesGroup && n != null) shown.getOrNull(n - 1) else null)
             ?: shown.firstOrNull { it.channelNumber == n } ?: displayChannels.firstOrNull { it.channelNumber == n }
-        if (target != null) onChannelClick(indexById[target.id] ?: 0, if (shown.contains(target)) selectedGroup else null)
+            ?: return@LaunchedEffect
+        // Index inside the shown list's own contract (favourites/global index their own list); else display index, no group.
+        val inGroup = if (shown.any { it.id == target.id }) playIndex(target.id, group, shown, displayChannels) else null
+        if (inGroup != null) onChannelClick(inGroup, selectedGroup)
+        else indexById[target.id]?.let { onChannelClick(it, null) }
     }
 
     val listState = rememberLazyListState()

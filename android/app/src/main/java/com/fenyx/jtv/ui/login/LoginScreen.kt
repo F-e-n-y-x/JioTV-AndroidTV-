@@ -131,8 +131,10 @@ fun LoginScreen(
         else onChangeMethod?.invoke()
     }
 
+    // While a send/verify is in flight, keys and submit do nothing (no double OTP send / double verify).
     val onNumberClick = { digit: String ->
-        if (step == 1) {
+        if (isLoading) Unit
+        else if (step == 1) {
             if (mobileNumber.length < 10) mobileNumber += digit
         } else {
             if (otp.length < 6) otp += digit
@@ -140,7 +142,8 @@ fun LoginScreen(
     }
 
     val onBackspace = {
-        if (step == 1) {
+        if (isLoading) Unit
+        else if (step == 1) {
             if (mobileNumber.isNotEmpty()) mobileNumber = mobileNumber.dropLast(1)
         } else {
             if (otp.isNotEmpty()) otp = otp.dropLast(1)
@@ -148,7 +151,8 @@ fun LoginScreen(
     }
 
     val onSubmit: () -> Unit = {
-        if (step == 1) {
+        if (isLoading) Unit
+        else if (step == 1) {
             if (mobileNumber.length >= 10) {
                 isLoading = true
                 errorMessage = null

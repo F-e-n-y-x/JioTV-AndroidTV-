@@ -30,6 +30,8 @@
     <application
         android:name=".JioTvApplication"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/tv_banner"
         android:label="@string/app_name"

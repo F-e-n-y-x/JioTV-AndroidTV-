@@ -121,7 +121,7 @@ object JioExoPlayerFactory {
             .setBufferDurationsMs(
                 minBufferMs,
                 maxBufferMs,
-                1200,   // Buffer required to START — low so channels zap in ~1s instead of ~3s
+                600,    // Buffer required to START — low so channels zap in well under a second
                 5000    // Buffer required to resume after a rebuffer — short so a stall isn't a long freeze
             )
             .setPrioritizeTimeOverSizeThresholds(true)

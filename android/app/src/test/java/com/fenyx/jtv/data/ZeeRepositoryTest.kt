@@ -65,4 +65,18 @@ class ZeeRepositoryTest {
         assertTrue(jwk.contains("\"k\":"))
         assertTrue(jwk.contains("\"type\":\"temporary\""))
     }
+
+    @Test
+    fun validClearKeyPairs_skipsMalformedPairs() {
+        val good = "c2c048e439d65316beeda6ef64d5d0f8:e2fdc132cbdee65501b845ce414fce39"
+        val keys = "$good, abc:def ,zzc048e439d65316beeda6ef64d5d0f8:e2fdc132cbdee65501b845ce414fce39," +
+            "c2c048e439d65316beeda6ef64d5d0f8:e2fdc132cbdee65501b845ce414fce3,,onlyone"
+        assertEquals(listOf("c2c048e439d65316beeda6ef64d5d0f8" to "e2fdc132cbdee65501b845ce414fce39"),
+            ZeeRepository.validClearKeyPairs(keys))
+    }
+
+    @Test
+    fun clearKeyToJwkJson_emptyWhenNoValidKey() {
+        assertEquals("", ZeeRepository.clearKeyToJwkJson("bad:key,123"))
+    }
 }

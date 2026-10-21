@@ -57,4 +57,16 @@ class AspectCorrectionTest {
     fun unknownSize_is169() {
         assertEquals(f169, correctedStreamAspect(0, 0, 1f, null), d)
     }
+
+    @Test
+    fun fillWidensOnlyWideFrames() {
+        // 16:9 SD frame with burned-in 4:3 bars (Zee Talkies): widen.
+        assertEquals(true, isWideFrame(1024, 576, 1f))
+        assertEquals(true, isWideFrame(720, 576, 1.4222f))
+        // A frame that is itself 4:3: FILL already stretches it, widening would crop.
+        assertEquals(false, isWideFrame(720, 576, 1f))
+        assertEquals(false, isWideFrame(720, 576, 1.0667f))
+        assertEquals(false, isWideFrame(640, 480, 0f))
+        assertEquals(true, isWideFrame(0, 0, 1f))
+    }
 }

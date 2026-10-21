@@ -144,6 +144,7 @@
     <string name="player_replay_line">Replay · %1$s · %2$s · %3$s</string>
     <string name="player_replay_ended">%s has ended.</string>
     <string name="player_replay_next">Next: %1$s · %2$s</string>
+    <string name="player_started_at">Started %1$s</string>
     <string name="player_watch_next">Watch next programme</string>
     <string name="player_key_ok_right">OK / Right</string>
     <string name="player_hint_categories">categories</string>

@@ -40,6 +40,7 @@ import com.fenyx.jtv.data.Channel
 import com.fenyx.jtv.theme.Jtv
 import com.fenyx.jtv.ui.components.JText
 import com.fenyx.jtv.ui.components.JtvClickable
+import com.fenyx.jtv.ui.components.formatTime
 
 /** Everything the options panel and quick menu show. Built by the player from its playback state. */
 @Immutable
@@ -90,6 +91,8 @@ internal interface PlayerActions {
     fun seekTo(ms: Long) {}
     /** Back to the live point, and play. */
     fun goLive() {}
+    /** Replay [p], the show on now, from its start (Jio catch-up); live again when it catches up. */
+    fun watchFromStart(p: com.fenyx.jtv.data.EpgProgram) {}
 }
 
 /**
@@ -103,6 +106,7 @@ internal fun OptionsPanel(
     entry: OptionsPage,
     model: OptionsModel,
     channel: Channel?,
+    epg: EpgSource,
     actions: PlayerActions,
     touch: Boolean,
     onPage: (OptionsPage) -> Unit,
@@ -157,15 +161,24 @@ internal fun OptionsPanel(
         when (page) {
             OptionsPage.Main -> {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // The show on now, from its start: only live (not while replaying) and when Jio can.
+                    val airing = if (channel != null && LocalReplay.current == null) rememberNowNext(epg, channel.id, always = true)?.now else null
+                    val startOver = airing?.takeIf { channel != null && com.fenyx.jtv.data.Catchup.startOver(channel, it, com.fenyx.jtv.data.JioClock.nowMs()) != null }
+                    if (startOver != null) {
+                        OptionRow(
+                            stringResource(R.string.guide_watch_from_start), stringResource(R.string.player_started_at, formatTime(startOver.startMs)),
+                            rowH, Modifier.focusRequester(first),
+                        ) { actions.watchFromStart(startOver); onClose() }
+                    }
                     val pickable = model.langChoices.size > 1
                     if (pickable) {
-                        OptionRow(stringResource(R.string.player_language), model.langLabel, rowH, Modifier.focusRequester(first).focusRequester(subFocus.getValue(OptionsPage.Language))) { open(OptionsPage.Language) }
+                        OptionRow(stringResource(R.string.player_language), model.langLabel, rowH, (if (startOver == null) Modifier.focusRequester(first) else Modifier).focusRequester(subFocus.getValue(OptionsPage.Language))) { open(OptionsPage.Language) }
                     } else {
                         InfoRow(stringResource(R.string.player_language), model.langLabel, rowH)
                     }
                     OptionRow(
                         stringResource(R.string.player_quality), qualityLabel(model.quality), rowH,
-                        (if (pickable) Modifier else Modifier.focusRequester(first)).focusRequester(subFocus.getValue(OptionsPage.Quality)),
+                        (if (pickable || startOver != null) Modifier else Modifier.focusRequester(first)).focusRequester(subFocus.getValue(OptionsPage.Quality)),
                     ) { open(OptionsPage.Quality) }
                     OptionRow(stringResource(R.string.player_aspect), aspectLabel(model.aspect), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Aspect))) { open(OptionsPage.Aspect) }
                     OptionRow(stringResource(R.string.player_voice_boost), voiceLabel(model.voice), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Voice))) { open(OptionsPage.Voice) }

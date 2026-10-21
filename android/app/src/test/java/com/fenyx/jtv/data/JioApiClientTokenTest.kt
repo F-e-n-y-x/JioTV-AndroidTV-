@@ -48,4 +48,21 @@ class JioApiClientTokenTest {
         val token = JioApiClient.extractHdneaToken(url)
         assertEquals(1799999999L, JioApiClient.extractTokenExpiryEpochSec(token))
     }
+
+    @Test
+    fun streamTokenExpired_onlyWhenExpIsPast() {
+        val url = "https://cdn.jio/live/x.mpd?__hdnea__=st=1~exp=1000~hmac=ab"
+        org.junit.Assert.assertTrue(JioApiClient.isStreamTokenExpired(url, nowSec = 1000))
+        org.junit.Assert.assertTrue(JioApiClient.isStreamTokenExpired(url, nowSec = 5000))
+        org.junit.Assert.assertFalse(JioApiClient.isStreamTokenExpired(url, nowSec = 999))
+        // No token / unreadable exp: let the player try.
+        org.junit.Assert.assertFalse(JioApiClient.isStreamTokenExpired("https://cdn/x.m3u8", nowSec = 5000))
+        org.junit.Assert.assertFalse(JioApiClient.isStreamTokenExpired("https://cdn/x.m3u8?__hdnea__=st=1~hmac=ab", nowSec = 5000))
+    }
+
+    @Test
+    fun emptyV31List_servesStaleCacheInsteadOfCaching() {
+        org.junit.Assert.assertTrue(JioApiClient.useStaleCache(0))
+        org.junit.Assert.assertFalse(JioApiClient.useStaleCache(1200))
+    }
 }

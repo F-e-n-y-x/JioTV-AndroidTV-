@@ -19,7 +19,7 @@ package com.fenyx.jtv.data
 class StreamUrlCache(
     private val maxEntries: Int = 6,
     private val marginSec: Long = 20,
-    private val nowSec: () -> Long = { System.currentTimeMillis() / 1000 },
+    private val nowSec: () -> Long = { JioClock.nowMs() / 1000 },
 ) {
     private class Entry(val data: JioApiClient.StreamData, val authToken: String, val expiresAtSec: Long)
 

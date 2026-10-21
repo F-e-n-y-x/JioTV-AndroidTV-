@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -86,7 +87,8 @@ fun ChannelRow(
     JtvClickable(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.fillMaxWidth().height(m.height),
+        // Min height, not fixed: a large system font grows the row instead of clipping it.
+        modifier = modifier.fillMaxWidth().heightIn(min = m.height),
         container = if (isMoving) c.acc else Color.Transparent,
         focusedContainer = if (isMoving) c.acc else c.inv,
     ) { focused ->
@@ -94,7 +96,7 @@ fun ChannelRow(
         val fg = if (isMoving) c.accTx else if (focused) c.invTx else c.tx
         val fg2 = if (isMoving) c.accTx else if (focused) c.invTx.copy(alpha = 0.75f) else c.t2
         Row(
-            Modifier.align(Alignment.CenterStart).padding(start = 10.dp, end = if (onMore != null) 0.dp else 14.dp),
+            Modifier.align(Alignment.CenterStart).padding(start = 10.dp, end = if (onMore != null) 0.dp else 14.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(

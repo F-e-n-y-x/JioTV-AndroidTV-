@@ -8,9 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -96,7 +97,8 @@ fun ChannelCard(
     JtvClickable(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.fillMaxWidth().height(m.height),
+        // Min height, not fixed: a large system font grows the card instead of clipping it.
+        modifier = modifier.fillMaxWidth().heightIn(min = m.height),
         shape = RoundedCornerShape(8.dp),
         container = if (isMoving) c.acc else c.s1,
         focusedContainer = if (isMoving) c.acc else c.inv,
@@ -105,7 +107,12 @@ fun ChannelCard(
         val inverted = focused || isMoving
         val fg = if (isMoving) c.accTx else if (focused) c.invTx else c.tx
         val fg2 = if (isMoving) c.accTx else if (focused) c.invTx.copy(alpha = 0.75f) else c.t2
-        Column(Modifier.fillMaxSize().padding(m.pad)) {
+        // Top block (number, logo, name) and bottom block (what's on) pinned apart; works with a min height.
+        Column(
+            Modifier.fillMaxWidth().heightIn(min = m.height).padding(m.pad),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+          Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     number.takeIf { it > 0 }?.toString() ?: "",
@@ -125,9 +132,11 @@ fun ChannelCard(
             Spacer(Modifier.height(6.dp))
             Text(
                 channel.name, style = textStyle(m.nameSize, FontWeight.SemiBold), color = fg,
-                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                // Always two lines tall, so cards in one grid row stay the same height at large font sizes.
+                maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.weight(1f))
+          }
+          Column {
             Text(
                 nowProgram?.title ?: groupLabel(channel.group), style = textStyle(m.subSize), color = fg2,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -139,6 +148,7 @@ fun ChannelCard(
                     track = if (inverted) fg.copy(alpha = 0.22f) else c.line,
                 )
             }
+          }
         }
     }
 }
@@ -194,7 +204,9 @@ fun GridInfoBar(
     val c = Jtv.colors
     val nn = remember(programs, now) { programs?.let { nowNext(it, now) } }
     val p = nn?.now
-    Row(modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(8.dp)).background(c.s1)) {
+    // Min height + intrinsic height (not a fixed 64dp) so a large font grows the bar; fillMaxHeight children
+    // (the number block) then match the content instead of the whole screen.
+    Row(modifier.fillMaxWidth().heightIn(min = 64.dp).height(IntrinsicSize.Min).clip(RoundedCornerShape(8.dp)).background(c.s1)) {
         NumberBlock(number, Modifier.fillMaxHeight().width(72.dp), fontSize = 20.sp)
         Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
             Text(
