@@ -40,7 +40,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 - **Guide with replays.** A time grid with a gentle "now" line. The **Replay** category lists channels Jio lets you watch again: press OK on a past show to watch it from the start, up to 7 days back.
 - **Pause and rewind live TV.** Pause keeps your place. Use ←/→ to rewind or skip, and **Live** to jump back.
 - **The channel card.** Change channel and a wide, see-through card shows the logo, number, show, time left and what's next.
-- **Browse without stopping the show.** Press ← to slide channel tiles over the picture; ↑ ↓ change category.
+- **Browse without stopping the show.** Press ← to open a two-pane channel list over the left of the picture: categories on the left, channels and the show on now on the right. The old strip is still in Settings → Channel browser.
 - **One clear Options panel (→).** Language, picture quality in plain words, aspect, Voice Boost, sleep timer and favourite.
 - **Your remote, your buttons.** Settings → Remote buttons: put any action on any button (holding a button counts too). There are profiles for Standard, Fire TV, Basic and Air-mouse remotes.
 
@@ -73,6 +73,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 - ⭐ **Favourites that follow you.** Pair your phone and TV once with a 4-digit code (**Settings → Devices**). After that, favourites stay in sync over home Wi-Fi, with no server needed.
 - 📺 **Play on TV.** From your phone, open a channel's options and choose **Play on <TV name>**. The TV switches channel.
 - 🕘 **Recent.** Your last channels are one tap away, on the home screen and in Search.
+- 🔲 **List or grid.** Live TV can show channels as a list or as a grid of cards (Settings → Channel view).
 - 🔎 **Search every channel.** Search can look through all channels or only the languages you kept on (switch at the top of Search). Favourites stay in your Favourites list even when you hide their language.
 - 💾 **Favourites backup.** Save them to a file and restore them after a fresh install.
 - 🇮🇳 **हिन्दी में भी.** The whole app can be in Hindi: **Settings → App language**. Channel names and show titles stay as Jio sends them.
@@ -88,7 +89,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 
 1. Download the APK:
    - **Stable:** `JTV-v1.5.x.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
-   - **Beta:** `JTV-v2.0-beta.24.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
+   - **Beta:** `JTV-v2.0-beta.25.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
 2. **Install it on your TV.**
    - The easiest way is to copy it to a USB stick and open it with a file manager such as **X-plore** or **File Commander**.
    - Or use ADB:
