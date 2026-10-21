@@ -70,9 +70,9 @@ data class CardMetrics(
     val maxCols: Int,
 )
 
-val TvCard = CardMetrics(120.dp, 9.dp, 20.sp, 44.dp, 26.dp, 15.sp, 14.sp, 112f, 12.dp, 3, 6)
-val TabletCard = CardMetrics(132.dp, 10.dp, 22.sp, 52.dp, 30.dp, 16.sp, 14.sp, 128f, 12.dp, 3, 4)
-val PhoneCard = CardMetrics(128.dp, 10.dp, 20.sp, 48.dp, 28.dp, 16.sp, 14.sp, 150f, 8.dp, 2, 3)
+val TvCard = CardMetrics(120.dp, 9.dp, 16.sp, 44.dp, 26.dp, 15.sp, 14.sp, 112f, 12.dp, 3, 6)
+val TabletCard = CardMetrics(132.dp, 10.dp, 18.sp, 52.dp, 30.dp, 16.sp, 14.sp, 128f, 12.dp, 3, 4)
+val PhoneCard = CardMetrics(128.dp, 10.dp, 16.sp, 48.dp, 28.dp, 16.sp, 14.sp, 150f, 8.dp, 2, 3)
 
 /**
  * One channel as a grid card: big number + logo, name (2 lines), and at the bottom what's on now with a
@@ -110,7 +110,6 @@ fun ChannelCard(
                 Text(
                     number.takeIf { it > 0 }?.toString() ?: "",
                     style = numberStyle(m.numberSize), color = fg, maxLines = 1, softWrap = false,
-                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (isFavorite) {
                     Icon(
@@ -118,8 +117,10 @@ fun ChannelCard(
                         tint = if (inverted) fg else c.acc, modifier = Modifier.padding(start = 4.dp).size(14.dp),
                     )
                 }
-                Spacer(Modifier.weight(1f))
-                ChannelPlate(channel.logoUrl, m.plateW, m.plateH)
+                // The logo gives way before the number does (4-digit numbers in a narrow card).
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    ChannelPlate(channel.logoUrl, m.plateW, m.plateH)
+                }
             }
             Spacer(Modifier.height(6.dp))
             Text(
@@ -194,7 +195,7 @@ fun GridInfoBar(
     val nn = remember(programs, now) { programs?.let { nowNext(it, now) } }
     val p = nn?.now
     Row(modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(8.dp)).background(c.s1)) {
-        NumberBlock(number, Modifier.fillMaxHeight().width(76.dp), fontSize = 26.sp)
+        NumberBlock(number, Modifier.fillMaxHeight().width(72.dp), fontSize = 20.sp)
         Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
             Text(
                 p?.title ?: channel.name, style = textStyle(17.sp, FontWeight.Bold), color = c.tx,

@@ -135,6 +135,8 @@ private class JobSlot { var job: Job? = null }
 
 private val PanelWidth = 560.dp
 private val CatWidth = 156.dp
+/** Room for a 5-digit channel number at 16sp in the wide font. */
+private val NumberWidth = 56.dp
 private val RowH = 56.dp
 private val CatH = 30.dp
 private val StripH = 104.dp
@@ -377,11 +379,10 @@ private fun PanelChannelRow(
     ) { focused ->
         val fg = if (focused) c.invTx else c.tx
         val fg2 = if (focused) c.invTx.copy(alpha = 0.75f) else c.t2
-        if (focused) Box(Modifier.align(Alignment.CenterStart).width(4.dp).fillMaxHeight().background(c.acc))
         Row(Modifier.align(Alignment.CenterStart).padding(start = 10.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (number > 0) number.toString() else "", style = numberStyle(20.sp), color = fg,
-                textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(40.dp),
+                if (number > 0) number.toString() else "", style = numberStyle(16.sp), color = fg,
+                textAlign = TextAlign.End, maxLines = 1, softWrap = false, modifier = Modifier.width(NumberWidth),
             )
             Spacer(Modifier.width(8.dp))
             ChannelPlate(channel.logoUrl, 46.dp, 32.dp)
