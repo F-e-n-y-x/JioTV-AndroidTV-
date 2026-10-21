@@ -1,8 +1,28 @@
-# JTV 2.0 beta 27
+# JTV 2.0 beta 28
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.27.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.28.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 27
+## New in beta 28
+- **Watch from the start.** Missed the beginning of a show? On channels with replay, open **Options (→)** in the player or the show in the **Guide** and choose **Watch from the start**. When you catch up, it goes back to live by itself.
+- **Faster.** The channel list appears straight away on start, channels start sooner after a zap, holding ↑ / ↓ no longer loads every channel on the way, and lists scroll more smoothly on slower boxes.
+- **Works on boxes with a wrong clock.** The app now uses Jio's time, so channels no longer reload every few seconds when the TV's clock is off.
+- **Better on Jio hotspot / JioFiber.** Connections no longer stall when the network's IPv6 is broken.
+- **Fixes.**
+  - The app no longer crashes on Android 7.
+  - A bad entry in an outside playlist no longer empties the channel list.
+  - Channels with an expired link show a message instead of loading forever.
+  - Sign out now stays signed out.
+  - Typing a number in Favourites plays the right channel, and tunes at once when no longer number matches.
+  - Voice Boost keeps its setting.
+  - No sound in the background after pressing Home.
+  - Holding Back only closes the panel.
+  - The playing channel stays the same when the list changes.
+
+---
+
+## Earlier betas
+
+### Beta 27
 - **Channel numbers show in full.** In the channel browser (press **←** while watching), 3, 4 and 5-digit numbers were cut to the first two digits. They now show in full (#13). The same fix applies to the Live TV grid, where 4-digit numbers next to the logo were cut off.
 - **Smaller numbers.** Channel numbers in the channel browser and the Live TV grid are smaller, so names get more room.
 - **Cleaner highlight.** The selected channel in the channel browser is now just the white highlight, without the yellow bar on its left.
