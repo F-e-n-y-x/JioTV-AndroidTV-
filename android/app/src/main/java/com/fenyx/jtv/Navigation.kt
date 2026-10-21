@@ -163,8 +163,9 @@ fun MainNavigation() {
     }
 
     /**
-     * THE way to start playback of a channel: [index] into `displayChannels`, [group] the list it was
-     * picked from (null = all). TV pushes the Player screen; phone/tablet open (or retune) the player
+     * THE way to start playback of a channel: [group] the list it was picked from (null = all) and
+     * [index] relative to it: favourites / all-global index inside their own list, null or any other
+     * group index `displayChannels` (see `playIndex`). TV pushes the Player screen; phone/tablet open (or retune) the player
      * host in its expanded state — the same running player is reused if one is already up (mini).
      */
     fun openPlayer(index: Int, group: String?, catchup: com.fenyx.jtv.data.CatchupRequest? = null) {
@@ -203,9 +204,15 @@ fun MainNavigation() {
                     allChannels.isEmpty() && !isLoading -> mainViewModel.fetchChannels()
                     allChannels.isNotEmpty() -> {
                         hasAutoPlayed.value = true
+                        val inGroup = lastChannelId?.let { id ->
+                            lastChannelGroup?.let {
+                                com.fenyx.jtv.ui.main.playIndex(id, it, mainViewModel.getChannelsByGroup(it), allChannels)
+                            }
+                        }
                         val channelIndex = allChannels.indexOfFirst { it.id == lastChannelId }
                         if (channelIndex != -1 && session.value == null) {
-                            openPlayer(channelIndex, lastChannelGroup)
+                            // Group no longer holds the channel (e.g. unfavourited): play it from all.
+                            if (inGroup != null) openPlayer(inGroup, lastChannelGroup) else openPlayer(channelIndex, null)
                         }
                     }
                     // Load finished but produced no channels (e.g. offline first run) -> fall through

@@ -1907,18 +1907,7 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
     val videoSize = player.videoSize
     val rawW = videoSize.width
     val rawH = videoSize.height
-    val par = if (videoSize.pixelWidthHeightRatio > 0f) videoSize.pixelWidthHeightRatio else 1.0f
-    var streamAspect = if (rawW > 0 && rawH > 0) (rawW * par) / rawH.toFloat() else (16f / 9f)
-
-    // SD PAL channels (e.g. Kalaignar TV 720x576) often omit SAR in the HLS manifest,
-    // yielding raw 5:4 (1.25) instead of standard 4:3 (1.333).
-    // If the Jio API declared aspect ratio is "4x3" OR if it's an SD stream with raw aspect near 1.25 (and not declared 16x9),
-    // treat effective aspect as 4:3 so it fills the proper 4:3 pillarbox area.
-    if (channel?.aspectRatio == "4x3" || (channel?.aspectRatio != "16x9" && rawH in 1..576 && streamAspect in 1.15f..1.35f)) {
-        streamAspect = 4.0f / 3.0f
-    } else if (channel?.aspectRatio == "16x9" && streamAspect < 1.5f && (rawH in 1..576 || rawW in 1..1024)) {
-        streamAspect = 16.0f / 9.0f
-    }
+    val streamAspect = correctedStreamAspect(rawW, rawH, videoSize.pixelWidthHeightRatio, channel?.aspectRatio)
 
     val is43Stream = streamAspect < 1.5f
     val isSdStream = (rawH in 1..576) || (rawW in 1..1024 && rawH in 1..600)

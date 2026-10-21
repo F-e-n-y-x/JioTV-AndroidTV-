@@ -16,6 +16,7 @@ object Labels {
         MainViewModel.GROUP_ALL.lowercase() -> R.string.home_cat_all_channels
         MainViewModel.GROUP_FAVORITES.lowercase() -> R.string.home_cat_favourites
         MainViewModel.GROUP_RECENT.lowercase() -> R.string.home_cat_recent
+        MainViewModel.GROUP_ALL_GLOBAL.lowercase() -> R.string.search_scope_global
         "entertainment" -> R.string.home_group_entertainment
         "movies" -> R.string.home_group_movies
         "kids" -> R.string.home_group_kids

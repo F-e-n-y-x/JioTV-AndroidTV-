@@ -135,7 +135,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getAllLanguagesWithCounts(): Map<String, Int> {
         val all = _allChannels.value
         return if (all.isEmpty()) emptyMap()
-        else all.groupBy { it.language.ifBlank { "Other" } }.mapValues { it.value.size }
+        else all.flatMap { ch -> com.fenyx.jtv.data.ChannelLanguage.channelSupportedLanguages(ch).map { it.ifBlank { "Other" } } }
+            .groupingBy { it }.eachCount()
     }
 
     fun setHiddenLanguages(hidden: Set<String>) {

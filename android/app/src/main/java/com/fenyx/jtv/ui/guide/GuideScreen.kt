@@ -124,7 +124,7 @@ private const val MAX_AHEAD = 7 * DAY
  * keep the same point in time, like every broadcaster guide. Touch/mouse: drag the timeline sideways,
  * tap a programme for its details, tap a channel to watch it.
  *
- * @param onPlay called with the channel's index in [MainViewModel.getAllChannels] and the category
+ * @param onPlay called with the channel's index (see [com.fenyx.jtv.ui.main.playIndex]) and the category
  *   (null for all channels) so the player zaps inside the same list.
  */
 @Composable
@@ -171,8 +171,8 @@ fun GuideScreen(
         if (category == GROUP_REPLAY) viewModel.getChannelsByGroup(MainViewModel.GROUP_ALL).filter { it.isCatchup }.distinctBy { it.id }
         else viewModel.getChannelsByGroup(category).distinctBy { it.id }
     }
-    val indexOf = remember(allChannels) { allChannels.withIndex().associate { (i, ch) -> ch.id to i } }
     val playGroup = category.takeIf { it != MainViewModel.GROUP_ALL && it != GROUP_REPLAY }
+    val indexOf = { id: String -> com.fenyx.jtv.ui.main.playIndex(id, playGroup, channels, allChannels) }
     val maxBack = remember(channels) { if (channels.any { it.isCatchup }) Catchup.WINDOW_MS else MAX_BACK }
     // "Replay earlier shows" from a channel's options: open on that channel (see below).
     val focusChannelId by viewModel.guideFocusChannel.collectAsState()
@@ -275,11 +275,11 @@ fun GuideScreen(
                     // A finished show: replay it from Jio's catch-up, or explain that it can't be.
                     prog != null && prog.stopMs <= t -> {
                         val req = Catchup.request(ch, prog, t)
-                        if (req != null) onReplay(indexOf[ch.id] ?: return, playGroup, req)
+                        if (req != null) onReplay(indexOf(ch.id) ?: return, playGroup, req)
                         else details = DetailsRequest(row, prog)
                     }
                     // On now (or the channel itself): live. "Watch from start" is in the details.
-                    else -> onPlay(indexOf[ch.id] ?: return, playGroup)
+                    else -> onPlay(indexOf(ch.id) ?: return, playGroup)
                 }
             }
 
@@ -490,7 +490,7 @@ fun GuideScreen(
                                     // Tap on a finished show that Jio can replay: replay it. Otherwise
                                     // (and on long-press) its details.
                                     val req = if (!long && p != null && p.stopMs <= System.currentTimeMillis()) Catchup.request(ch, p) else null
-                                    val idx = indexOf[ch.id]
+                                    val idx = indexOf(ch.id)
                                     if (req != null && idx != null) onReplay(idx, playGroup, req)
                                     else details = DetailsRequest(row, p)
                                 },
@@ -532,12 +532,12 @@ fun GuideScreen(
             now = now,
             onWatch = {
                 details = null
-                indexOf[ch.id]?.let { onPlay(it, playGroup) }
+                indexOf(ch.id)?.let { onPlay(it, playGroup) }
             },
             onWatchFromStart = req.prog?.let { p -> Catchup.request(ch, p, now) }?.let { cu ->
                 {
                     details = null
-                    indexOf[ch.id]?.let { onReplay(it, playGroup, cu) }
+                    indexOf(ch.id)?.let { onReplay(it, playGroup, cu) }
                 }
             },
             onClose = { details = null },

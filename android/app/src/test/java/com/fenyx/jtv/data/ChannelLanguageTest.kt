@@ -122,4 +122,29 @@ class ChannelLanguageTest {
         assertEquals(2, display.size)
         assertTrue(display.any { it.name == "Sony SAB" })
     }
+
+    private fun langCh(name: String, lang: String) = ch("1", name, "Kids").copy(language = lang)
+
+    @Test
+    fun supportedLanguages_hungamaAndDisneyGainTamil() {
+        assertTrue("Tamil" in ChannelLanguage.channelSupportedLanguages(langCh("Hungama", "Hindi")))
+        assertTrue("Tamil" in ChannelLanguage.channelSupportedLanguages(langCh("Disney Channel HD", "Hindi")))
+    }
+
+    @Test
+    fun supportedLanguages_discoveryDoesNotGainTamil() {
+        assertEquals(setOf("English"), ChannelLanguage.channelSupportedLanguages(langCh("Discovery", "English")))
+    }
+
+    @Test
+    fun supportedLanguages_shortKeysMatchWholeWordsOnly() {
+        assertEquals(setOf("English"), ChannelLanguage.channelSupportedLanguages(langCh("Nickname Network", "English")))
+        assertEquals(setOf("English"), ChannelLanguage.channelSupportedLanguages(langCh("ETLC", "English")))
+        assertTrue("Tamil" in ChannelLanguage.channelSupportedLanguages(langCh("Nick HD", "Hindi")))
+    }
+
+    @Test
+    fun supportedLanguages_noMapHitReturnsOwnLanguage() {
+        assertEquals(setOf("Tamil"), ChannelLanguage.channelSupportedLanguages(langCh("Zee Tamil", "Tamil")))
+    }
 }

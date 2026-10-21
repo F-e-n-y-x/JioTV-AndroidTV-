@@ -147,13 +147,12 @@ object ChannelLanguage {
     data class Variant(val langCode: String?, val channel: Channel)
 
     /**
-     * Channels broadcast with in-stream multi-audio tracks (Hindi, Tamil, Telugu, English...).
-     * Keyed by lowercase base channel name (without HD or language suffix).
+     * Channels known to carry in-stream multi-audio tracks, keyed by lowercase base name (no HD/language
+     * suffix), matched on whole words. Curated: confirm a channel really ships extra audio before adding.
      */
     private val MULTI_AUDIO_MAP: Map<String, Set<String>> = mapOf(
         "disney channel" to setOf("Hindi", "English", "Tamil", "Telugu"),
         "disney junior" to setOf("Hindi", "English", "Tamil", "Telugu"),
-        "disney international" to setOf("English", "Hindi"),
         "hungama" to setOf("Hindi", "Tamil", "Telugu"),
         "super hungama" to setOf("Hindi", "Tamil", "Telugu", "English"),
         "pogo" to setOf("Hindi", "Tamil", "Telugu"),
@@ -161,19 +160,7 @@ object ChannelLanguage {
         "nickelodeon" to setOf("Hindi", "English", "Tamil", "Telugu"),
         "nick" to setOf("Hindi", "English", "Tamil", "Telugu"),
         "cartoon network" to setOf("English", "Hindi", "Tamil", "Telugu", "Kannada", "Malayalam", "Marathi"),
-        "sony yay" to setOf("Hindi", "Tamil", "Telugu", "Bengali", "Malayalam"),
-        "discovery" to setOf("English", "Hindi", "Tamil", "Telugu", "Bengali", "Kannada"),
-        "discovery kids" to setOf("Hindi", "Tamil", "Telugu"),
-        "discovery science" to setOf("English", "Hindi"),
-        "discovery turbo" to setOf("English", "Hindi"),
-        "animal planet" to setOf("English", "Hindi", "Tamil", "Telugu"),
-        "tlc" to setOf("English", "Hindi", "Tamil", "Telugu"),
-        "national geographic" to setOf("English", "Hindi", "Tamil", "Telugu", "Bengali"),
-        "nat geo" to setOf("English", "Hindi", "Tamil", "Telugu", "Bengali"),
-        "nat geo wild" to setOf("English", "Hindi", "Tamil", "Telugu"),
-        "history tv18" to setOf("Hindi", "English", "Tamil", "Telugu", "Bengali", "Marathi", "Gujarati"),
-        "sony bbc earth" to setOf("English", "Hindi", "Tamil", "Telugu"),
-        "investigation discovery" to setOf("English", "Hindi", "Tamil", "Telugu")
+        "sony yay" to setOf("Hindi", "Tamil", "Telugu", "Bengali", "Malayalam")
     )
 
     /**
@@ -183,11 +170,9 @@ object ChannelLanguage {
     fun channelSupportedLanguages(channel: Channel, variantLangs: List<String> = emptyList()): Set<String> {
         val set = mutableSetOf(channel.language)
         variantLangs.forEach { set.add(it) }
-        val baseName = detect(channel.name).base.lowercase().trim()
+        val padded = " ${detect(channel.name).base.lowercase().trim()} "
         MULTI_AUDIO_MAP.forEach { (key, langs) ->
-            if (baseName.contains(key)) {
-                set.addAll(langs)
-            }
+            if (padded.contains(" $key ")) set.addAll(langs) // whole-word match: "nick" != "nickname"
         }
         return set
     }
