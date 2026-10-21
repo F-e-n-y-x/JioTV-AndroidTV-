@@ -1,8 +1,15 @@
-# JTV 2.0 beta 28
+# JTV 2.0 beta 29
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.28.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.29.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 28
+## New in beta 29
+- **A much better Voice Boost.** Voice Boost now listens for speech and lifts voices only while someone is talking, turning the background down a little at the same time. Music between lines is left alone, so it no longer "pumps", and switching it on no longer makes the sound quieter. It works on the many channels that are close to mono, where the old Voice Boost made little difference. Try **Medium** first; **Max** gives the most voice lift.
+
+---
+
+## Earlier betas
+
+### Beta 28
 - **Watch from the start.** Missed the beginning of a show? On channels with replay, open **Options (→)** in the player or the show in the **Guide** and choose **Watch from the start**. When you catch up, it goes back to live by itself.
 - **Faster.** The channel list appears straight away on start, channels start sooner after a zap, holding ↑ / ↓ no longer loads every channel on the way, and lists scroll more smoothly on slower boxes.
 - **Works on boxes with a wrong clock.** The app now uses Jio's time, so channels no longer reload every few seconds when the TV's clock is off.
