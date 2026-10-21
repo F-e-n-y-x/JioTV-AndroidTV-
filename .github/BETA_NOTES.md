@@ -1,8 +1,17 @@
-# JTV 2.0 beta 26
+# JTV 2.0 beta 27
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.26.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.27.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 26
+## New in beta 27
+- **Channel numbers show in full.** In the channel browser (press **←** while watching), 3, 4 and 5-digit numbers were cut to the first two digits. They now show in full (#13). The same fix applies to the Live TV grid, where 4-digit numbers next to the logo were cut off.
+- **Smaller numbers.** Channel numbers in the channel browser and the Live TV grid are smaller, so names get more room.
+- **Cleaner highlight.** The selected channel in the channel browser is now just the white highlight, without the yellow bar on its left.
+
+---
+
+## Earlier betas
+
+### Beta 26
 - **Replay on Sony channels.** Sony Yay (Hindi, Tamil, Telugu), SET, SET HD, Sony SAB, MAX, Pal, Aath, PIX, BBC Earth, Marathi and WAH had replay greyed out or failing with "This show can't be replayed right now". Replay now works on all of them. The first start after updating takes a little longer while the channel list is rebuilt once.
 - **Sony Vizha.** Replay works for the shows Jio has made available. Many Vizha shows are still not on Jio's side, and those stay unavailable.
 
