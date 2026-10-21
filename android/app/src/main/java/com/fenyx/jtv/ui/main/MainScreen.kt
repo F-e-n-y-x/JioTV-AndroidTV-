@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -37,6 +41,9 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -83,6 +90,7 @@ import com.fenyx.jtv.ui.components.progress
 import com.fenyx.jtv.ui.components.rememberMinuteClock
 import com.fenyx.jtv.ui.components.textStyle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** A category entry shown in the column (TV/tablet) or the chips (phone). */
 private data class Category(val key: String, val label: String, val count: Int)
@@ -92,6 +100,7 @@ private data class Category(val key: String, val label: String, val count: Int)
  * categories · channel list · preview on TV and wide tablets; chips · list · bottom bar on phones.
  * Live TV is the first screen; OK / tap plays; hold OK / long-press / the ⋮ button opens channel options.
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun MainScreen(
     onChannelClick: (Int, String?) -> Unit,
@@ -114,6 +123,10 @@ fun MainScreen(
     val favoriteChannels by viewModel.favoriteChannels.collectAsState()
     val epgMode by settingsManager.epgModeFlow.collectAsState(initial = false)
     val epgData by viewModel.epgData.collectAsState()
+    // List or grid (null until the saved choice has loaded, so nothing flashes in the wrong view).
+    val gridPref by settingsManager.channelGridFlow.collectAsState(initial = null)
+    val grid = gridPref == true
+    val scope = rememberCoroutineScope()
     com.fenyx.jtv.ui.settings.UpdatePrompt(viewModel)
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
     val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
@@ -195,7 +208,7 @@ fun MainScreen(
         }
         if (isFavoritesGroup && filteredChannels.size > 1) {
             val i = filteredChannels.indexOfFirst { it.id == ch.id }
-            add(ChannelAction(ctx.getString(R.string.home_action_move), ctx.getString(R.string.home_action_move_note)) {
+            add(ChannelAction(ctx.getString(R.string.home_action_move), ctx.getString(if (grid) R.string.home_action_move_note_grid else R.string.home_action_move_note)) {
                 workingOrder = filteredChannels; movingId = ch.id
             })
             if (i > 0) add(ChannelAction(ctx.getString(R.string.home_action_move_top)) {
@@ -232,31 +245,56 @@ fun MainScreen(
     }
 
     val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
+    // Columns of the grid as laid out (0 until it has been measured once).
+    var gridCols by remember { mutableIntStateOf(0) }
     var focusedId by remember { mutableStateOf<String?>(null) }
+    // Set when the user flips List/Grid: the channel they were on gets scrolled into view and is the one
+    // focus lands on when they press Down into the new view. Cleared as soon as a channel takes focus.
+    var restoreId by remember { mutableStateOf<String?>(null) }
+    // True while the channel that owns [targetFocus] is composed (focusing an unattached one would crash).
+    val targetAttached = remember { booleanArrayOf(false) }
 
     // Initial focus: the channel that was playing (back from the player), else the first channel.
     val targetFocus = remember { FocusRequester() }
-    val focusTargetId = remember(shown, lastChannelId) {
-        if (movingId != null) movingId else shown.firstOrNull { it.id == lastChannelId }?.id ?: shown.firstOrNull()?.id
+    val focusTargetId = remember(shown, lastChannelId, restoreId) {
+        if (movingId != null) movingId
+        else restoreId?.takeIf { id -> shown.any { it.id == id } } ?: shown.firstOrNull { it.id == lastChannelId }?.id ?: shown.firstOrNull()?.id
     }
     var initialFocusDone by remember { mutableStateOf(false) }
     // Touch devices get no initial focus highlight (a focus ring there reads as "selected").
     val requestInitialFocus = Jtv.isTv
-    LaunchedEffect(focusTargetId) {
-        if (!requestInitialFocus || initialFocusDone || focusTargetId == null || movingId != null) return@LaunchedEffect
+    LaunchedEffect(focusTargetId, gridPref, gridCols) {
+        if (!requestInitialFocus || initialFocusDone || focusTargetId == null || movingId != null || gridPref == null) return@LaunchedEffect
+        if (grid && gridCols == 0) return@LaunchedEffect // wait for the grid's first measure
         val idx = shown.indexOfFirst { it.id == focusTargetId }
-        if (idx > 2) listState.scrollToItem(idx - 2)
+        if (grid) gridState.scrollToItem(gridScrollTarget(idx.coerceAtLeast(0), gridCols))
+        else if (idx > 2) listState.scrollToItem(idx - 2)
         androidx.compose.runtime.withFrameNanos { }
         runCatching { targetFocus.requestFocus() }
         initialFocusDone = true
+    }
+    // After a List/Grid flip, bring the channel you were on into view in the new layout.
+    LaunchedEffect(grid, gridCols) {
+        val id = restoreId ?: return@LaunchedEffect
+        if (grid && gridCols == 0) return@LaunchedEffect
+        val idx = shown.indexOfFirst { it.id == id }
+        if (idx < 0) return@LaunchedEffect
+        if (grid) gridState.scrollToItem(gridScrollTarget(idx, gridCols)) else listState.scrollToItem((idx - 2).coerceAtLeast(0))
     }
     // Keep the moving row visible and focused after every step.
     LaunchedEffect(workingOrder) {
         val id = movingId ?: return@LaunchedEffect
         val idx = shown.indexOfFirst { it.id == id }
         if (idx < 0) return@LaunchedEffect
-        val vis = listState.layoutInfo.visibleItemsInfo.map { it.index }
-        if (vis.size < 3 || idx <= vis.first() || idx >= vis.last()) listState.scrollToItem((idx - 2).coerceAtLeast(0))
+        if (grid) {
+            val vis = gridState.layoutInfo.visibleItemsInfo.map { it.index }
+            val cols = gridCols.coerceAtLeast(1)
+            if (vis.size < cols || idx < vis.first() + cols || idx > vis.last() - cols) gridState.scrollToItem(gridScrollTarget(idx, cols))
+        } else {
+            val vis = listState.layoutInfo.visibleItemsInfo.map { it.index }
+            if (vis.size < 3 || idx <= vis.first() || idx >= vis.last()) listState.scrollToItem((idx - 2).coerceAtLeast(0))
+        }
         androidx.compose.runtime.withFrameNanos { }
         runCatching { targetFocus.requestFocus() }
     }
@@ -294,14 +332,16 @@ fun MainScreen(
             return@onPreviewKeyEvent true
         }
         if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-        val delta = when (e.key) {
-            Key.DirectionUp -> -1
-            Key.DirectionDown -> 1
-            Key.DirectionLeft, Key.DirectionRight -> return@onPreviewKeyEvent true
+        val step = when (e.key) {
+            Key.DirectionUp -> GridKey.Up
+            Key.DirectionDown -> GridKey.Down
+            Key.DirectionLeft -> GridKey.Left
+            Key.DirectionRight -> GridKey.Right
             else -> return@onPreviewKeyEvent false
         }
+        // List: Up/Down one place (Left/Right do nothing). Grid: Left/Right one place, Up/Down a whole row.
         val from = list.indexOfFirst { it.id == id }
-        val to = (from + delta).coerceIn(0, list.lastIndex)
+        val to = gridMoveTarget(from, step, if (grid) gridCols.coerceAtLeast(1) else 1, list.size)
         if (from >= 0 && to != from) workingOrder = FavoriteOrder.move(list, from, to)
         true
     }
@@ -310,6 +350,7 @@ fun MainScreen(
 
     val listContent: @Composable (RowMetrics, Boolean) -> Unit = { m, touch ->
         when {
+            gridPref == null -> {}
             isLoading && shown.isEmpty() -> CenterMessage { CircularProgressIndicator(color = c.acc) ; Spacer(Modifier.height(14.dp)); Text(stringResource(R.string.home_loading_channels), style = textStyle(16.sp), color = c.t2) }
             error != null && shown.isEmpty() -> CenterMessage {
                 Text(error ?: "", style = textStyle(17.sp), color = c.tx, textAlign = TextAlign.Center)
@@ -317,9 +358,42 @@ fun MainScreen(
                 JtvButton(stringResource(R.string.common_try_again), onClick = { viewModel.retry() }, primary = true)
             }
             shown.isEmpty() -> CenterMessage { Text(stringResource(R.string.home_no_channels_in_category), style = textStyle(16.sp), color = c.t2) }
+            grid -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                val cm = when (Jtv.form) { FormFactor.Tv -> TvCard; FormFactor.Tablet -> TabletCard; FormFactor.Phone -> PhoneCard }
+                val cols = gridColumns(maxWidth.value - 8f, cm.minCardDp, cm.gap.value, cm.minCols, cm.maxCols)
+                LaunchedEffect(cols) { gridCols = cols }
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(cols),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize().focusRestorer { if (restoreId != null && targetAttached[0]) targetFocus else FocusRequester.Default }.focusGroup(),
+                    // 4dp sides: the focused card scales up 3% and the grid clips what overflows it.
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(cm.gap),
+                    horizontalArrangement = Arrangement.spacedBy(cm.gap),
+                ) {
+                    gridItemsIndexed(shown, key = { _, ch -> ch.id }, contentType = { _, _ -> "card" }) { i, ch ->
+                        val programs = if (epgMode) epgData[ch.id] else null
+                        if (epgMode) LaunchedEffect(ch.id) { if (programs.isNullOrEmpty()) viewModel.fetchNativeEpgIfMissing(ch.id) }
+                        val nowProg = programs?.let { p -> p.firstOrNull { it.startMs <= now && now < it.stopMs } }
+                        if (ch.id == focusTargetId) TrackAttached(targetAttached)
+                        ChannelCard(
+                            channel = ch, nowProgram = nowProg, now = now, m = cm,
+                            isFavorite = !isFavoritesGroup && favoriteChannels.contains(ch.id),
+                            isMoving = ch.id == movingId,
+                            number = if (isFavoritesGroup) i + 1 else ch.channelNumber,
+                            onClick = { play(ch) },
+                            onLongClick = { if (movingId == null) menuChannel = ch },
+                            modifier = Modifier
+                                .then(if (ch.id == focusTargetId) Modifier.focusRequester(targetFocus) else Modifier)
+                                .onFocusChanged { if (it.isFocused) { focusedId = ch.id; restoreId = null; viewModel.prefetchSoon(ch.id) } }
+                                .then(if (movingId != null) Modifier.animateItem() else Modifier),
+                        )
+                    }
+                }
+            }
             else -> LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().focusRestorer().focusGroup(),
+                modifier = Modifier.fillMaxSize().focusRestorer { if (restoreId != null && targetAttached[0]) targetFocus else FocusRequester.Default }.focusGroup(),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
@@ -327,6 +401,7 @@ fun MainScreen(
                     val programs = if (epgMode) epgData[ch.id] else null
                     if (epgMode) LaunchedEffect(ch.id) { if (programs.isNullOrEmpty()) viewModel.fetchNativeEpgIfMissing(ch.id) }
                     val nowProg = programs?.let { p -> p.firstOrNull { it.startMs <= now && now < it.stopMs } }
+                    if (ch.id == focusTargetId) TrackAttached(targetAttached)
                     ChannelRow(
                         channel = ch, nowProgram = nowProg, now = now, m = m,
                         isFavorite = !isFavoritesGroup && favoriteChannels.contains(ch.id),
@@ -337,13 +412,15 @@ fun MainScreen(
                         
                         modifier = Modifier
                             .then(if (ch.id == focusTargetId) Modifier.focusRequester(targetFocus) else Modifier)
-                            .onFocusChanged { if (it.isFocused) { focusedId = ch.id; viewModel.prefetchSoon(ch.id) } }
+                            .onFocusChanged { if (it.isFocused) { focusedId = ch.id; restoreId = null; viewModel.prefetchSoon(ch.id) } }
                             .then(if (movingId != null) Modifier.animateItem() else Modifier),
                     )
                 }
             }
         }
     }
+
+    val onViewSelect: (Boolean) -> Unit = { g -> restoreId = focusedId; scope.launch { settingsManager.setChannelGrid(g) } }
 
     CompositionLocalProvider(LocalNow provides now) {
         BoxWithConstraints(modifier.fillMaxSize().background(c.bg).then(keys)) {
@@ -355,7 +432,14 @@ fun MainScreen(
                     onSearch = onSearchClick, onGuide = onGuideClick, onSettings = onSettingsClick,
                     movingName = movingId?.let { id -> shown.firstOrNull { it.id == id }?.name },
                     movingPos = movingId?.let { id -> shown.indexOfFirst { it.id == id } + 1 } ?: 0, total = shown.size,
+                    grid = grid, onViewSelect = onViewSelect,
                     list = { listContent(if (Jtv.isTv) TvRow else TouchRow.copy(height = 64.dp), false) },
+                    info = {
+                        focusedChannel?.let { ch ->
+                            LaunchedEffect(ch.id) { delay(250); viewModel.fetchNativeEpgIfMissing(ch.id) }
+                            GridInfoBar(ch, epgData[ch.id], now, if (isFavoritesGroup) shown.indexOfFirst { it.id == ch.id } + 1 else ch.channelNumber)
+                        }
+                    },
                     preview = {
                         focusedChannel?.let { ch ->
                             // The channel you rest on (after 0.25 s, so fast scrolling fetches nothing) and its
@@ -392,6 +476,7 @@ fun MainScreen(
                     categories = categories, selected = group, count = displayChannels.size,
                     onSelect = { viewModel.setSelectedGroup(it) },
                     onSearch = onSearchClick, onGuide = onGuideClick, onSettings = onSettingsClick,
+                    grid = grid, onViewSelect = onViewSelect,
                     list = { listContent(TouchRow, true) },
                 )
             }
@@ -404,6 +489,12 @@ fun MainScreen(
             }
         }
     }
+}
+
+/** Marks that the composable it sits in is on screen (see targetAttached in MainScreen). */
+@Composable
+private fun TrackAttached(flag: BooleanArray) {
+    DisposableEffect(Unit) { flag[0] = true; onDispose { flag[0] = false } }
 }
 
 @Composable
@@ -426,7 +517,10 @@ private fun WideHome(
     movingName: String?,
     movingPos: Int,
     total: Int,
+    grid: Boolean,
+    onViewSelect: (Boolean) -> Unit,
     list: @Composable () -> Unit,
+    info: @Composable () -> Unit,
     preview: @Composable () -> Unit,
 ) {
     val c = Jtv.colors
@@ -448,6 +542,8 @@ private fun WideHome(
                     color = if (movingName != null) c.acc else c.t3,
                 )
             }
+            // Up from the channels reaches this (and the tabs next to it).
+            ViewToggle(grid, onViewSelect, Modifier.padding(end = 20.dp, top = 2.dp))
             // TV: section tabs (Up from the list). Tablet: the left navigation rail does this job.
             if (tv) TvTabs(PhoneTab.Live, { t ->
                 when (t) { PhoneTab.Guide -> onGuide(); PhoneTab.Search -> onSearch(); PhoneTab.Settings -> onSettings(); else -> {} }
@@ -480,15 +576,24 @@ private fun WideHome(
                 }
             }
             Spacer(Modifier.width(20.dp))
-            Box(Modifier.weight(1f).fillMaxHeight()) { list() }
-            Spacer(Modifier.width(24.dp))
-            Box(Modifier.width(if (tv) 270.dp else 340.dp).fillMaxHeight()) { preview() }
+            if (grid) {
+                // Grid: the whole width for cards, the focused channel's details on a strip underneath.
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) { list() }
+                    Spacer(Modifier.height(8.dp))
+                    info()
+                }
+            } else {
+                Box(Modifier.weight(1f).fillMaxHeight()) { list() }
+                Spacer(Modifier.width(24.dp))
+                Box(Modifier.width(if (tv) 270.dp else 340.dp).fillMaxHeight()) { preview() }
+            }
         }
         if (tv) {
             Spacer(Modifier.height(8.dp))
             KeyHint(
                 if (movingName != null) listOf(
-                    stringResource(R.string.nav_key_up_down) to stringResource(R.string.nav_hint_move),
+                    (if (grid) stringResource(R.string.nav_key_arrows) else stringResource(R.string.nav_key_up_down)) to stringResource(R.string.nav_hint_move),
                     stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_save),
                     stringResource(R.string.nav_key_back) to stringResource(R.string.nav_hint_cancel),
                 )
@@ -512,6 +617,8 @@ private fun PhoneHome(
     onSearch: () -> Unit,
     onGuide: () -> Unit,
     onSettings: () -> Unit,
+    grid: Boolean,
+    onViewSelect: (Boolean) -> Unit,
     list: @Composable () -> Unit,
 ) {
     val c = Jtv.colors
@@ -525,7 +632,9 @@ private fun PhoneHome(
         Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.home_title), style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
             Spacer(Modifier.width(10.dp))
-            Text(pluralStringResource(R.plurals.common_channel_count, count, count), style = textStyle(14.sp), color = c.t3, maxLines = 1)
+            Text(pluralStringResource(R.plurals.common_channel_count, count, count), style = textStyle(14.sp), color = c.t3, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            ViewToggle(grid, onViewSelect)
         }
         LazyRow(
             state = chipState,

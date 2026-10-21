@@ -56,7 +56,7 @@ import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.launch
 
 /** Which second-level picker / dialog is open. */
-private enum class Sheet { None, Theme, DeviceType, AppLanguage, Accent, StartWith, OpenOnStart, AutoStartPermission, AutoStartNoScreen, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
+private enum class Sheet { None, Theme, DeviceType, AppLanguage, Accent, ChannelView, BrowserStyle, StartWith, OpenOnStart, AutoStartPermission, AutoStartNoScreen, Quality, Language, PictureSize, Buffer, EpgUrl, Update, ConfirmSignOut, ConfirmChangeMethod }
 
 /**
  * Settings, v2 "Everyday": a plain two-level list. Section labels, then rows of *label + current
@@ -89,6 +89,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         canAutoOpen = com.fenyx.jtv.AutoStart.allowed(context)
         onPauseOrDispose { }
     }
+    val channelGrid by settingsManager.channelGridFlow.collectAsState(initial = false)
+    val browserPanel by settingsManager.playerBrowserPanelFlow.collectAsState(initial = true)
     val groupLanguageVariants by settingsManager.groupLanguageVariantsFlow.collectAsState(initial = true)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
     val serverUrl by settingsManager.serverUrlFlow.collectAsState(initial = "")
@@ -225,6 +227,9 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         add(SRow.Item("categories", stringResource(R.string.settings_categories),
             value = if (hiddenCats == 0) stringResource(R.string.categories_all_shown) else stringResource(R.string.categories_n_hidden, hiddenCats),
             description = stringResource(R.string.settings_categories_desc)) { categoriesScreen = true })
+        add(SRow.Item("channelView", stringResource(R.string.settings_channel_view),
+            value = stringResource(if (channelGrid) R.string.home_view_grid else R.string.home_view_list),
+            description = stringResource(R.string.settings_channel_view_desc)) { sheet = Sheet.ChannelView })
         add(SRow.Item("start", stringResource(R.string.settings_start), value = stringResource(if (autoplayLastChannel) R.string.settings_start_last else R.string.settings_start_list),
             description = stringResource(R.string.settings_start_desc)) { sheet = Sheet.StartWith })
         if (isTv) add(SRow.Item("openOnStart", stringResource(R.string.settings_open_on_start),
@@ -242,6 +247,9 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         add(SRow.Item("buffer", stringResource(R.string.settings_buffer), value = bufferOptions.find { it.first == playbackBufferSec }?.second
             ?: pluralStringResource(R.plurals.settings_buffer_seconds, playbackBufferSec, playbackBufferSec),
             description = stringResource(R.string.settings_buffer_desc)) { sheet = Sheet.Buffer })
+        if (Jtv.isTv) add(SRow.Item("browser", stringResource(R.string.settings_browser_style),
+            value = stringResource(if (browserPanel) R.string.settings_browser_panel else R.string.settings_browser_strip),
+            description = stringResource(R.string.settings_browser_style_desc)) { sheet = Sheet.BrowserStyle })
         if (showPip) add(SRow.Item("pip", stringResource(R.string.settings_pip), value = onOff(pipOnLeave),
             description = stringResource(R.string.settings_pip_desc)) { scope.launch { settingsManager.setPipOnLeave(!pipOnLeave) } })
         if (showRemote) add(SRow.Item("remote", stringResource(R.string.settings_remote), value = remoteProfileLabel(remoteMap),
@@ -462,6 +470,15 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                     com.fenyx.jtv.AutoStart.sync(context, v)
                     sheet = if (v != com.fenyx.jtv.AutoStart.OFF && !com.fenyx.jtv.AutoStart.allowed(context)) Sheet.AutoStartPermission else Sheet.None
                 },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.ChannelView -> PickerDialog(stringResource(R.string.settings_channel_view),
+                listOf("list" to stringResource(R.string.home_view_list), "grid" to stringResource(R.string.home_view_grid)), if (channelGrid) "grid" else "list",
+                onSelect = { v -> scope.launch { settingsManager.setChannelGrid(v == "grid") }; sheet = Sheet.None },
+                onDismiss = { sheet = Sheet.None })
+            Sheet.BrowserStyle -> PickerDialog(stringResource(R.string.settings_browser_style),
+                listOf("panel" to stringResource(R.string.settings_browser_panel), "strip" to stringResource(R.string.settings_browser_strip)),
+                if (browserPanel) "panel" else "strip",
+                onSelect = { v -> scope.launch { settingsManager.setPlayerBrowserPanel(v == "panel") }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
             Sheet.StartWith -> PickerDialog(stringResource(R.string.settings_start), startOptions, if (autoplayLastChannel) "last" else "list",
                 onSelect = { v -> scope.launch { settingsManager.setAutoplayLastChannel(v == "last") }; sheet = Sheet.None },

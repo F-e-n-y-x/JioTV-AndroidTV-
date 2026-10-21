@@ -35,6 +35,11 @@
     <string name="home_loading_channels">Loading channels…</string>
     <string name="home_no_channels_in_category">No channels in this category</string>
     <string name="home_now">Now</string>
+    <string name="home_view_label">View</string>
+    <string name="home_view_list">List</string>
+    <string name="home_view_grid">Grid</string>
+    <string name="nav_key_arrows">Arrow keys</string>
+    <string name="home_action_move_note_grid">Use the arrow keys to place it, then press OK</string>
     <plurals name="home_min_left">
         <item quantity="one">%d min left</item>
         <item quantity="other">%d min left</item>

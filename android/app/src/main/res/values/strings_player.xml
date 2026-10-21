@@ -145,4 +145,10 @@
     <string name="player_replay_ended">%s has ended.</string>
     <string name="player_replay_next">Next: %1$s · %2$s</string>
     <string name="player_watch_next">Watch next programme</string>
+    <string name="player_key_ok_right">OK / Right</string>
+    <string name="player_hint_categories">categories</string>
+    <string name="player_hint_channel">channel</string>
+    <string name="player_hint_channels">channels</string>
+    <string name="player_hint_close">close</string>
+    <string name="player_panel_fav_note">Numbers follow your own order</string>
 </resources>

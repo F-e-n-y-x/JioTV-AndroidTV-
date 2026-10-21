@@ -31,6 +31,11 @@
     <string name="home_loading_channels">चैनल लोड हो रहे हैं…</string>
     <string name="home_no_channels_in_category">इस कैटेगरी में कोई चैनल नहीं है</string>
     <string name="home_now">अभी</string>
+    <string name="home_view_label">दृश्य</string>
+    <string name="home_view_list">सूची</string>
+    <string name="home_view_grid">ग्रिड</string>
+    <string name="nav_key_arrows">तीर वाली कुंजियाँ</string>
+    <string name="home_action_move_note_grid">तीर वाली कुंजियों से जगह चुनें, फिर OK दबाएँ</string>
     <plurals name="home_min_left">
         <item quantity="one">%d मिनट बाकी</item>
         <item quantity="other">%d मिनट बाकी</item>

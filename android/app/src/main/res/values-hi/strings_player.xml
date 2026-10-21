@@ -135,4 +135,10 @@
     <string name="player_replay_ended">%s खत्म हो गया।</string>
     <string name="player_replay_next">इसके बाद: %1$s · %2$s</string>
     <string name="player_watch_next">अगला प्रोग्राम देखें</string>
+    <string name="player_key_ok_right">OK / दाएँ</string>
+    <string name="player_hint_categories">कैटेगरी</string>
+    <string name="player_hint_channel">चैनल</string>
+    <string name="player_hint_channels">चैनल</string>
+    <string name="player_hint_close">बंद करें</string>
+    <string name="player_panel_fav_note">नंबर आपके अपने क्रम में हैं</string>
 </resources>

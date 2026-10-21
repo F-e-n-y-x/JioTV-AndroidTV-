@@ -195,6 +195,8 @@ fun TvPlayerScreen(
 
     // Programme guide: the channel being watched always gets its guide; other rows follow the setting.
     val epgModeState = settingsManager.epgModeFlow.collectAsState(initial = false)
+    // TV channel browser: two-pane panel (default) or the old tile strip.
+    val browserPanel by settingsManager.playerBrowserPanelFlow.collectAsState(initial = true)
     val epg = remember(vm) { EpgSource(vm, epgModeState) }
 
     var quality by remember { mutableStateOf("auto") }
@@ -1411,6 +1413,7 @@ fun TvPlayerScreen(
         actions = actions,
         timeshift = ts,
         buffering = isBuffering && playbackError == null,
+        browserPanel = browserPanel,
     )
 
     // Keep focus somewhere sensible: on the error's first button (TV), else on the player itself, so
@@ -1694,12 +1697,13 @@ fun TvPlayerScreen(
                             true
                         }
                         Key.DirectionUp -> when (ov) {
-                            PlayerOverlay.Browse -> { browseCategory(-1); true }
+                            // Strip: Up/Down switch category. Panel: its own columns take the arrows.
+                            PlayerOverlay.Browse -> if (browserPanel) false else { browseCategory(-1); true }
                             PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
                             else -> { doZap(if (upIsNext) 1 else -1); true }
                         }
                         Key.DirectionDown -> when (ov) {
-                            PlayerOverlay.Browse -> { browseCategory(1); true }
+                            PlayerOverlay.Browse -> if (browserPanel) false else { browseCategory(1); true }
                             PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
                             else -> { doZap(if (upIsNext) -1 else 1); true }
                         }

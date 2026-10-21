@@ -42,10 +42,8 @@ import com.fenyx.jtv.data.Channel
 import com.fenyx.jtv.data.EpgProgram
 import com.fenyx.jtv.theme.Jtv
 import com.fenyx.jtv.ui.components.ChannelPlate
-import com.fenyx.jtv.ui.components.EndsSoonPill
 import com.fenyx.jtv.ui.components.JtvClickable
 import com.fenyx.jtv.ui.components.JtvProgress
-import com.fenyx.jtv.ui.components.minutesLeft
 import com.fenyx.jtv.ui.components.numberStyle
 import com.fenyx.jtv.ui.components.progress
 import com.fenyx.jtv.ui.components.textStyle
@@ -127,10 +125,6 @@ fun ChannelRow(
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    // Only the last few minutes: most shows end on the half hour, so a 10-minute rule lit up every row.
-                    if (nowProgram != null && nowProgram.minutesLeft(now) <= 5) {
-                        EndsSoonPill(nowProgram.stopMs, Modifier.padding(start = 8.dp), fontSize = 12.sp)
-                    }
                 }
                 if (nowProgram != null) {
                     JtvProgress(

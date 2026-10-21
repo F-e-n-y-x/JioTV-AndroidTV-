@@ -142,6 +142,8 @@ internal class OverlayData(
     val timeshift: Timeshift,
     /** A buffering spinner is up (drawn round Play/Pause in the controls). */
     val buffering: Boolean = false,
+    /** TV channel browser: true = two-pane panel (default), false = the old tile strip. */
+    val browserPanel: Boolean = true,
 )
 
 @Composable
@@ -164,14 +166,16 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
             BannerAutoHide(ui, 4_000, paused = d.model.paused, ts = d.timeshift)
             val ov = ui.overlay
             val browsing = ov == PlayerOverlay.Browse
+            val panel = browsing && d.browserPanel
+            val strip = browsing && !d.browserPanel
             val strapVisible = ov == PlayerOverlay.Banner || browsing
             val bGroup = ui.browseGroup
-            val browseList = remember(bGroup, browsing) { if (browsing) d.resolveGroup(bGroup) else emptyList() }
+            val browseList = remember(bGroup, strip) { if (strip) d.resolveGroup(bGroup) else emptyList() }
             val onRailFocus = remember(ui) { { i: Int -> ui.browseIndex = i } }
             val onRailClick = remember(bGroup) { { i: Int -> act.tune(bGroup, i) } }
 
             // Top-left: category header while browsing, or the mouse top bar.
-            if (browsing) {
+            if (strip) {
                 val (prev, next) = neighbours(d.browseGroups, bGroup)
                 BrowseHeader(
                     groupLabel(bGroup), browseList.size, prev, next,
@@ -195,11 +199,16 @@ internal fun TvOverlays(ui: PlayerUi, d: OverlayData) {
             }
 
             AnimatedVisibility(
-                visible = strapVisible, enter = fadeInFast, exit = fadeOutFast,
+                visible = panel, enter = fadeInFast, exit = fadeOutFast,
+                modifier = Modifier.align(Alignment.CenterStart),
+            ) { BrowsePanel(ui, d) }
+
+            AnimatedVisibility(
+                visible = ov == PlayerOverlay.Banner || strip, enter = fadeInFast, exit = fadeOutFast,
                 modifier = Modifier.align(Alignment.BottomStart),
             ) {
                 Column(Modifier.fillMaxWidth().padding(start = 48.dp, end = 48.dp, top = 27.dp)) {
-                    if (browsing && browseList.isNotEmpty()) {
+                    if (strip && browseList.isNotEmpty()) {
                         ChannelRail(
                             channels = browseList,
                             playingId = d.playing?.id,

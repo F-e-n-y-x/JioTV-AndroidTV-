@@ -342,6 +342,8 @@
     <string name="device_tv">TV</string>
     <string name="device_phone">Phone</string>
     <string name="device_tablet">Tablet</string>
+    <string name="settings_channel_view">Channel view</string>
+    <string name="settings_channel_view_desc">Show channels as a list, or as a grid of cards</string>
     <string name="settings_categories">Categories</string>
     <string name="settings_categories_desc">Choose which categories to show, and their order</string>
     <string name="categories_intro">Press OK on a category to show or hide it, or move it. All channels always stays.</string>
@@ -363,4 +365,8 @@
     <string name="channel_languages_n_hidden">%d hidden</string>
     <string name="channel_languages_show_all">Show all</string>
     <string name="channel_languages_hide_all">Hide all</string>
+    <string name="settings_browser_style">Channel browser</string>
+    <string name="settings_browser_style_desc">The list that opens when you press Left while watching</string>
+    <string name="settings_browser_panel">Two-pane</string>
+    <string name="settings_browser_strip">Strip</string>
 </resources>

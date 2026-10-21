@@ -32,6 +32,10 @@ class SettingsManager(private val context: Context) {
         private val GROUP_LANGUAGE_VARIANTS = booleanPreferencesKey("group_language_variants")
 
         private val EPG_MODE = booleanPreferencesKey("epg_mode")
+        // Live TV page: false = list (default), true = grid.
+        private val CHANNEL_GRID = booleanPreferencesKey("channel_grid_view")
+        // TV player channel browser: "panel" (two-pane, default) or "strip" (the old tile strip).
+        private val PLAYER_BROWSER_STYLE = stringPreferencesKey("player_browser_style")
         private val EPG_URL = stringPreferencesKey("epg_url")
         private val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
         // When the favourites list last changed (wall clock ms). LAN sync: the newer list wins.
@@ -157,6 +161,18 @@ class SettingsManager(private val context: Context) {
     val epgModeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[EPG_MODE] ?: false
     }.distinctUntilChanged()
+
+    val channelGridFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[CHANNEL_GRID] ?: false
+    }.distinctUntilChanged()
+
+    val playerBrowserPanelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PLAYER_BROWSER_STYLE] != "strip"
+    }.distinctUntilChanged()
+
+    suspend fun setPlayerBrowserPanel(panel: Boolean) {
+        context.dataStore.edit { preferences -> preferences[PLAYER_BROWSER_STYLE] = if (panel) "panel" else "strip" }
+    }
 
     val epgUrlFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[EPG_URL] ?: "https://avkb.short.gy/epg.xml.gz"
@@ -341,6 +357,10 @@ class SettingsManager(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences[EPG_MODE] = enabled
         }
+    }
+
+    suspend fun setChannelGrid(grid: Boolean) {
+        context.dataStore.edit { preferences -> preferences[CHANNEL_GRID] = grid }
     }
 
     suspend fun setEpgUrl(url: String) {
