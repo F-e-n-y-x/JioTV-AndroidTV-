@@ -19,8 +19,11 @@ BRANCH=$(git branch --show-current)
 APK=app/build/outputs/apk/release/app-release.apk
 SDK=${ANDROID_HOME:-$(sed -n 's/^sdk.dir=//p' local.properties 2>/dev/null)}
 BT=$(ls -d "${SDK:-/opt/android-sdk}"/build-tools/*/ | sort -V | tail -1)
-"$BT/apksigner" verify --print-certs "$APK" | grep -q "Android Debug" && { echo "APK is debug-signed" >&2; exit 1; }
-"$BT/aapt2" dump badging "$APK" | grep -q "versionName='$VER'" || { echo "APK versionName is not $VER" >&2; exit 1; }
+# Capture first: grep -q closing the pipe early would make apksigner/aapt2 fail under pipefail.
+CERTS=$("$BT/apksigner" verify --print-certs "$APK")
+[[ "$CERTS" != *"Android Debug"* ]] || { echo "APK is debug-signed" >&2; exit 1; }
+BADGING=$("$BT/aapt2" dump badging "$APK")
+[[ "$BADGING" == *"versionName='$VER'"* ]] || { echo "APK versionName is not $VER" >&2; exit 1; }
 
 OUT="$(mktemp -d)/JTV-$TAG.apk"
 cp "$APK" "$OUT"
