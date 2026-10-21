@@ -469,9 +469,18 @@ private fun PlayerForChannel(
     val allChannelsByGroup = remember(playerGroups, allChannels) {
         playerGroups.associateWith { g -> mainViewModel.getChannelsByGroup(g) }
     }
-    val filteredIndex = remember(channels, allChannels, channelIndex) {
-        val targetChannel = allChannels.getOrNull(channelIndex)
-        if (targetChannel != null) channels.indexOf(targetChannel).coerceAtLeast(0) else 0
+    val filteredIndex = remember(channels, allChannels, channelIndex, group) {
+        if (group == MainViewModel.GROUP_FAVORITES || group == MainViewModel.GROUP_ALL_GLOBAL) {
+            channelIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+        } else {
+            val targetChannel = allChannels.getOrNull(channelIndex)
+            if (targetChannel != null) {
+                val idx = channels.indexOf(targetChannel)
+                if (idx >= 0) idx else channelIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            } else {
+                channelIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            }
+        }
     }
     val variantsFor = remember(mainViewModel) { { id: String -> mainViewModel.variantsFor(id) } }
 

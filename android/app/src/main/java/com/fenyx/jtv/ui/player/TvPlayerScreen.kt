@@ -1718,7 +1718,7 @@ fun TvPlayerScreen(
         ) {
             // The ONE video surface: always the first child, in every mode (full, portrait page, mini),
             // so it is never recreated; only its box changes (layout phase). Everything else draws over it.
-            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode).pipSourceRect(activity, enabled = !isTv && !inPip))
+            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode).pipSourceRect(activity, enabled = !isTv && !inPip), currentChannel)
 
             val name = currentChannel?.name
             val buffering = isBuffering && playbackError == null
@@ -1826,7 +1826,7 @@ fun TvPlayerScreen(
 /** The video. Its own composable so overlay changes never recompose (or re-layout) the PlayerView. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier) {
+private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier, channel: Channel? = null) {
     // Debuggable builds only: a "novideo" file in the app's external files dir replaces the picture with
     // a neutral placeholder, so UI screenshots for the README never contain channel video.
     val ctx0 = LocalContext.current
@@ -1837,11 +1837,11 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
 
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
 
-    DisposableEffect(player, resizeMode) {
+    DisposableEffect(player, resizeMode, channel) {
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
                 playerViewRef?.let { view ->
-                    view.post { applyAspectRatio(view, player, resizeMode) }
+                    view.post { applyAspectRatio(view, player, resizeMode, channel) }
                 }
             }
         }
@@ -1865,7 +1865,7 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
                     clipToPadding = false
                     setBackgroundColor(android.graphics.Color.BLACK)
                     playerViewRef = this
-                    post { applyAspectRatio(this, player, resizeMode) }
+                    post { applyAspectRatio(this, player, resizeMode, channel) }
                 }
             },
             update = { view ->
@@ -1873,7 +1873,7 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
                 if (!noVideo && view.player !== player) {
                     view.player = player
                 }
-                applyAspectRatio(view, player, resizeMode)
+                applyAspectRatio(view, player, resizeMode, channel)
             },
             onRelease = { view ->
                 if (playerViewRef === view) playerViewRef = null
@@ -1899,7 +1899,7 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier)
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
-private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: Int) {
+private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: Int, channel: Channel? = null) {
     val contentFrame = view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame) ?: return
     val parentWidth = view.width.takeIf { it > 0 } ?: view.resources.displayMetrics.widthPixels
     val parentHeight = view.height.takeIf { it > 0 } ?: view.resources.displayMetrics.heightPixels
@@ -1908,7 +1908,17 @@ private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: In
     val rawW = videoSize.width
     val rawH = videoSize.height
     val par = if (videoSize.pixelWidthHeightRatio > 0f) videoSize.pixelWidthHeightRatio else 1.0f
-    val streamAspect = if (rawW > 0 && rawH > 0) (rawW * par) / rawH.toFloat() else (16f / 9f)
+    var streamAspect = if (rawW > 0 && rawH > 0) (rawW * par) / rawH.toFloat() else (16f / 9f)
+
+    // SD PAL channels (e.g. Kalaignar TV 720x576) often omit SAR in the HLS manifest,
+    // yielding raw 5:4 (1.25) instead of standard 4:3 (1.333).
+    // If the Jio API declared aspect ratio is "4x3" OR if it's an SD stream with raw aspect near 1.25 (and not declared 16x9),
+    // treat effective aspect as 4:3 so it fills the proper 4:3 pillarbox area.
+    if (channel?.aspectRatio == "4x3" || (channel?.aspectRatio != "16x9" && rawH in 1..576 && streamAspect in 1.15f..1.35f)) {
+        streamAspect = 4.0f / 3.0f
+    } else if (channel?.aspectRatio == "16x9" && streamAspect < 1.5f && (rawH in 1..576 || rawW in 1..1024)) {
+        streamAspect = 16.0f / 9.0f
+    }
 
     val is43Stream = streamAspect < 1.5f
     val isSdStream = (rawH in 1..576) || (rawW in 1..1024 && rawH in 1..600)

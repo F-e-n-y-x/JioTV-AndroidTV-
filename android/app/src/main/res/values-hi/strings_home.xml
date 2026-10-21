@@ -144,4 +144,6 @@
     </plurals>
     <string name="search_recently_watched">हाल में देखे</string>
     <string name="search_favourites">फ़ेवरेट</string>
+    <string name="search_scope_global">सभी 1000+ चैनल</string>
+    <string name="search_scope_filtered">चुनी भाषाएं</string>
 </resources>

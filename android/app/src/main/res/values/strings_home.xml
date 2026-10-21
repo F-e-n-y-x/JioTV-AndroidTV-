@@ -153,4 +153,6 @@
     </plurals>
     <string name="search_recently_watched">Recently watched</string>
     <string name="search_favourites">Favourites</string>
+    <string name="search_scope_global">All 1000+ Channels</string>
+    <string name="search_scope_filtered">Filtered Languages</string>
 </resources>

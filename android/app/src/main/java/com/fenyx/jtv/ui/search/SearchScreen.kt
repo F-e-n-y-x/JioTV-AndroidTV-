@@ -17,10 +17,12 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -57,22 +59,54 @@ fun SearchScreen(
     val c = Jtv.colors
     val isTv = Jtv.isTv
     val isPhone = Jtv.form == FormFactor.Phone
-    val allChannels by viewModel.displayChannels.collectAsState()
-    val indexMap = remember(allChannels) { allChannels.withIndex().associate { (i, c) -> c.id to i } }
+    val displayChannels by viewModel.displayChannels.collectAsState()
+    val rawAllChannels by viewModel.allChannels.collectAsState()
+
+    var globalSearch by remember { mutableStateOf(true) }
+
+    val activeChannels = remember(globalSearch, rawAllChannels, displayChannels) {
+        if (globalSearch && rawAllChannels.isNotEmpty()) rawAllChannels.sortedBy { it.channelNumber } else displayChannels
+    }
+    val indexMap = remember(activeChannels) { activeChannels.withIndex().associate { (i, c) -> c.id to i } }
+
+    val allSorted = remember(rawAllChannels, displayChannels) {
+        (if (rawAllChannels.isNotEmpty()) rawAllChannels else displayChannels).sortedBy { it.channelNumber }
+    }
+    val globalIndexMap = remember(allSorted) { allSorted.withIndex().associate { (i, c) -> c.id to i } }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val settings = remember { com.fenyx.jtv.data.SettingsManager(context) }
     val recentIds by settings.recentChannelsFlow.collectAsState(initial = emptyList())
     val favoriteOrder by viewModel.favoriteOrder.collectAsState()
-    val byId = remember(allChannels) { allChannels.associateBy { it.id } }
+
+    // Persistent favorites & recents: resolve against all channels so channels in other languages are preserved
+    val globalPool = remember(rawAllChannels, displayChannels) {
+        if (rawAllChannels.isNotEmpty()) rawAllChannels else displayChannels
+    }
+    val byId = remember(globalPool) { globalPool.associateBy { it.id } }
     val recents = remember(recentIds, byId) { recentIds.mapNotNull { byId[it] } }
     val favourites = remember(favoriteOrder, byId) { favoriteOrder.mapNotNull { byId[it] } }
 
+    fun playChannel(ch: Channel) {
+        if (globalSearch) {
+            val idx = indexMap[ch.id] ?: globalIndexMap[ch.id] ?: 0
+            onChannelClick(idx, MainViewModel.GROUP_ALL_GLOBAL)
+        } else {
+            val idx = indexMap[ch.id]
+            if (idx != null) {
+                onChannelClick(idx, null)
+            } else {
+                val gIdx = globalIndexMap[ch.id] ?: 0
+                onChannelClick(gIdx, MainViewModel.GROUP_ALL_GLOBAL)
+            }
+        }
+    }
+
     var query by remember { mutableStateOf("") }
-    val results = remember(query, allChannels) {
+    val results = remember(query, activeChannels) {
         val q = query.trim()
         if (q.isEmpty()) emptyList()
-        else allChannels.filter { ch ->
+        else activeChannels.filter { ch ->
             // Match the representative's name, or any collapsed language variant's name, so a hidden
             // feed like "Colors Kannada" is still findable via its "Colors" tile.
             ch.name.contains(q, ignoreCase = true) ||
@@ -95,7 +129,7 @@ fun SearchScreen(
     var menuChannel by remember { mutableStateOf<Channel?>(null) }
     menuChannel?.let { ch ->
         val actions = buildList {
-            add(com.fenyx.jtv.ui.main.ChannelAction(context.getString(R.string.home_watch)) { onChannelClick(indexMap[ch.id] ?: 0, null) })
+            add(com.fenyx.jtv.ui.main.ChannelAction(context.getString(R.string.home_watch)) { playChannel(ch) })
             if (ch.isCatchup && onTab != null) add(com.fenyx.jtv.ui.main.ChannelAction(context.getString(R.string.home_action_replay_earlier), context.getString(R.string.home_action_replay_earlier_note)) {
                 viewModel.requestGuideFocus(ch.id)
                 onTab(com.fenyx.jtv.ui.main.PhoneTab.Guide)
@@ -163,7 +197,58 @@ fun SearchScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // ─── Scope toggle: Global (all 1000+ channels) vs Filtered (active languages) ───
+        Row(
+            modifier = Modifier.padding(bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            JtvClickable(
+                onClick = { globalSearch = true },
+                shape = RoundedCornerShape(16.dp),
+                container = Color.Transparent,
+                focusedContainer = Color.Transparent
+            ) { focused ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (globalSearch) c.acc else if (focused) c.s2 else c.s1)
+                        .border(1.dp, if (focused) c.invTx else Color.Transparent, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.search_scope_global),
+                        style = textStyle(14.sp, if (globalSearch) FontWeight.Bold else FontWeight.Normal),
+                        color = if (globalSearch) c.invTx else if (focused) c.tx else c.t2
+                    )
+                }
+            }
+
+            JtvClickable(
+                onClick = { globalSearch = false },
+                shape = RoundedCornerShape(16.dp),
+                container = Color.Transparent,
+                focusedContainer = Color.Transparent
+            ) { focused ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (!globalSearch) c.acc else if (focused) c.s2 else c.s1)
+                        .border(1.dp, if (focused) c.invTx else Color.Transparent, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.search_scope_filtered),
+                        style = textStyle(14.sp, if (!globalSearch) FontWeight.Bold else FontWeight.Normal),
+                        color = if (!globalSearch) c.invTx else if (focused) c.tx else c.t2
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         // One list, in the owner's order: search results, then Recently watched, then Favourites.
         val q = query.trim()
@@ -194,7 +279,7 @@ fun SearchScreen(
                             channel = channel,
                             compact = isPhone,
                             modifier = if (firstSection && channel.id == firstId) Modifier.focusRequester(firstResultFocus) else Modifier,
-                            onClick = { onChannelClick(indexMap[channel.id] ?: 0, null) },
+                            onClick = { playChannel(channel) },
                             onLongClick = { menuChannel = channel },
                         )
                     }

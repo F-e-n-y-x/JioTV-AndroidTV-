@@ -1,8 +1,26 @@
-# JTV 2.0 beta 22
+# JTV 2.0 beta 23
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.22.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.23.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 22
+## New in beta 23
+- **Global Search across all 1000+ Channels (#12):**
+  - Added a search scope toggle in the Search screen: toggle between searching all 1000+ channels globally or searching within your active language filters.
+  - Channels selected from global search launch directly with seamless navigation.
+- **Persistent Favorites across Language Filters (#11, #12):**
+  - Favorited channels in any language remain permanently visible and accessible in the Favourites category and Search, even when that language is filtered out in Live TV settings.
+  - Fixed the favorite channel count discrepancy: the category tab badge and the Live TV list header count now match 100% accurately.
+- **Aspect Ratio "Fit" Framing for SD Channels (#11):**
+  - Fixed PAL standard definition channels (e.g. Kalaignar TV, 720x576) squishing horizontally in "Fit" mode due to missing SAR metadata in HLS streams.
+  - The player now recognizes Jio's declared 4:3 aspect ratio and standard PAL SD dimensions, accurately framing the picture in true 4:3 proportions without distortion.
+- **Sony YAY Tamil Catch-up & Multi-Audio Channel Filtering (#10):**
+  - Fixed catch-up replay for Sony YAY and other Sony channels by automatically falling back to Widevine DRM DASH streams when clear HLS catch-up manifests are missing or 404 on Jio's CDN.
+  - Channels broadcast with multi-language in-stream audio (Hungama, Disney Channel, Super Hungama, Pogo, Sonic, Nickelodeon, Cartoon Network, Discovery, Animal Planet, etc.) remain visible when filtering by Tamil, Telugu, or other supported audio languages.
+
+---
+
+## Earlier betas
+
+### Beta 22
 - **Hardware-Accelerated Scaling & Full Aspect Ratio Fix for Zee Talkies & SD Channels:**
   - After examining and decoding the authentic live broadcast frames of Zee Talkies (`1024x576`), resolved the windowboxing (postage-stamp) and aspect ratio limitations on Android TV:
   - **Zoom (Crop Black Bars)**: Eliminates both the top/bottom letterbox bars and left/right pillarbox bars on SD movie channels like Zee Talkies, scaling the picture symmetrically to fill the 16:9 screen with 100% natural, undistorted proportions.

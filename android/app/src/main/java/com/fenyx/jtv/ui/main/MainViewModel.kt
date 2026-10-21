@@ -34,6 +34,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val GROUP_ALL: String = "__ALL__"
         const val GROUP_FAVORITES: String = "__FAVORITES__"
         const val GROUP_RECENT: String = "__RECENT__"
+        const val GROUP_ALL_GLOBAL: String = "__ALL_GLOBAL__"
     }
 
     private val settingsManager = SettingsManager(application)
@@ -55,6 +56,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, com.fenyx.jtv.data.CategoryPrefs())
 
     private val _allChannels = MutableStateFlow<List<Channel>>(emptyList())
+    val allChannels: StateFlow<List<Channel>> = _allChannels.asStateFlow()
 
     // Channels as shown in the UI: language-variant collapsing is applied here when enabled, so every
     // consumer (grid, per-group player list, index maps) sees the same collapsed list.
@@ -157,7 +159,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 settingsManager.groupLanguageVariantsFlow.distinctUntilChanged(),
                 settingsManager.hiddenLanguagesFlow.distinctUntilChanged()
             ) { all, groupOn, hiddenLangs ->
-                val filtered = if (hiddenLangs.isEmpty()) all else all.filter { it.language !in hiddenLangs }
+                val filtered = if (hiddenLangs.isEmpty()) all else all.filter { ch ->
+                    val supported = com.fenyx.jtv.data.ChannelLanguage.channelSupportedLanguages(ch)
+                    supported.any { it !in hiddenLangs }
+                }
                 val effective = if (filtered.isEmpty()) all else filtered
                 val pair = if (groupOn && effective.isNotEmpty()) com.fenyx.jtv.data.ChannelLanguage.collapse(effective)
                 else effective to emptyMap<String, List<com.fenyx.jtv.data.ChannelLanguage.Variant>>()
@@ -258,7 +263,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val byId = all.associateBy { it.id }
             return recent.mapNotNull { byId[it] }
         }
-        if (group == GROUP_FAVORITES) return FavoriteOrder.sortedFavorites(all, order) { it.id }
+        if (group == GROUP_FAVORITES) {
+            // Persistent Favorites: Resolve against ALL channels so favorited channels
+            // remain visible even when their language is filtered out from Live TV!
+            val pool = if (_allChannels.value.isNotEmpty()) _allChannels.value else all
+            return FavoriteOrder.sortedFavorites(pool, order) { it.id }
+        }
+        if (group == GROUP_ALL_GLOBAL) {
+            return _allChannels.value.sortedBy { it.channelNumber }
+        }
         val list = if (group == null || group == GROUP_ALL) all else all.filter { it.group == group }
         if (order.isEmpty()) return list.sortedBy { it.channelNumber }
         val rank = order.withIndex().associate { (i, id) -> id to i }

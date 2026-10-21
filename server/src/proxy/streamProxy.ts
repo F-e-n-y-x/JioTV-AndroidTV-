@@ -155,6 +155,16 @@ async function resolveOnce(key: string): Promise<CachedStream> {
     } else {
       learnMode(channelId, "drm");
     }
+  } else if (catchup && !data.isMpd && data.streamUrl) {
+    if (!(await masterAlive(data.streamUrl, data.streamHeaders))) {
+      // Catch-up HLS returned 404/dead (e.g. Sony YAY / Sony channels) — fall back to Widevine DASH
+      try {
+        const drm = await getStreamData(channelId, activeCreds, { catchup, preferDrm: true });
+        if (drm.isMpd && drm.streamUrl && (await masterAlive(drm.streamUrl, drm.streamHeaders))) {
+          data = drm;
+        }
+      } catch {}
+    }
   }
 
   deadCache.delete(key);

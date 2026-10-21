@@ -19,5 +19,7 @@ data class Channel(
     /** v3.1 `is_premium`. */
     val isPremium: Boolean = false,
     /** v3.1 `plan_type` ("free", "premium", ...), "" when absent. */
-    val planType: String = ""
+    val planType: String = "",
+    /** Jio API declared aspect ratio ("4x3", "16x9"), "" when absent. */
+    val aspectRatio: String = ""
 )

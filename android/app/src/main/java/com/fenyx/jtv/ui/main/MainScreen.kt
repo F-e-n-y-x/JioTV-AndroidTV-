@@ -132,10 +132,16 @@ fun MainScreen(
     val recentCount = remember(recentIds, displayChannels) { val ids = displayChannels.mapTo(HashSet()) { it.id }; recentIds.count { it in ids } }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val catPrefs by viewModel.categoryPrefs.collectAsState()
-    val categories = remember(displayChannels, groups, favoriteChannels, recentCount, ctx, catPrefs) {
+    val allChannels by viewModel.allChannels.collectAsState()
+    val favoriteOrder by viewModel.favoriteOrder.collectAsState()
+    val favoritesList = remember(allChannels, displayChannels, favoriteOrder) {
+        val pool = if (allChannels.isNotEmpty()) allChannels else displayChannels
+        FavoriteOrder.sortedFavorites(pool, favoriteOrder) { it.id }
+    }
+    val categories = remember(displayChannels, groups, favoritesList, recentCount, ctx, catPrefs) {
         val counts = displayChannels.groupingBy { it.group }.eachCount()
         buildList<Category> {
-            if (favoriteChannels.isNotEmpty()) add(Category(MainViewModel.GROUP_FAVORITES, ctx.getString(R.string.home_cat_favourites), favoriteChannels.size))
+            if (favoritesList.isNotEmpty()) add(Category(MainViewModel.GROUP_FAVORITES, ctx.getString(R.string.home_cat_favourites), favoritesList.size))
             if (recentCount > 0) add(Category(MainViewModel.GROUP_RECENT, ctx.getString(R.string.home_cat_recent), recentCount))
             add(Category(MainViewModel.GROUP_ALL, ctx.getString(R.string.home_cat_all_channels), displayChannels.size))
             groups.forEach { add(Category(it, Labels.groupRes(it)?.let(ctx::getString) ?: it, counts[it] ?: 0)) }
@@ -164,7 +170,12 @@ fun MainScreen(
             if (from >= 0 && to >= 0) workingOrder = FavoriteOrder.move(list, from, to)
             commitMove(); return
         }
-        onChannelClick(indexById[ch.id] ?: 0, selectedGroup)
+        val targetIndex = if (isFavoritesGroup) {
+            shown.indexOfFirst { it.id == ch.id }.coerceAtLeast(0)
+        } else {
+            indexById[ch.id] ?: 0
+        }
+        onChannelClick(targetIndex, selectedGroup)
     }
 
     fun actionsFor(ch: Channel): List<ChannelAction> = buildList {

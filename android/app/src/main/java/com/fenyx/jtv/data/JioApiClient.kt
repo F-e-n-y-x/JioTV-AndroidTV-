@@ -582,7 +582,8 @@ object JioApiClient {
                     isCatchup = obj.optBoolean("isCatchup", false),
                     stbNumber = obj.optInt("stbNumber", 0),
                     isPremium = obj.optBoolean("isPremium", false),
-                    planType = obj.optString("planType", "")
+                    planType = obj.optString("planType", ""),
+                    aspectRatio = obj.optString("aspectRatio", "")
                 ))
             }
             // Clean up any legacy dummy Zee channels (e.g. "zee_9001" or group "Zee") from previous builds
@@ -683,6 +684,7 @@ object JioApiClient {
                                     var stb = 0
                                     var isPremium = false
                                     var planType = ""
+                                    var aspectRatio = ""
                                     while (reader.hasNext()) {
                                         when (reader.nextName()) {
                                             "channel_id" -> channelId = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
@@ -695,6 +697,7 @@ object JioApiClient {
                                             "stbChannelNumber" -> stb = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
                                             "is_premium" -> isPremium = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
                                             "plan_type" -> planType = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
+                                            "aspectRatio" -> aspectRatio = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
                                             else -> reader.skipValue()
                                         }
                                     }
@@ -712,7 +715,8 @@ object JioApiClient {
                                             isCatchup = isCatchup,
                                             stbNumber = stb.coerceAtLeast(0),
                                             isPremium = isPremium,
-                                            planType = planType
+                                            planType = planType,
+                                            aspectRatio = aspectRatio
                                         )
                                     }
                                 }
@@ -771,6 +775,7 @@ object JioApiClient {
                     if (ch.stbNumber > 0) obj.put("stbNumber", ch.stbNumber)
                     if (ch.isPremium) obj.put("isPremium", true)
                     if (ch.planType.isNotEmpty()) obj.put("planType", ch.planType)
+                    if (ch.aspectRatio.isNotEmpty()) obj.put("aspectRatio", ch.aspectRatio)
                     ch.licenseUrl?.let { obj.put("licenseUrl", it) }
                     jsonArray.put(obj)
                 }
@@ -965,9 +970,12 @@ object JioApiClient {
                 }
                 val hlsUsable = hlsUrl.startsWith("http")
                 var useMpd = mpdUrl.isNotEmpty()
-                // Catch-up: the clear VOD HLS first, like the companion server (whose replay path is
-                // the one known to work); the DASH only when there's no real HLS.
-                if (catchup != null && hlsUsable && !hlsUrl.contains("paywall", ignoreCase = true)) useMpd = false
+                // Catch-up: clear VOD HLS first, but verify it is alive; if dead/404 (e.g. Sony YAY / Sony channels),
+                // fall back to Widevine DASH (MPD) so replay succeeds!
+                if (catchup != null && hlsUsable && !hlsUrl.contains("paywall", ignoreCase = true)) {
+                    val hlsAlive = manifestAlive(hlsUrl, probeHeaders(hlsUrl))
+                    useMpd = !hlsAlive && mpdUrl.isNotEmpty()
+                }
                 if (catchup == null && useMpd) {
                     val mode = streamModeCache[channelId]
                     if (mode == "hls" && hlsUsable) {
