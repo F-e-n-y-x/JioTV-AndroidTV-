@@ -49,8 +49,9 @@ class AspectCorrectionTest {
 
     @Test
     fun hd_declared43_forces43_currentBehaviour() {
-        // Questionable but identical to the original inline logic: declared 4x3 wins at any size.
-        assertEquals(f43, correctedStreamAspect(1920, 1080, 1f, "4x3"), d)
+        // Issue #11: Jio declares 4x3 for most HD channels too (Sony Vizha); an HD frame keeps 16:9.
+        assertEquals(f169, correctedStreamAspect(1920, 1080, 1f, "4x3"), d)
+        assertEquals(1280f / 720f, correctedStreamAspect(1280, 720, 1f, "4x3"), d)
     }
 
     @Test

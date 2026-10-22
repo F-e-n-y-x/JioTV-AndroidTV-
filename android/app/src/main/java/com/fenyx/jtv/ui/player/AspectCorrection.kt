@@ -16,8 +16,9 @@ fun correctedStreamAspect(rawW: Int, rawH: Int, pixelAspect: Float, declared: St
     val aspect = if (rawW > 0 && rawH > 0) (rawW * par) / rawH.toFloat() else 16f / 9f
     val d = normRatio(declared)
     return when {
-        // NOTE: declared 4x3 forces 4/3 for ANY size (even HD); kept as-is from the original logic.
-        d == "4x3" || (d != "16x9" && rawH in 1..576 && aspect in 1.15f..1.35f) -> 4f / 3f
+        // Jio's "aspectRatio" says 4x3 for ~80% of channels, HD ones included (Sony Vizha), so it
+        // never decides the shape on its own: only a 5:4-ish SD frame without SAR is fixed to 4:3.
+        d != "16x9" && rawH in 1..576 && aspect in 1.15f..1.35f -> 4f / 3f
         d == "16x9" && aspect < 1.5f && (rawH in 1..576 || rawW in 1..1024) -> 16f / 9f
         else -> aspect
     }
