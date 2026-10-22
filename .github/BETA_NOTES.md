@@ -1,8 +1,15 @@
-# JTV 2.0 beta 29
+# JTV 2.0 beta 30
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.29.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.30.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
 
-## New in beta 29
+## New in beta 30
+- **HD channels fill the screen again (#11).** Some HD channels, such as Sony Vizha, showed smaller with black bars on the sides in **Fit**. Fixed: the picture now keeps its real shape, while SD channels like Kalaignar TV still get the 4:3 fix.
+
+---
+
+## Earlier betas
+
+### Beta 29
 - **A much better Voice Boost.** Voice Boost now listens for speech and lifts voices only while someone is talking, turning the background down a little at the same time. Music between lines is left alone, so it no longer "pumps", and switching it on no longer makes the sound quieter. It works on the many channels that are close to mono, where the old Voice Boost made little difference. Try **Medium** first; **Max** gives the most voice lift.
 
 ---
