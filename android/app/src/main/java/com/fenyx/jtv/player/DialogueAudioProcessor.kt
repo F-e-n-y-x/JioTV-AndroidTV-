@@ -93,6 +93,7 @@ class DialogueAudioProcessor : BaseAudioProcessor() {
             sampleRate = inputAudioFormat.sampleRate
             block = sampleRate / 200
             appliedLevel = -1 // recompute coefficients for the new sample rate
+            resetBlock() // a partial block counted at the old rate must not overshoot the new one
             inputAudioFormat
         } else {
             AudioProcessor.AudioFormat.NOT_SET
@@ -159,7 +160,7 @@ class DialogueAudioProcessor : BaseAudioProcessor() {
             output.putShort(toPcm(softLimit(outL * gain)))
             output.putShort(toPcm(softLimit(outR * gain)))
             duck += dDuck; lift += dLift; gain += dGain
-            if (++n == block) endBlock()
+            if (++n >= block) endBlock()
             i += 4
         }
         inputBuffer.position(limit)
@@ -203,6 +204,18 @@ class DialogueAudioProcessor : BaseAudioProcessor() {
         for (b in arrayOf(hpSide, hpMid, boxMid, bodyMid, shelfMid, sibMid, hpVoice, lpVoice, liftBand, kHpIn, kShelfIn, kShelfOut)) {
             b.reset()
         }
+        // A new stream (zap/seek) starts from neutral gains, not the previous channel's levels.
+        resetBlock()
+        eMidS = 0f; eVoiceS = 0f; flux = 0f; vad = 0f
+        duck = 1f; lift = 0f; gain = 1f
+        envDb = -100f; comp = 1f
+        inLong = 0f; mixLong = 0f; outLong = 0f
+        matchDb = 0f
+    }
+
+    private fun resetBlock() {
+        n = 0; eMid = 0f; eVoice = 0f; eIn = 0f; eMix = 0f
+        dDuck = 0f; dLift = 0f; dGain = 0f
     }
 
     /**

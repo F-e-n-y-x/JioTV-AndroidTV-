@@ -201,6 +201,22 @@ class DialogueAudioProcessorTest {
         }
     }
 
+    /** A rate drop mid-stream left the block counter past the new block size: ramps ran away. */
+    @Test
+    fun sampleRateDrop_midBlock_keepsGainsBounded() {
+        val p = newProcessor(4)
+        // 1 s + 230 frames at 48 kHz: voice detected, 230 frames into a 240-frame block (> 220 at 44.1k).
+        p.queueInput(signal(1.0 + 230 / 48_000.0) { i -> 0.3 * syllables(i) * kotlin.math.sin(2 * Math.PI * 1000 * i / 48_000) })
+        assertTrue("vad ${p.vad}", p.vad > 0.5f)
+        p.configure(AudioProcessor.AudioFormat(44_100, 2, C.ENCODING_PCM_16BIT))
+        p.queueInput(signal(2.0) { i -> 0.05 * kotlin.math.sin(2 * Math.PI * 100 * i / 44_100) })
+        assertTrue("detector stalled, vad ${p.vad}", p.vad < 0.5f)
+        val out = p.output
+        var peak = 0
+        while (out.hasRemaining()) peak = maxOf(peak, kotlin.math.abs(out.getShort().toInt()))
+        assertTrue("peak $peak", peak < 0.25 * 32767)
+    }
+
     private fun rms(pcm: ShortArray, from: Int): Double {
         var s = 0.0
         for (i in from until pcm.size) s += pcm[i].toDouble() * pcm[i]
