@@ -182,6 +182,8 @@ fun TvPlayerScreen(
             seenOpenToken = openToken
             currentGroup = initialGroup
             currentIndex = initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            // Set now, not in SideEffect, so the remap on the group's list change keeps this target.
+            playingId = resolveGroup(initialGroup).getOrNull(currentIndex)?.id
             userPaused = false
             replay = catchup // catch-up
             replayEnded = false
@@ -1129,6 +1131,8 @@ fun TvPlayerScreen(
         zapHold.repeat = false
         currentGroup = group
         currentIndex = index.coerceIn(0, list.size - 1)
+        // Set now, not in SideEffect, so the remap on the group's list change keeps this target.
+        playingId = list[currentIndex].id
         ui.overlay = PlayerOverlay.Banner
         ui.bannerToken++
     }
