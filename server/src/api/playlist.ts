@@ -16,8 +16,8 @@ import { baseUrl } from "../util/baseUrl";
  * Public (access-code authenticated) endpoints for external IPTV players — VLC, TiviMate, OTT
  * Navigator, Kodi. Unlike the browser player (cookie/admin session) these are reachable with a `?code=`
  * query param so a TV app or player with no cookie jar can use them. When server auth is disabled the
- * code is not required. DRM/Widevine channels are served only to the `drm=1` playlist (Kodi-style
- * KODIPROP entries: `/live/:id.mpd` + `/dash/...` segments + `/license/:id`); a plain `.m3u8` request
+ * code is not required. DRM/Widevine channels are served as Kodi-style
+ * KODIPROP entries by default (`drm=plain` or `drm=hide` turns that off: `/live/:id.mpd` + `/dash/...` segments + `/license/:id`)); a plain `.m3u8` request
  * for one gets a 415.
  */
 
@@ -64,9 +64,9 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     const includeEpg = q.epg === "1" || q.epg === "true";
     const enableCatchup = q.catchup === "1" || q.catchup === "true";
     const hideDrm = q.drm === "hide" || q.drm === "0" || q.drm === "false";
-    // `drm=1`: Widevine channels become Kodi-style DASH entries (KODIPROP license lines). Opt-in, so
-    // players without Widevine (VLC, most phones) keep getting the plain list.
-    const withDrm = q.drm === "1" || q.drm === "true" || q.drm === "widevine";
+    // Widevine channels become Kodi-style DASH entries (KODIPROP license lines) by default, since
+    // their plain HLS is dead anyway. `drm=plain` keeps the old list (VLC can't decrypt Widevine).
+    const withDrm = !hideDrm && q.drm !== "plain";
     const quality = String(q.quality ?? "auto").toLowerCase();
 
     const all = await getChannels();

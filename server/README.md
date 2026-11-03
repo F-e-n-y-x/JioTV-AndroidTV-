@@ -16,7 +16,7 @@ Android TV app — and a full JioTV experience in any browser.
 | Stream type | Web player | External players (M3U) | Notes |
 |---|---|---|---|
 | **Non-DRM HLS** (most channels) | ✅ over **plain HTTP** | ✅ | Played with **hls.js** (software AES-128), so no HTTPS/Web-Crypto needed. The AES key is fetched with the license headers the key host expects. |
-| **DRM DASH / Widevine** (some premium) | ✅ over **HTTPS** only | ✅ with `drm=1`, Widevine players only | Browser Widevine needs a secure context — use the HTTPS URL. External: Kodi (inputstream.adaptive), TiviMate, OTT Navigator. VLC can't decrypt Widevine. |
+| **DRM DASH / Widevine** (some premium) | ✅ over **HTTPS** only | ✅ by default, Widevine players only | Browser Widevine needs a secure context — use the HTTPS URL. External: Kodi (inputstream.adaptive), TiviMate, OTT Navigator. VLC can't decrypt Widevine. |
 
 The web player uses **hls.js** for non-DRM HLS (works on `http://<lan-ip>`) and **Shaka Player** for
 DRM DASH. Every manifest/segment/key is proxied through the server so the browser never talks to the
@@ -163,8 +163,9 @@ quality, favourites-only, EPG guide and catch-up**, then paste it into your play
 http://<host>:29180/playlist.m3u?code=<accesscode>&lang=Hindi,English&group=News&quality=720&epg=1&catchup=1
 ```
 
-By default only **non-DRM** channels play in external players. Add `drm=1` for Widevine players
-(Kodi with inputstream.adaptive, TiviMate, OTT Navigator); see *Playlist options* below. EPG works best
+Widevine channels are listed as Kodi-style DASH entries by default, so they play in Widevine players
+(Kodi with inputstream.adaptive, TiviMate, OTT Navigator). For VLC add `drm=plain` or `drm=hide`; see
+*Playlist options* below. EPG works best
 with an **XMLTV** source selected.
 
 ## Local dev (Node 22+)
@@ -219,8 +220,8 @@ Machine/player endpoints use a **TV access code** (bearer header or `?code=`).
   proxy checks whether Jio's non-DRM HLS works; if only the DASH does, it stores mode `drm` in the
   `stream_modes` SQLite table (`hls` otherwise). `drm=hide` hides the `drm` ones. A channel nobody has
   played yet is still listed; once a player gets the 415 from `/live` it is hidden from the next refresh.
-- `drm=1` (opt-in; off by default so VLC and other non-Widevine players keep the plain list) turns the
-  same learned Widevine channels into Kodi-style DASH entries instead of hiding them:
+- By default (and with `drm=1`) the same learned Widevine channels become Kodi-style DASH entries
+  instead of being hidden. `drm=plain` gives the old list for VLC and other non-Widevine players:
 
   ```
   #KODIPROP:inputstream=inputstream.adaptive

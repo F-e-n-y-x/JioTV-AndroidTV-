@@ -67,8 +67,10 @@ test("drm=1 playlist: Widevine entry has KODIPROP lines, proxied URLs, no Jio to
     assert.equal(lines[i1 + 1], `http://tv.lan:29180/live/1.m3u8?ts=1&code=${CODE}`);
     assert.doesNotMatch(res.body, /hdnea|ssoToken|Accesstoken|crmid|jio\.com\/.*\.mpd/i);
 
-    // Default playlist is unchanged: no Widevine entries (built-in clearkey extras may still be .mpd).
-    const plain = await app.inject({ url: `/playlist.m3u?code=${CODE}`, headers: { host: "tv.lan:29180" } });
+    // Widevine entries are the default; drm=plain gives the old list (clearkey extras may still be .mpd).
+    const dflt = await app.inject({ url: `/playlist.m3u?code=${CODE}`, headers: { host: "tv.lan:29180" } });
+    assert.equal(dflt.body, res.body);
+    const plain = await app.inject({ url: `/playlist.m3u?code=${CODE}&drm=plain`, headers: { host: "tv.lan:29180" } });
     assert.doesNotMatch(plain.body, /widevine|\/license\//);
     assert.match(plain.body, /\/live\/2\.m3u8\?ts=1/);
   } finally {

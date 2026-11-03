@@ -103,8 +103,7 @@ function Layout({ onLogout }: { onLogout: () => void }) {
     <div className="h-full flex flex-col">
       <header className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 h-14 border-b border-border shrink-0">
         <div className="flex items-center gap-2 shrink-0">
-          <span className="grid place-items-center w-8 h-8 rounded-lg text-white shadow-sm"
-            style={{ background: "linear-gradient(135deg, var(--accent-strong), var(--accent))" }}><IconTv size={18} /></span>
+          <img src="/favicon.svg" alt="" className="w-8 h-8" />
           <span className="font-semibold tracking-tight">JTV<span className="text-muted font-normal hidden sm:inline"> Server</span></span>
         </div>
         {/* On phones the nav sits on the right (theme/logout are hidden); on desktop it follows the logo. */}
@@ -462,8 +461,8 @@ function M3uCard() {
     <div className="card">
       <div className="flex items-center gap-2"><IconList size={18} className="text-muted" /><h3>M3U playlist</h3></div>
       <p className="text-muted text-sm mt-1">
-        Build a playlist link for external players (VLC, TiviMate, OTT Navigator). Pick filters below — only
-        non-DRM channels play in these players; DRM channels use the web player or TV app.
+        Build a playlist link for external players (VLC, TiviMate, OTT Navigator). Pick filters below.
+        DRM (Widevine) channels play in Kodi, TiviMate and OTT Navigator; VLC plays only the others.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-4">
