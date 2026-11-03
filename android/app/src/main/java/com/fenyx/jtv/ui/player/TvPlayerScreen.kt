@@ -1810,7 +1810,8 @@ fun TvPlayerScreen(
         ) {
             // The ONE video surface: always the first child, in every mode (full, portrait page, mini),
             // so it is never recreated; only its box changes (layout phase). Everything else draws over it.
-            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode).pipSourceRect(activity, enabled = !isTv && !inPip), currentChannel)
+            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode).pipSourceRect(activity, enabled = !isTv && !inPip), currentChannel,
+                keepScreenOn = !userPaused && playbackError == null && !replayEnded)
 
             val name = currentChannel?.name
             val buffering = isBuffering && playbackError == null
@@ -1918,7 +1919,7 @@ fun TvPlayerScreen(
 /** The video. Its own composable so overlay changes never recompose (or re-layout) the PlayerView. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier, channel: Channel? = null) {
+private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier, channel: Channel? = null, keepScreenOn: Boolean = true) {
     // Debuggable builds only: a "novideo" file in the app's external files dir replaces the picture with
     // a neutral placeholder, so UI screenshots for the README never contain channel video.
     val ctx0 = LocalContext.current
@@ -1952,7 +1953,6 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier,
                 PlayerView(ctx).apply {
                     this.player = if (noVideo) null else player
                     useController = false
-                    keepScreenOn = true
                     clipChildren = false
                     clipToPadding = false
                     setBackgroundColor(android.graphics.Color.BLACK)
@@ -1962,6 +1962,8 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier,
             },
             update = { view ->
                 playerViewRef = view
+                // Let the TV sleep / screensaver run on a user pause, an error or the replay-ended prompt.
+                view.keepScreenOn = keepScreenOn
                 if (!noVideo && view.player !== player) {
                     view.player = player
                 }
