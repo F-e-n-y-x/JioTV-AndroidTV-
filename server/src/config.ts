@@ -32,14 +32,16 @@ function loadDotEnv(): void {
 loadDotEnv();
 
 /**
- * TRUST_PROXY → Fastify `trustProxy`. Default true: the server normally sits behind Cloudflare and/or
+ * TRUST_PROXY → Fastify `trustProxy`. The server normally sits behind Cloudflare (cloudflared) and/or
  * Caddy, and must honour X-Forwarded-Proto/Host/For to build correct https:// URLs and to rate-limit
- * the real client IP. Accepts true/false, a hop count ("1"), or a comma list of IPs/CIDRs. Set it to
- * false when the port is exposed directly to the internet (forwarded headers would be spoofable).
+ * the real client IP. Default: trust those headers only from loopback / link-local / private (RFC1918,
+ * ULA) peers — where cloudflared, Caddy and Docker proxies sit — so a direct internet client can't
+ * spoof them. Accepts true (trust anyone), false, a hop count ("1"), or a comma list of IPs/CIDRs.
  */
+export const DEFAULT_TRUST_PROXY = "loopback,linklocal,uniquelocal";
 export function parseTrustProxy(raw: string | undefined): boolean | number | string | string[] {
   const v = (raw ?? "").trim();
-  if (!v) return true;
+  if (!v) return DEFAULT_TRUST_PROXY;
   if (/^(true|yes|on)$/i.test(v)) return true;
   if (/^(false|no|off|0)$/i.test(v)) return false;
   if (/^\d+$/.test(v)) return Number(v);

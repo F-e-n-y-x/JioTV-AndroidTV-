@@ -19,9 +19,9 @@ services:
       # common home-server apps). Existing setups can keep PORT=8080 in .env.
       - PORT=${PORT:-29180}
       - DATA_DIR=/app/data
-      # Honour X-Forwarded-* from Cloudflare / Caddy (https links, real client IP for rate limits).
-      # Set to false if the port is exposed straight to the internet with no proxy in front.
-      - TRUST_PROXY=${TRUST_PROXY:-true}
+      # Honour X-Forwarded-* / CF-Connecting-IP from Cloudflare / Caddy (https links, real client IP
+      # for rate limits). Empty = only from loopback / private-network peers (see README).
+      - TRUST_PROXY=${TRUST_PROXY:-}
       # Shown in the app's "Servers on your network" list.
       - SERVER_NAME=${SERVER_NAME:-JTV server}
     ports:

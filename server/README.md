@@ -128,10 +128,12 @@ Don't forward 29180 from your router to the internet.
 
 ## Reverse proxy (Cloudflare / Caddy)
 
-`TRUST_PROXY` (default `true`) makes the server honour `X-Forwarded-Proto/Host/For`, so playlist and
-segment links come out as `https://your.domain/…` and rate limits see the real client IP (Cloudflare's
-`CF-Connecting-IP` is used when present). It also accepts a hop count or a list of proxy IPs/CIDRs.
-Set `TRUST_PROXY=false` if the port is reachable directly from the internet with no proxy in front.
+`TRUST_PROXY` makes the server honour `X-Forwarded-Proto/Host/For` (and Cloudflare's `CF-Connecting-IP`),
+so playlist and segment links come out as `https://your.domain/…` and rate limits see the real client IP.
+The default `loopback,linklocal,uniquelocal` trusts those headers only when the request comes from a
+loopback or private (10/8, 172.16/12, 192.168/16, fc00::/7) address, where cloudflared, Caddy and Docker
+proxies sit; direct internet clients can't spoof them. It also accepts `true` (trust anyone), `false`,
+or a list of proxy IPs/CIDRs.
 
 Rate limits (per client IP): admin login / setup / OTP verify / `/api/credentials` 10 per minute,
 OTP send 5/min, `/api/refresh` and `/api/admin/refresh` 10/min, `/playlist.m3u` 30/min. Streaming

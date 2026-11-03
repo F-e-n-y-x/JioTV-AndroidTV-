@@ -13,6 +13,7 @@ import { initExtraChannels, stopExtraChannelsScheduler } from "./jio/extraChanne
 import { isAdminConfigured } from "./store/settings";
 import { ensureCert } from "./https";
 import { redactUrl } from "./util/redact";
+import { rateLimitKey } from "./util/clientIp";
 import { closeDb } from "./store/db";
 
 /** Builds a fully-wired Fastify instance (used for both the HTTP and HTTPS listeners). */
@@ -64,14 +65,11 @@ async function buildApp(extra?: Record<string, unknown>): Promise<FastifyInstanc
 
   // Rate limiting is opt-in per route (`config.rateLimit`): login / OTP / credentials / refresh /
   // playlist. Streaming routes (/live, /seg, /api/proxy) are deliberately NOT limited — a player makes
-  // many requests a minute. Behind Cloudflare the client IP comes from CF-Connecting-IP (set by
-  // Cloudflare itself); otherwise from req.ip (which honours X-Forwarded-For when trustProxy is on).
+  // many requests a minute. Behind Cloudflare the client IP comes from CF-Connecting-IP (only when the
+  // TCP peer is a trusted proxy); otherwise from req.ip (X-Forwarded-For, again only from trusted peers).
   await app.register(rateLimit, {
     global: false,
-    keyGenerator: (req) => {
-      const cf = config.trustProxy ? req.headers["cf-connecting-ip"] : undefined;
-      return (typeof cf === "string" && cf) || req.ip;
-    },
+    keyGenerator: rateLimitKey(config.trustProxy),
   });
   app.get("/jtv-server", async (_req, reply) => reply.type("application/json").send(discoveryInfo()));
   await registerRoutes(app);
