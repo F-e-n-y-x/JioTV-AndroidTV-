@@ -79,7 +79,8 @@ object JioApiClient {
     private const val PROACTIVE_RETRY_GAP_MS = 10 * 60 * 1000L
 
     /** Refresh the 12 h access token once it has less than this left, while it's still valid. */
-    private const val ACCESS_TOKEN_REFRESH_LEAD_SEC = 2 * 60 * 60L
+    // Must exceed TokenRefreshScheduler's 3 h interval, or the token can expire between two checks.
+    private const val ACCESS_TOKEN_REFRESH_LEAD_SEC = 4 * 60 * 60L
 
     /** `exp` claim (epoch seconds) of a JWT, or 0 when it can't be read. */
     fun jwtExpirySec(token: String): Long = try {
