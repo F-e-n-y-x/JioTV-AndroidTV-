@@ -1,8 +1,25 @@
-# JTV 2.0 beta 31
+# JTV 2.0 beta 32
 
-> **Now the Latest release.** The 1.5.x app will offer this as an update. Install `JTV-v2.0-beta.31.apk` over your current version, and your login and favourites are kept. Earlier betas are listed below.
+> **Latest release.** The 1.5.x app offers this as an update. Install `JTV-v2.0-beta.32.apk` over your current version, and your login and favourites are kept. Earlier betas are listed below.
 
-## New in beta 31
+## New in beta 32
+- **Languages are together again.** "Group languages together" is switched back on for everyone, so channels like History TV18 HD, Discovery and Animal Planet show once, and you pick Hindi, Tamil, Telugu or English in the player. The language list no longer shows "Default" next to English.
+- **Speak to search.** Press **Speak** on the Search screen (or the remote's search key) and say a channel name. With the programme guide on, Search also finds shows, not only channels.
+- **Continue watching on the Android TV home screen.** The last channel appears in the "Play next" row; press it to go straight back.
+- **Works with Google Assistant and media keys.** "Pause", play and stop now work by voice and from TV remotes with media buttons.
+- **After standby, the channel starts fresh** instead of trying an old, expired stream.
+- **"This channel isn't in your Jio plan"** instead of a generic error, plus a new switch in Settings → Channels to hide those channels.
+- **Steadier playback.** Picture quality no longer drops when the sign-in token renews, a stuck channel now shows an error instead of reloading forever, and the screen can turn off when paused or on an error.
+- **Guide fixes.** The guide catches Jio sending the wrong day, and a TV left on overnight gets today's shows.
+- **Fewer sign-in prompts.** The sign-in is renewed earlier, before it can expire between checks.
+- **Safer updates.** The in-app update rejects a half-downloaded file.
+- **Server: DRM channels in TiviMate / Kodi.** Add `&drm=1` to your playlist link to include Widevine channels. See the server README.
+
+---
+
+## Earlier betas
+
+### Beta 31
 - **Typing a channel number plays that channel.** After switching to a channel in another category (by number, from the channel browser or with "previous channel"), the player sometimes jumped straight back to the old channel. Fixed.
 - **No more endless loading on start.** With "Open last channel" on and no channels available (for example, offline on first start), the app spun forever and Settings couldn't be reached. It now opens the home screen.
 - **Voice Boost can't distort.** After the sound format changed in the middle of a channel, Voice Boost could keep turning the volume up until it distorted. Fixed.
