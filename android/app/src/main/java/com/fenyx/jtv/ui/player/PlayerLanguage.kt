@@ -134,12 +134,14 @@ internal fun buildLanguageChoices(
 
     // Sibling-language channels.
     for (v in variants) {
-        val code = normalizeLang(v.langCode)
+        // The un-suffixed feed (History TV18 HD) has no language in its name: use Jio's language field,
+        // so it isn't listed as "Default" next to the same language from the stream.
+        val code = normalizeLang(v.langCode) ?: ChannelLanguage.codeFor(v.channel.language)
         val isPlaying = v.channel.id == playingId
         if (isPlaying && haveStream) continue // the stream's own options already cover it
         if (code != null && !codes.add(code)) continue
         val value = LANG_CHANNEL + v.channel.id
-        opts.add(value to (normalizeLang(v.langCode)?.let(nameOf) ?: ChannelLanguage.displayName(v.langCode)))
+        opts.add(value to (code?.let(nameOf) ?: ChannelLanguage.displayName(v.langCode)))
         if (isPlaying && current == null) current = value
     }
 
