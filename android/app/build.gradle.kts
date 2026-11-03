@@ -146,6 +146,7 @@ dependencies {
   implementation(libs.androidx.media3.datasource.okhttp)
   implementation(libs.okhttp)
   implementation(libs.androidx.media3.ui)
+  implementation(libs.androidx.media3.session)
 
   // DataStore
   implementation(libs.androidx.datastore.preferences)

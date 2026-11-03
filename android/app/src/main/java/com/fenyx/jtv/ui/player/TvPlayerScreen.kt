@@ -610,6 +610,12 @@ fun TvPlayerScreen(
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(finalUrl)
                     .setMimeType(if (streamData.isMpd) MimeTypes.APPLICATION_MPD else MimeTypes.APPLICATION_M3U8)
+                    // What the MediaSession shows ("now playing"). Live: the channel only, since a show title
+                    // set here would go stale at the next programme (no reload). Catch-up: the replayed show.
+                    .setMediaMetadata(androidx.media3.common.MediaMetadata.Builder().apply {
+                        val name = currentChannel?.name ?: ch.name
+                        if (cu != null) setTitle(cu.title).setArtist(name) else setTitle(name)
+                    }.build())
                     // Play ~20s behind the live edge so brief network/CDN jitter is absorbed by the
                     // buffer instead of starving the player and causing a rebuffer (the "loading").
                     .setLiveConfiguration(
@@ -1168,6 +1174,28 @@ fun TvPlayerScreen(
         retryCount.intValue = 0
         isBuffering = true
         streamRefreshTrigger++
+    }
+
+    // MediaSession while the player is up: Google Assistant ("pause"), headset / Bluetooth media keys and
+    // the Android TV "now playing" card. Media keys the player's own key handling consumes never reach it;
+    // D-pad / OK aren't media keys. Play / pause go through setPaused, so they count as a user pause.
+    val sessionCalls = rememberUpdatedState(object {
+        fun paused(p: Boolean) = setPaused(p)
+        fun retry() = doRetry()
+    })
+    DisposableEffect(exoPlayer) {
+        val player = object : androidx.media3.common.ForwardingPlayer(exoPlayer) {
+            override fun play() = sessionCalls.value.paused(false)
+            override fun pause() = sessionCalls.value.paused(true)
+            override fun setPlayWhenReady(playWhenReady: Boolean) = sessionCalls.value.paused(!playWhenReady)
+            override fun stop() = sessionCalls.value.paused(true)
+            // Play from idle (stopped / error): load a fresh URL and token, never the stale source.
+            override fun prepare() = sessionCalls.value.retry()
+        }
+        val session = androidx.media3.session.MediaSession.Builder(context, player)
+            .setId("jtv-player-${System.identityHashCode(exoPlayer)}")
+            .build()
+        onDispose { session.release() }
     }
 
     fun openBrowse() {
