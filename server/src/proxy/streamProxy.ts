@@ -192,20 +192,29 @@ function withFreshToken(url: string, hdnea: string): string {
   return i >= 0 ? url.slice(0, i + HDNEA_MARKER.length) + hdnea : url;
 }
 
+/** Lower-cased hostname of an http(s) URL, or "" for anything else. */
+function httpHost(raw: string): string {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.hostname.toLowerCase() : "";
+  } catch { return ""; }
+}
+
+/** Jio's own servers — the only hosts the account's Jio credentials (ssoToken, Accesstoken, __hdnea__…) may go to. */
+export function isJioHost(raw: string): boolean {
+  const h = httpHost(raw);
+  return h === "jio.com" || h.endsWith(".jio.com") || h.endsWith(".jiocdn.com");
+}
+
 /**
- * The proxy attaches the account's Jio credentials (ssoToken, Accesstoken…) to what it fetches, so it
- * must only ever talk to Jio's own servers. Without this, `/seg?u=https://anything` would send those
- * tokens to any host (or reach the LAN / cloud metadata) and stream the answer back.
+ * Hosts the proxy may fetch at all: Jio, plus the third-party CDNs extra (non-Jio) channels stream
+ * from. Without this, `/seg?u=https://anything` would reach the LAN / cloud metadata and stream the
+ * answer back. Third-party hosts only ever get an extra channel's own headers (see proxyUpstream).
  */
 export function isJioUpstream(raw: string): boolean {
-  let u: URL;
-  try { u = new URL(raw); } catch { return false; }
-  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-  const h = u.hostname.toLowerCase();
+  const h = httpHost(raw);
   return (
-    h === "jio.com" ||
-    h.endsWith(".jio.com") ||
-    h.endsWith(".jiocdn.com") ||
+    isJioHost(raw) ||
     h.endsWith(".workers.dev") ||
     h.endsWith(".pages.dev") ||
     h.endsWith(".cloudfront.net") ||
@@ -219,13 +228,14 @@ export function isValidStreamKey(key: string): boolean {
   return /^\d{1,7}$/.test(key) || /^cu\.[A-Za-z0-9_-]{1,2048}$/.test(key) || /^zee_[A-Za-z0-9_.-]+$/i.test(key) || isExtraChannel(key);
 }
 
-/** fetch() that follows redirects only while they stay on allowed hosts (credentials ride along). */
-async function fetchJio(url: string, init: RequestInit, hops = 3): Promise<Response> {
-  if (!isJioUpstream(url)) throw new Error("Refusing to fetch an untrusted URL through the stream proxy");
+/** fetch() that follows redirects only while they stay on allowed hosts (credentials ride along).
+ *  `jioOnly`: the request carries Jio credentials, so every hop must stay on a Jio host. */
+export async function fetchJio(url: string, init: RequestInit, jioOnly: boolean, hops = 3): Promise<Response> {
+  if (!(jioOnly ? isJioHost(url) : isJioUpstream(url))) throw new Error("Refusing to fetch an untrusted URL through the stream proxy");
   const res = await fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(SEGMENT_TIMEOUT_MS) });
   const loc = res.headers.get("location");
   if (res.status >= 300 && res.status < 400 && loc && hops > 0) {
-    return fetchJio(new URL(loc, url).toString(), init, hops - 1);
+    return fetchJio(new URL(loc, url).toString(), init, jioOnly, hops - 1);
   }
   return res;
 }
@@ -240,9 +250,11 @@ export async function proxyUpstream(
   rangeHeader?: string
 ): Promise<Response> {
   if (!isValidStreamKey(channelId)) throw new Error("Invalid channel id");
-  if (!isJioUpstream(targetUrl)) throw new Error("Refusing to fetch an untrusted URL through the stream proxy");
+  const extra = isExtraChannel(channelId);
+  // Third-party hosts are only for extra channels; a Jio channel's request carries the account's tokens.
+  if (!(extra ? isJioUpstream(targetUrl) : isJioHost(targetUrl))) throw new Error("Refusing to fetch an untrusted URL through the stream proxy");
 
-  if (isExtraChannel(channelId)) {
+  if (extra) {
     const ch = await getExtraChannel(channelId);
     const headers: Record<string, string> = {};
     if (ch?.userAgent) headers["User-Agent"] = ch.userAgent;
@@ -250,7 +262,7 @@ export async function proxyUpstream(
     if (ch?.origin) headers["Origin"] = ch.origin;
     if (ch?.cookie) headers["Cookie"] = ch.cookie;
     if (rangeHeader) headers["Range"] = rangeHeader;
-    return fetchJio(targetUrl, { headers });
+    return fetchJio(targetUrl, { headers }, false);
   }
 
   const c = await getStream(channelId);
@@ -263,7 +275,7 @@ export async function proxyUpstream(
   const headers: Record<string, string> = { ...(isKey ? c.data.licenseHeaders : c.data.streamHeaders) };
   if (!isKey && c.hdnea) headers["Cookie"] = HDNEA_MARKER + c.hdnea;
   if (rangeHeader) headers["Range"] = rangeHeader;
-  return fetchJio(url, { headers });
+  return fetchJio(url, { headers }, true);
 }
 
 /** Forwards a Widevine license challenge to Jio's license server with the correct headers. */

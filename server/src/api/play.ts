@@ -97,6 +97,9 @@ export async function registerPlayRoutes(app: FastifyInstance): Promise<void> {
         // (206) response would truncate it. Segments still honour Range for seeking.
         const isManifestUrl = /\.(mpd|m3u8)(\?|$)/i.test(target);
         const upstream = await proxyUpstream(cid, target, isManifestUrl ? undefined : (req.headers["range"] as string | undefined));
+        // Upstream bytes are served from our origin: never let a text/html answer run script here.
+        reply.header("x-content-type-options", "nosniff");
+        reply.header("content-security-policy", "sandbox");
         const contentType = upstream.headers.get("content-type") ?? "";
 
         // Manifests are small: buffer + rewrite URLs so the browser resolves media via the proxy.

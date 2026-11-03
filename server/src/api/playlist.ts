@@ -128,6 +128,8 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
         const segPrefix = `${baseUrl(req)}/seg?cid=${encodeURIComponent(rawId)}${codeQ}&u=`;
         const rewritten = rewriteManifest(text, ct, extra.streamUrl, segPrefix, maxHeight) ?? text;
         reply.header("content-type", ct);
+        reply.header("x-content-type-options", "nosniff");
+        reply.header("content-security-policy", "sandbox");
         return reply.send(rewritten);
       } catch (err) {
         return reply.code(502).send(`# ${(err as Error).message}`);
@@ -189,6 +191,9 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
       const target = decodeURIComponent(u);
       const isManifestUrl = /\.(mpd|m3u8)(\?|$)/i.test(target);
       const upstream = await proxyUpstream(cid, target, isManifestUrl ? undefined : (req.headers["range"] as string | undefined));
+      // Upstream bytes are served from our origin: never let a text/html answer run script here.
+      reply.header("x-content-type-options", "nosniff");
+      reply.header("content-security-policy", "sandbox");
       const contentType = upstream.headers.get("content-type") ?? "";
 
       const looksManifest =
