@@ -81,15 +81,15 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 - ⚡ **Fast.** Zapping up and down is near-instant, because the channels around you are fetched ahead of time.
 - 🪶 **Still tiny.** The APK is about **3 MB** and runs smoothly on cheap TV boxes.
 
-> **Beta notes:** v2 is released as a **pre-release**, so the stable app never updates to it by itself. Install the beta APK over 1.5.x and your login and favourites are kept. Once on the beta, you'll be offered newer betas and the final 2.0. Found something odd? [Open an issue](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/issues) and tell me your device. It really helps.
+> **Beta notes:** from beta 31, v2 is the **Latest** release, so the 1.5.x app offers it as an update. Install it over 1.5.x and your login and favourites are kept. Once on v2, you'll be offered newer betas and the final 2.0. Found something odd? [Open an issue](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/issues) and tell me your device. It really helps.
 
 ---
 
 ## 📥 Install
 
 1. Download the APK:
-   - **Stable:** `JTV-v1.5.x.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
-   - **Beta:** `JTV-v2.0-beta.30.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
+   - **Latest:** `JTV-v2.0-beta.31.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
+   - **Older 1.5.x:** `JTV-v1.5.x.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases).
 2. **Install it on your TV.**
    - The easiest way is to copy it to a USB stick and open it with a file manager such as **X-plore** or **File Commander**.
    - Or use ADB:
@@ -246,7 +246,7 @@ The stable app, version 1.5.x, on a TV.
 <details>
 <summary><b>📝 Changelog</b></summary>
 
-### v2.0-beta (pre-release)
+### v2.0-beta
 
 The **"Everyday"** redesign for TV, phone and tablet:
 - New home, guide, player strap, channel browser, options panel and search.

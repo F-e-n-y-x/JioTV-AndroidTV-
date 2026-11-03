@@ -1,8 +1,23 @@
-# JTV 2.0 beta 30
+# JTV 2.0 beta 31
 
-> ⚠️ **Pre-release.** The stable app (1.5.x) will **not** update to it by itself. Install `JTV-v2.0-beta.30.apk` over your current version, and your login and favourites are kept. Only the newest beta is kept here. Earlier betas are listed below.
+> **Now the Latest release.** The 1.5.x app will offer this as an update. Install `JTV-v2.0-beta.31.apk` over your current version, and your login and favourites are kept. Earlier betas are listed below.
 
-## New in beta 30
+## New in beta 31
+- **Typing a channel number plays that channel.** After switching to a channel in another category (by number, from the channel browser or with "previous channel"), the player sometimes jumped straight back to the old channel. Fixed.
+- **No more endless loading on start.** With "Open last channel" on and no channels available (for example, offline on first start), the app spun forever and Settings couldn't be reached. It now opens the home screen.
+- **Voice Boost can't distort.** After the sound format changed in the middle of a channel, Voice Boost could keep turning the volume up until it distorted. Fixed.
+- **Fewer "sign in again" prompts.** On a slow network, a new sign-in token could be lost while it was being saved. It is now always saved.
+- **Server: safer.**
+  - The stream proxy only sends your Jio sign-in to Jio's own servers, including after redirects.
+  - Login attempt limits can no longer be dodged with a fake proxy header.
+  - A disk error while building the guide no longer crashes the server.
+  - If you run the server behind a proxy on another machine, see `TRUST_PROXY` in the server README.
+
+---
+
+## Earlier betas
+
+### Beta 30
 - **HD channels fill the screen again (#11).** Some HD channels, such as Sony Vizha, showed smaller with black bars on the sides in **Fit**. Fixed: the picture now keeps its real shape, while SD channels like Kalaignar TV still get the 4:3 fix.
 
 ---
