@@ -20,6 +20,24 @@ class JioLoadErrorHandlingPolicy(
     private val tokenRetryLimit: Int = 4
 ) : DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 6) {
 
+    // Media3 asks for a fallback BEFORE a retry, and the default excludes the failing rendition for 60 s
+    // on 403/404/410. For an expired token that only drops the picture quality, so retry instead.
+    override fun getFallbackSelectionFor(
+        fallbackOptions: LoadErrorHandlingPolicy.FallbackOptions,
+        loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
+    ): LoadErrorHandlingPolicy.FallbackSelection? {
+        val ex = loadErrorInfo.exception
+        if (ex is HttpDataSource.InvalidResponseCodeException &&
+            retryInsteadOfFallback(ex.responseCode, loadErrorInfo.errorCount, tokenRetryLimit)
+        ) return null
+        return super.getFallbackSelectionFor(fallbackOptions, loadErrorInfo)
+    }
+
+    internal companion object {
+        fun retryInsteadOfFallback(code: Int, errorCount: Int, limit: Int): Boolean =
+            (code == 403 || code == 404 || code == 410) && errorCount <= limit
+    }
+
     override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
         val ex = loadErrorInfo.exception
         if (ex is HttpDataSource.InvalidResponseCodeException) {
