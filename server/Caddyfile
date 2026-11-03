@@ -2,5 +2,5 @@
 #   docker compose --profile https up -d
 # Browser Widevine/EME (Phase 2 web player) requires a secure context, so HTTPS is needed there.
 jtv.example.com {
-    reverse_proxy jtv-server:8080
+    reverse_proxy jtv-server:29180
 }

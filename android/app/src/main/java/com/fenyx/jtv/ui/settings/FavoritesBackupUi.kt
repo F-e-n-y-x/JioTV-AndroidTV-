@@ -1,5 +1,6 @@
 package com.fenyx.jtv.ui.settings
 
+import com.fenyx.jtv.R
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
@@ -30,30 +31,31 @@ fun rememberFavoritesBackup(nameOf: (String) -> String?): FavoritesBackupActions
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsManager(context) }
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+    fun toast(@androidx.annotation.StringRes id: Int, vararg args: Any) = toast(context.getString(id, *args))
 
     fun doSave() = scope.launch {
         val ids = settings.favoriteOrderFlow.first()
-        if (ids.isEmpty()) { toast("You have no favourites to back up yet."); return@launch }
+        if (ids.isEmpty()) { toast(R.string.backup_none); return@launch }
         FavoritesBackup.save(context, ids, ids.associateWith { nameOf(it) ?: "" }.filterValues { it.isNotEmpty() })
-            .onSuccess { toast("Saved ${ids.size} ${if (ids.size == 1) "favourite" else "favourites"} to $it") }
-            .onFailure { toast("Could not save the backup: ${it.message ?: "storage error"}") }
+            .onSuccess { toast(context.resources.getQuantityString(R.plurals.backup_saved, ids.size, ids.size, it)) }
+            .onFailure { toast(R.string.backup_save_failed, it.message ?: context.getString(R.string.backup_storage_error)) }
     }
 
     val askWrite = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) doSave() else toast("JTV needs storage access to save the backup in Downloads.")
+        if (ok) doSave() else toast(R.string.backup_need_storage)
     }
 
     fun applyRestore(ids: List<String>) = scope.launch {
-        if (ids.isEmpty()) { toast("That backup has no favourites."); return@launch }
+        if (ids.isEmpty()) { toast(R.string.backup_empty); return@launch }
         val added = FavoritesBackup.restore(context, ids)
-        toast(if (added > 0) "Restored $added ${if (added == 1) "favourite" else "favourites"}." else "Your favourites already match the backup.")
+        toast(if (added > 0) context.resources.getQuantityString(R.plurals.backup_restored, added, added) else context.getString(R.string.backup_already_match))
     }
 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             FavoritesBackup.readUri(context, uri)
                 .onSuccess { applyRestore(it) }
-                .onFailure { toast("That file isn't a JTV favourites backup.") }
+                .onFailure { toast(R.string.backup_not_a_backup) }
         }
     }
 
@@ -71,7 +73,7 @@ fun rememberFavoritesBackup(nameOf: (String) -> String?): FavoritesBackupActions
                     try {
                         pick.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
                     } catch (_: ActivityNotFoundException) {
-                        toast("Open Downloads/${FavoritesBackup.FILE_NAME} with JTV from a file manager to restore.")
+                        toast(R.string.backup_open_with, FavoritesBackup.FILE_NAME)
                     }
                 }
             },

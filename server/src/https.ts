@@ -32,7 +32,8 @@ export function generateCert(): void {
     ],
   });
   fs.mkdirSync(config.dataDir, { recursive: true });
-  fs.writeFileSync(keyPath, pems.private);
+  fs.writeFileSync(keyPath, pems.private, { mode: 0o600 }); // private key: owner-only
+  try { fs.chmodSync(keyPath, 0o600); } catch { /* existing file on odd FS */ }
   fs.writeFileSync(certPath, pems.cert);
 }
 

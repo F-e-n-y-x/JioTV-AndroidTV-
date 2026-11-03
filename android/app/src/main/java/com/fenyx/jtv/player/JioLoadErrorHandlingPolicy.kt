@@ -24,6 +24,11 @@ class JioLoadErrorHandlingPolicy(
         val ex = loadErrorInfo.exception
         if (ex is HttpDataSource.InvalidResponseCodeException) {
             val code = ex.responseCode
+            // The request already carried the newest token and that token is past its exp: retrying
+            // can't help, so fail now and let the app fetch a new URL (or show why there is none).
+            if (code == 403 && com.fenyx.jtv.data.JioApiClient.isStreamTokenExpired(ex.dataSpec.uri.toString())) {
+                return C.TIME_UNSET
+            }
             if (code == 403 || code == 404 || code == 410) {
                 return if (loadErrorInfo.errorCount <= tokenRetryLimit) {
                     // Quick backoff; gives the token-refresh loop a beat to publish a fresh token.

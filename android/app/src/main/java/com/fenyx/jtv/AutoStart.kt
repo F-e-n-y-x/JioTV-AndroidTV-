@@ -65,7 +65,16 @@ object AutoStart {
 }
 
 class BootReceiver : BroadcastReceiver() {
+    private companion object {
+        val BOOT_ACTIONS = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            "android.intent.action.QUICKBOOT_POWERON",
+            "com.htc.intent.action.QUICKBOOT_POWERON",
+        )
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action !in BOOT_ACTIONS) return
         val pending = goAsync()
         val app = context.applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
@@ -97,11 +106,11 @@ class WakeWatchService : Service() {
         super.onCreate()
         val nm = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Open when the TV turns on", NotificationManager.IMPORTANCE_MIN))
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.settings_open_on_start), NotificationManager.IMPORTANCE_MIN))
         }
         val n: Notification = NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("Open when the TV turns on")
+            .setSmallIcon(R.drawable.ic_pip_play)
+            .setContentTitle(getString(R.string.settings_open_on_start))
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
         val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0

@@ -1,784 +1,763 @@
 package com.fenyx.jtv.ui.main
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.runtime.*
-import androidx.compose.foundation.focusGroup
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
-import com.fenyx.jtv.theme.Surface
-import androidx.tv.material3.MaterialTheme
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import com.fenyx.jtv.data.Channel
+import com.fenyx.jtv.data.EpgProgram
+import com.fenyx.jtv.data.FavoriteOrder
 import com.fenyx.jtv.data.SettingsManager
-import com.fenyx.jtv.theme.*
-import kotlinx.coroutines.flow.first
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.ChannelPlate
+import com.fenyx.jtv.ui.components.JtvButton
+import com.fenyx.jtv.ui.components.JtvClock
+import com.fenyx.jtv.ui.components.JtvProgress
+import com.fenyx.jtv.ui.components.KeyHint
+import com.fenyx.jtv.ui.components.LocalNow
+import com.fenyx.jtv.ui.components.NumberBlock
+import com.fenyx.jtv.ui.components.formatTime
+import com.fenyx.jtv.ui.components.minutesLeft
+import com.fenyx.jtv.ui.components.nowNext
+import com.fenyx.jtv.ui.components.numberStyle
+import com.fenyx.jtv.ui.components.progress
+import com.fenyx.jtv.ui.components.rememberMinuteClock
+import com.fenyx.jtv.ui.components.textStyle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** A category entry shown in the column (TV/tablet) or the chips (phone). */
+private data class Category(val key: String, val label: String, val count: Int)
+
+/**
+ * v2 "Everyday" home (approved round-2 mockups D-tv-home, D-tablet-home, D-phone-home):
+ * categories · channel list · preview on TV and wide tablets; chips · list · bottom bar on phones.
+ * Live TV is the first screen; OK / tap plays; hold OK / long-press / the ⋮ button opens channel options.
+ */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun MainScreen(
     onChannelClick: (Int, String?) -> Unit,
     onSettingsClick: () -> Unit,
     onSearchClick: () -> Unit = {},
+    onGuideClick: () -> Unit = {},
     modifier: Modifier = Modifier,
-    viewModel: MainViewModel = viewModel()
+    viewModel: MainViewModel = viewModel(),
 ) {
-    val channels by viewModel.channels.collectAsState()
-    val groups by viewModel.groups.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    com.fenyx.jtv.ui.settings.UpdatePrompt(viewModel)
-    val error by viewModel.error.collectAsState()
-    val selectedGroup by viewModel.selectedGroup.collectAsState()
-
+    val c = Jtv.colors
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
+
+    val displayChannels by viewModel.displayChannels.collectAsState()
+    val groups by viewModel.groups.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val selectedGroup by viewModel.selectedGroup.collectAsState()
+    val filteredChannels by viewModel.filteredChannels.collectAsState()
+    val favoriteChannels by viewModel.favoriteChannels.collectAsState()
     val epgMode by settingsManager.epgModeFlow.collectAsState(initial = false)
     val epgData by viewModel.epgData.collectAsState()
-    val favoriteChannels by viewModel.favoriteChannels.collectAsState()
+    // List or grid (null until the saved choice has loaded, so nothing flashes in the wrong view).
+    val gridPref by settingsManager.channelGridFlow.collectAsState(initial = null)
+    val grid = gridPref == true
+    val scope = rememberCoroutineScope()
+    com.fenyx.jtv.ui.settings.UpdatePrompt(viewModel)
+    val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
+    val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
+    // Paired TVs on the same Wi-Fi, for "Play on <TV>" in the channel options.
+    val playTargets by com.fenyx.jtv.sync.LanSync.playTargets.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.fetchChannels()
+    LaunchedEffect(Unit) { viewModel.fetchChannels() }
+    // Once channels are there, quietly resolve the likely first picks (last channel, favourites).
+    LaunchedEffect(displayChannels.isNotEmpty()) { if (displayChannels.isNotEmpty()) viewModel.warmLikelyChannels() }
+    val now = rememberMinuteClock()
+
+    val group = selectedGroup ?: MainViewModel.GROUP_ALL
+    val isFavoritesGroup = group == MainViewModel.GROUP_FAVORITES
+
+    val recentIds by viewModel.recentIds.collectAsState()
+    val recentCount = remember(recentIds, displayChannels) { val ids = displayChannels.mapTo(HashSet()) { it.id }; recentIds.count { it in ids } }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val catPrefs by viewModel.categoryPrefs.collectAsState()
+    val allChannels by viewModel.allChannels.collectAsState()
+    val favoriteOrder by viewModel.favoriteOrder.collectAsState()
+    val favoritesList = remember(allChannels, displayChannels, favoriteOrder) {
+        val pool = if (allChannels.isNotEmpty()) allChannels else displayChannels
+        FavoriteOrder.sortedFavorites(pool, favoriteOrder) { it.id }
     }
-    
-    // EPG is driven by Jio's NATIVE per-channel guide (reliable, keyed by channel_id, correct ms
-    // epochs) — filled per visible row below via fetchNativeEpgIfMissing. We intentionally do NOT
-    // auto-download/parse the XMLTV source here: the default source's IDs (ts…/sun…) don't map to Jio
-    // channel_ids so it shows nothing, and parsing its ~19 MB file on every EPG entry hammered weak TVs.
-    // The XMLTV path stays available only via the manual "Refresh EPG Data" button in Settings, for
-    // users who point EPG Source URL at a Jio-ID-keyed feed.
-
-    // Single shared 30s clock for every EPG row. Previously each visible row ran its own
-    // `while(true){ delay(30s) }` ticker and recomposed independently — on a full EPG screen that was
-    // ~20 coroutines + 20 separate recomposition passes. One hoisted clock is far lighter on weak CPUs.
-    var epgNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(epgMode) {
-        if (epgMode) {
-            while (true) {
-                epgNow = System.currentTimeMillis()
-                kotlinx.coroutines.delay(30_000)
-            }
+    val categories = remember(displayChannels, groups, favoritesList, recentCount, ctx, catPrefs) {
+        val counts = displayChannels.groupingBy { it.group }.eachCount()
+        buildList<Category> {
+            if (favoritesList.isNotEmpty()) add(Category(MainViewModel.GROUP_FAVORITES, ctx.getString(R.string.home_cat_favourites), favoritesList.size))
+            if (recentCount > 0) add(Category(MainViewModel.GROUP_RECENT, ctx.getString(R.string.home_cat_recent), recentCount))
+            add(Category(MainViewModel.GROUP_ALL, ctx.getString(R.string.home_cat_all_channels), displayChannels.size))
+            groups.forEach { add(Category(it, Labels.groupRes(it)?.let(ctx::getString) ?: it, counts[it] ?: 0)) }
+        }.let { list ->
+            val byKey = list.associateBy { it.key }
+            catPrefs.arrange(list.map { it.key }, MainViewModel.GROUP_ALL).mapNotNull { byKey[it] }
         }
     }
+    val indexById = remember(displayChannels) { displayChannels.withIndex().associate { (i, ch) -> ch.id to i } }
 
-    Row(modifier = modifier.fillMaxSize().background(TvDarkBackground)) {
+    // ── Favourites reorder (issue #1): arrows move the lifted channel, OK saves, Back cancels ──
+    var movingId by remember { mutableStateOf<String?>(null) }
+    var workingOrder by remember { mutableStateOf<List<Channel>?>(null) }
+    var menuChannel by remember { mutableStateOf<Channel?>(null) }
+    val shown = workingOrder ?: filteredChannels
+    fun cancelMove() { movingId = null; workingOrder = null }
+    fun commitMove() { workingOrder?.let { l -> viewModel.saveFavoriteOrder(l.map { it.id }) }; cancelMove() }
+    LaunchedEffect(group) { if (!isFavoritesGroup) cancelMove() }
+    androidx.activity.compose.BackHandler(enabled = movingId != null) { cancelMove() }
 
-        // ─── Left Sidebar (Category Navigation) ───
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(210.dp)
-                .background(TvDarkSurface)
-                // focusGroup so D-pad Left/Right treats the sidebar as one cluster (predictable
-                // traversal to/from the grid instead of geometry-based zig-zag).
-                .focusGroup()
-                // Overscan-safe top/bottom + a small left inset so focused labels stay in the safe area.
-                .padding(start = 12.dp, top = TvDimens.OverscanVertical, bottom = TvDimens.OverscanVertical)
-        ) {
-
-
-            // Search entry — a D-pad-friendly way to find one of ~1300 channels by name.
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
-                onClick = onSearchClick,
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = Color.Transparent,
-                    focusedContainerColor = TvDarkSurfaceVariant
-                ),
-                border = ClickableSurfaceDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(
-                        border = androidx.compose.foundation.BorderStroke(2.dp, TvFocusBorder),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                )
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = "Search", tint = TvPrimary, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Search", color = TvOnSurface, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // "All" + "Favorites" pseudo-categories precede the real Jio categories.
-            val sidebarGroups = remember(groups, favoriteChannels) {
-                buildList {
-                    add(MainViewModel.GROUP_ALL)
-                    if (favoriteChannels.isNotEmpty()) add(MainViewModel.GROUP_FAVORITES)
-                    addAll(groups)
-                }
-            }
-
-            // Category list. focusRestorer remembers the last-focused category so returning to the
-            // sidebar lands where you left it, not back at the top.
-            LazyColumn(modifier = Modifier.weight(1f).focusRestorer()) {
-                items(sidebarGroups) { group ->
-                    val isSelected = selectedGroup == group ||
-                        (selectedGroup == null && group == MainViewModel.GROUP_ALL)
-                    val label = when (group) {
-                        MainViewModel.GROUP_ALL -> "All"
-                        MainViewModel.GROUP_FAVORITES -> "★ Favorites (${favoriteChannels.size})"
-                        else -> group
-                    }
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                        onClick = { viewModel.setSelectedGroup(group) },
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        // Full-width sidebar rows can't scale without clipping, so the focus cue is a
-                        // bright border + fill (clearly visible at 10 feet).
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = if (isSelected) TvPrimaryContainer.copy(alpha = 0.3f) else Color.Transparent,
-                            focusedContainerColor = TvDarkSurfaceVariant
-                        ),
-                        border = ClickableSurfaceDefaults.border(
-                            focusedBorder = androidx.tv.material3.Border(
-                                border = androidx.compose.foundation.BorderStroke(2.dp, TvFocusBorder),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-
-                            Text(
-                                text = label,
-                                color = if (isSelected) TvPrimary else TvOnSurface,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Bottom actions
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .padding(horizontal = 16.dp)
-                    .background(TvDarkSurfaceVariant)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Refresh
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
-                onClick = { viewModel.retry() },
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = Color.Transparent,
-                    focusedContainerColor = TvDarkSurfaceVariant
-                ),
-                border = ClickableSurfaceDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(
-                        border = androidx.compose.foundation.BorderStroke(2.dp, TvFocusBorder),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                )
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = TvOnSurfaceVariant, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Refresh", color = TvOnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-
-            // Settings
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
-                onClick = onSettingsClick,
-                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = Color.Transparent,
-                    focusedContainerColor = TvDarkSurfaceVariant
-                ),
-                border = ClickableSurfaceDefaults.border(
-                    focusedBorder = androidx.tv.material3.Border(
-                        border = androidx.compose.foundation.BorderStroke(2.dp, TvFocusBorder),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                )
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = TvOnSurfaceVariant, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Settings", color = TvOnSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
+    fun play(ch: Channel) {
+        if (movingId != null) {
+            val list = workingOrder ?: return
+            val from = list.indexOfFirst { it.id == movingId }
+            val to = list.indexOfFirst { it.id == ch.id }
+            if (from >= 0 && to >= 0) workingOrder = FavoriteOrder.move(list, from, to)
+            commitMove(); return
         }
-
-        // ─── Right Content Area (Channel Grid) ───
-        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            if (isLoading) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator(color = TvPrimary)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Loading channels...", color = TvOnSurfaceVariant)
-                }
-            } else if (error != null) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("⚠", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = error!!,
-                        color = TvOnSurfaceVariant,
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Surface(
-                        onClick = { viewModel.retry() },
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = TvPrimaryContainer,
-                            focusedContainerColor = TvPrimary
-                        )
-                    ) {
-                        Text(
-                            "Retry",
-                            modifier = Modifier.padding(horizontal = 32.dp, vertical = 12.dp),
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            } else {
-                val filteredChannels by viewModel.filteredChannels.collectAsState()
-                val isFavoritesGroup = selectedGroup == MainViewModel.GROUP_FAVORITES
-                val scope = rememberCoroutineScope()
-
-                // ── Favorites reorder state ──
-                // While moving, the grid shows `workingOrder` (a local copy) so every arrow press is
-                // instant; it's written to DataStore once on OK. Back discards it.
-                var movingId by remember { mutableStateOf<String?>(null) }
-                var workingOrder by remember { mutableStateOf<List<com.fenyx.jtv.data.Channel>?>(null) }
-                var menuChannel by remember { mutableStateOf<com.fenyx.jtv.data.Channel?>(null) }
-                val movingFocus = remember { FocusRequester() }
-                val shown = workingOrder ?: filteredChannels
-
-                fun cancelMove() { movingId = null; workingOrder = null }
-                fun commitMove() {
-                    workingOrder?.let { list -> viewModel.saveFavoriteOrder(list.map { it.id }) }
-                    cancelMove()
-                }
-                fun startMove(channel: com.fenyx.jtv.data.Channel) {
-                    workingOrder = filteredChannels
-                    movingId = channel.id
-                }
-                // Leaving Favorites (or the list changing underneath) ends a move without saving.
-                LaunchedEffect(selectedGroup) { if (!isFavoritesGroup) cancelMove() }
-                androidx.activity.compose.BackHandler(enabled = movingId != null) { cancelMove() }
-
-                // Pre-compute channel index map once (O(n)) instead of indexOf per item (O(n²))
-                val allChannels = viewModel.getAllChannels()
-                val channelIndexMap = remember(allChannels) {
-                    allChannels.withIndex().associate { (i, ch) -> ch.id to i }
-                }
-
-                // Initial focus: drop focus onto the first channel once per screen entry after the list
-                // appears, so the first D-pad press works — and so returning from the player (which
-                // recomposes Home fresh) re-establishes focus instead of leaving the remote dead.
-                // Uses plain `remember` (not rememberSaveable) so each fresh entry re-requests; the guard
-                // stops category switches within one entry from yanking focus back to the grid.
-                val firstItemFocus = remember { FocusRequester() }
-                var initialFocusDone by remember { mutableStateOf(false) }
-                LaunchedEffect(filteredChannels.isNotEmpty()) {
-                    if (!initialFocusDone && filteredChannels.isNotEmpty()) {
-                        runCatching { firstItemFocus.requestFocus() }
-                        initialFocusDone = true
-                    }
-                }
-
-                val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-
-                // Keep the moving card on screen and focused after each step.
-                LaunchedEffect(workingOrder) {
-                    val id = movingId ?: return@LaunchedEffect
-                    val index = shown.indexOfFirst { it.id == id }
-                    if (index < 0) return@LaunchedEffect
-                    val visible = if (epgMode) listState.layoutInfo.visibleItemsInfo.map { it.index }
-                                  else gridState.layoutInfo.visibleItemsInfo.map { it.index }
-                    val fullyInside = visible.size > 2 && index > visible.first() && index < visible.last()
-                    if (!fullyInside) {
-                        if (epgMode) listState.scrollToItem((index - 1).coerceAtLeast(0))
-                        else gridState.scrollToItem(index)
-                    }
-                    androidx.compose.runtime.withFrameNanos { }
-                    runCatching { movingFocus.requestFocus() }
-                }
-
-                // D-pad handling while moving. Columns come from the live grid layout so ▲/▼ jump a
-                // whole row whatever the screen size; the EPG list is a single column.
-                val moveKeys = Modifier.onPreviewKeyEvent { event ->
-                    val id = movingId ?: return@onPreviewKeyEvent false
-                    val list = workingOrder ?: return@onPreviewKeyEvent false
-                    val isOk = event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.NumPadEnter
-                    if (isOk) {
-                        if (event.type == KeyEventType.KeyUp) commitMove()
-                        return@onPreviewKeyEvent true
-                    }
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    val columns = if (epgMode) 1
-                        else (gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column } ?: 0) + 1
-                    val delta = when (event.key) {
-                        Key.DirectionLeft -> if (epgMode) return@onPreviewKeyEvent true else -1
-                        Key.DirectionRight -> if (epgMode) return@onPreviewKeyEvent true else 1
-                        Key.DirectionUp -> -columns
-                        Key.DirectionDown -> columns
-                        else -> return@onPreviewKeyEvent false
-                    }
-                    val from = list.indexOfFirst { it.id == id }
-                    val to = (from + delta).coerceIn(0, list.lastIndex)
-                    if (from >= 0 && to != from) workingOrder = com.fenyx.jtv.data.FavoriteOrder.move(list, from, to)
-                    true
-                }
-
-                // Card click: normally opens the player; while moving, a mouse/touch tap on another
-                // card drops the moving channel into that slot (remote OK is handled in moveKeys).
-                fun onCardClick(channel: com.fenyx.jtv.data.Channel) {
-                    val id = movingId
-                    if (id != null) {
-                        val list = workingOrder ?: return
-                        val from = list.indexOfFirst { it.id == id }
-                        val to = list.indexOfFirst { it.id == channel.id }
-                        if (from >= 0 && to >= 0) workingOrder = com.fenyx.jtv.data.FavoriteOrder.move(list, from, to)
-                        commitMove()
-                        return
-                    }
-                    onChannelClick(channelIndexMap[channel.id] ?: 0, selectedGroup)
-                }
-
-                fun actionsFor(channel: com.fenyx.jtv.data.Channel): List<ChannelAction> = buildList {
-                    val isFav = favoriteChannels.contains(channel.id)
-                    add(ChannelAction("▶  Watch") { onCardClick(channel) })
-                    if (isFavoritesGroup && filteredChannels.size > 1) {
-                        val index = filteredChannels.indexOfFirst { it.id == channel.id }
-                        add(ChannelAction("⇅  Move", "Use the arrow keys to place it, then press OK") { startMove(channel) })
-                        if (index > 0) add(ChannelAction("⤒  Move to top") {
-                            viewModel.saveFavoriteOrder(com.fenyx.jtv.data.FavoriteOrder.move(filteredChannels, index, 0).map { it.id })
-                        })
-                        if (index in 0 until filteredChannels.lastIndex) add(ChannelAction("⤓  Move to bottom") {
-                            viewModel.saveFavoriteOrder(com.fenyx.jtv.data.FavoriteOrder.move(filteredChannels, index, filteredChannels.lastIndex).map { it.id })
-                        })
-                        add(ChannelAction("▦  Group favorites by category", "Categories keep the order they first appear in") {
-                            viewModel.groupFavoritesByCategory()
-                        })
-                    }
-                    add(
-                        if (isFav) ChannelAction("☆  Remove from Favorites") { viewModel.toggleFavorite(channel.id) }
-                        else ChannelAction("★  Add to Favorites") { viewModel.toggleFavorite(channel.id) }
-                    )
-                }
-
-                menuChannel?.let { ch ->
-                    ChannelActionsDialog(channel = ch, actions = actionsFor(ch), onDismiss = { menuChannel = null })
-                }
-
-                fun itemModifier(index: Int, channel: com.fenyx.jtv.data.Channel): Modifier = when {
-                    channel.id == movingId -> Modifier.focusRequester(movingFocus)
-                    index == 0 -> Modifier.focusRequester(firstItemFocus)
-                    else -> Modifier
-                }
-
-                Column(modifier = Modifier.fillMaxSize()) {
-                    val movingChannel = movingId?.let { id -> shown.firstOrNull { it.id == id } }
-                    if (movingChannel != null) {
-                        MoveBanner(
-                            channelName = movingChannel.name,
-                            position = shown.indexOf(movingChannel) + 1,
-                            total = shown.size,
-                            isGrid = !epgMode,
-                            modifier = Modifier.padding(start = TvDimens.SpaceMd, end = TvDimens.OverscanHorizontal, top = TvDimens.OverscanVertical)
-                        )
-                    } else if (isFavoritesGroup && shown.isNotEmpty()) {
-                        FavoritesHint(
-                            modifier = Modifier.padding(start = TvDimens.SpaceMd + 4.dp, end = TvDimens.OverscanHorizontal, top = TvDimens.OverscanVertical)
-                        )
-                    }
-                    val topPad = if (movingChannel != null || isFavoritesGroup) 12.dp else TvDimens.OverscanVertical
-
-                    if (shown.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No channels in this category", color = TvOnSurfaceVariant)
-                        }
-                    } else if (epgMode) {
-                        LazyColumn(
-                            state = listState,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.focusRestorer().then(moveKeys),
-                            contentPadding = PaddingValues(
-                                start = TvDimens.SpaceMd, end = TvDimens.OverscanHorizontal,
-                                top = topPad, bottom = TvDimens.OverscanVertical
-                            )
-                        ) {
-                            itemsIndexed(items = shown, key = { _, ch -> ch.id }) { index, channel ->
-                                val programs = epgData[channel.id] ?: emptyList()
-                                LaunchedEffect(channel.id) {
-                                    if (programs.isEmpty()) {
-                                        viewModel.fetchNativeEpgIfMissing(channel.id)
-                                    }
-                                }
-
-                                EpgChannelRow(
-                                    channel = channel,
-                                    epgPrograms = programs,
-                                    now = epgNow,
-                                    onClick = { onCardClick(channel) },
-                                    onLongClick = { if (movingId == null) menuChannel = channel },
-                                    isMoving = channel.id == movingId,
-                                    modifier = itemModifier(index, channel).then(
-                                        if (movingId != null) Modifier.animateItem() else Modifier
-                                    )
-                                )
-                            }
-                        }
-                    } else {
-                        LazyVerticalGrid(
-                            state = gridState,
-                            columns = GridCells.Adaptive(150.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            // focusRestorer keeps your place in the grid when you leave and come back
-                            // (e.g. return from the player), instead of snapping to the first card.
-                            modifier = Modifier.focusRestorer().then(moveKeys),
-                            // Overscan-safe: extra room on the right/top/bottom so focused cards (which
-                            // scale up) and the last column aren't clipped by the panel edge.
-                            contentPadding = PaddingValues(
-                                start = TvDimens.SpaceMd, end = TvDimens.OverscanHorizontal,
-                                top = topPad, bottom = TvDimens.OverscanVertical
-                            )
-                        ) {
-                            itemsIndexed(items = shown, key = { _, ch -> ch.id }) { index, channel ->
-                                ChannelCard(
-                                    channel = channel,
-                                    onClick = { onCardClick(channel) },
-                                    onLongClick = { if (movingId == null) menuChannel = channel },
-                                    isFavorite = !isFavoritesGroup && favoriteChannels.contains(channel.id),
-                                    isMoving = channel.id == movingId,
-                                    modifier = itemModifier(index, channel).then(
-                                        if (movingId != null) Modifier.animateItem() else Modifier
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-
+        val targetIndex = if (isFavoritesGroup) {
+            shown.indexOfFirst { it.id == ch.id }.coerceAtLeast(0)
+        } else {
+            indexById[ch.id] ?: 0
         }
+        onChannelClick(targetIndex, selectedGroup)
     }
-}
 
-@Composable
-fun ChannelCard(
-    channel: com.fenyx.jtv.data.Channel,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null,
-    isFavorite: Boolean = false,
-    isMoving: Boolean = false
-) {
-    val context = LocalContext.current
-
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(1f),
-        onClick = onClick,
-        onLongClick = onLongClick,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
-        // Clear 10-foot focus cue: the card scales up (was disabled at 1.0f) plus the focus border.
-        // The card being moved is "lifted": bigger, accent-filled and always outlined.
-        scale = ClickableSurfaceDefaults.scale(focusedScale = if (isMoving) 1.12f else TvDimens.FocusedScale),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isMoving) TvPrimaryContainer.copy(alpha = 0.5f) else TvDarkSurface,
-            focusedContainerColor = if (isMoving) TvPrimaryContainer.copy(alpha = 0.6f) else TvDarkSurfaceVariant
-        ),
-        border = ClickableSurfaceDefaults.border(
-            border = if (isMoving) androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(3.dp, TvPrimary),
-                shape = RoundedCornerShape(12.dp)
-            ) else androidx.tv.material3.Border.None,
-            focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(if (isMoving) 3.dp else 2.dp, if (isMoving) Color.White else TvFocusBorder),
-                shape = RoundedCornerShape(12.dp)
-            )
+    fun actionsFor(ch: Channel): List<ChannelAction> = buildList {
+        val isFav = favoriteChannels.contains(ch.id)
+        add(ChannelAction(ctx.getString(R.string.home_watch)) { play(ch) })
+        // Catch-up: the guide, on this channel, a little back in time (Jio keeps 7 days).
+        if (ch.isCatchup) add(ChannelAction(ctx.getString(R.string.home_action_replay_earlier), ctx.getString(R.string.home_action_replay_earlier_note)) {
+            viewModel.requestGuideFocus(ch.id)
+            onGuideClick()
+        })
+        add(
+            if (isFav) ChannelAction(ctx.getString(R.string.home_action_remove_favourite), confirm = ctx.getString(R.string.home_confirm_remove_favourite, ch.name)) { viewModel.toggleFavorite(ch.id) }
+            else ChannelAction(ctx.getString(R.string.home_action_add_favourite)) { viewModel.toggleFavorite(ch.id) }
         )
-    ) {
-        if (isMoving || isFavorite) {
-            Text(
-                if (isMoving) "⇅" else "★",
-                color = if (isMoving) Color.White else androidx.compose.ui.graphics.Color(0xFFFFC107),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
-            )
+        playTargets.forEach { tv ->
+            add(ChannelAction(ctx.getString(R.string.home_action_play_on, tv.name)) { com.fenyx.jtv.sync.LanSync.playOn(tv.id, ch.id) })
         }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            // Channel logo
-            if (channel.logoUrl.isNotEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(channel.logoUrl)
-                        .size(112) // Downsample to 2x display size (56dp) to save memory
-                        .build(),
-                    contentDescription = channel.name,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(TvDarkSurfaceVariant),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                // Fallback icon
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(TvDarkSurfaceVariant),
-                    contentAlignment = Alignment.Center
+        if (isFavoritesGroup && filteredChannels.size > 1) {
+            val i = filteredChannels.indexOfFirst { it.id == ch.id }
+            add(ChannelAction(ctx.getString(R.string.home_action_move), ctx.getString(if (grid) R.string.home_action_move_note_grid else R.string.home_action_move_note)) {
+                workingOrder = filteredChannels; movingId = ch.id
+            })
+            if (i > 0) add(ChannelAction(ctx.getString(R.string.home_action_move_top)) {
+                viewModel.saveFavoriteOrder(FavoriteOrder.move(filteredChannels, i, 0).map { it.id })
+            })
+            if (i in 0 until filteredChannels.lastIndex) add(ChannelAction(ctx.getString(R.string.home_action_move_bottom)) {
+                viewModel.saveFavoriteOrder(FavoriteOrder.move(filteredChannels, i, filteredChannels.lastIndex).map { it.id })
+            })
+            add(ChannelAction(ctx.getString(R.string.home_action_group_by_category), ctx.getString(R.string.home_action_group_by_category_note)) {
+                viewModel.groupFavoritesByCategory()
+            })
+        }
+    }
+    menuChannel?.let { ch -> ChannelActionsDialog(ch, actionsFor(ch)) { menuChannel = null } }
+    var confirmUnfav by remember { mutableStateOf<Channel?>(null) }
+    confirmUnfav?.let { ch ->
+        ChannelActionsDialog(
+            ch, emptyList(),
+            startWith = ChannelAction(ctx.getString(R.string.home_action_remove), confirm = ctx.getString(R.string.home_confirm_remove_favourite, ch.name)) { viewModel.toggleFavorite(ch.id) },
+        ) { confirmUnfav = null }
+    }
+
+    // ── Number entry (0–9 tunes the real Jio channel number) ──
+    var digits by remember { mutableStateOf("") }
+    LaunchedEffect(digits) {
+        if (digits.isEmpty()) return@LaunchedEffect
+        // Wait for another digit only while a longer number in the list could still match (15 → 150, 1500…).
+        val reachable = (shown.asSequence() + displayChannels.asSequence()).map { it.channelNumber } +
+            (if (isFavoritesGroup) (1..shown.size).asSequence() else emptySequence())
+        if (numberEntryCanGrow(digits, reachable.asIterable())) delay(1500)
+        val n = digits.toIntOrNull()
+        digits = ""
+        // In Favourites the numbers are positions (1, 2, 3…), so 2 is the second favourite (#7).
+        val target = (if (isFavoritesGroup && n != null) shown.getOrNull(n - 1) else null)
+            ?: shown.firstOrNull { it.channelNumber == n } ?: displayChannels.firstOrNull { it.channelNumber == n }
+            ?: return@LaunchedEffect
+        // Index inside the shown list's own contract (favourites/global index their own list); else display index, no group.
+        val inGroup = if (shown.any { it.id == target.id }) playIndex(target.id, group, shown, displayChannels) else null
+        if (inGroup != null) onChannelClick(inGroup, selectedGroup)
+        else indexById[target.id]?.let { onChannelClick(it, null) }
+    }
+
+    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
+    // Columns of the grid as laid out (0 until it has been measured once).
+    var gridCols by remember { mutableIntStateOf(0) }
+    var focusedId by remember { mutableStateOf<String?>(null) }
+    // Set when the user flips List/Grid: the channel they were on gets scrolled into view and is the one
+    // focus lands on when they press Down into the new view. Cleared as soon as a channel takes focus.
+    var restoreId by remember { mutableStateOf<String?>(null) }
+    // True while the channel that owns [targetFocus] is composed (focusing an unattached one would crash).
+    val targetAttached = remember { booleanArrayOf(false) }
+
+    // Initial focus: the channel that was playing (back from the player), else the first channel.
+    val targetFocus = remember { FocusRequester() }
+    val focusTargetId = remember(shown, lastChannelId, restoreId) {
+        if (movingId != null) movingId
+        else restoreId?.takeIf { id -> shown.any { it.id == id } } ?: shown.firstOrNull { it.id == lastChannelId }?.id ?: shown.firstOrNull()?.id
+    }
+    var initialFocusDone by remember { mutableStateOf(false) }
+    // Touch devices get no initial focus highlight (a focus ring there reads as "selected").
+    val requestInitialFocus = Jtv.isTv
+    LaunchedEffect(focusTargetId, gridPref, gridCols) {
+        if (!requestInitialFocus || initialFocusDone || focusTargetId == null || movingId != null || gridPref == null) return@LaunchedEffect
+        if (grid && gridCols == 0) return@LaunchedEffect // wait for the grid's first measure
+        val idx = shown.indexOfFirst { it.id == focusTargetId }
+        if (grid) gridState.scrollToItem(gridScrollTarget(idx.coerceAtLeast(0), gridCols))
+        else if (idx > 2) listState.scrollToItem(idx - 2)
+        androidx.compose.runtime.withFrameNanos { }
+        runCatching { targetFocus.requestFocus() }
+        initialFocusDone = true
+    }
+    // After a List/Grid flip, bring the channel you were on into view in the new layout.
+    LaunchedEffect(grid, gridCols) {
+        val id = restoreId ?: return@LaunchedEffect
+        if (grid && gridCols == 0) return@LaunchedEffect
+        val idx = shown.indexOfFirst { it.id == id }
+        if (idx < 0) return@LaunchedEffect
+        if (grid) gridState.scrollToItem(gridScrollTarget(idx, gridCols)) else listState.scrollToItem((idx - 2).coerceAtLeast(0))
+    }
+    // Keep the moving row visible and focused after every step.
+    LaunchedEffect(workingOrder) {
+        val id = movingId ?: return@LaunchedEffect
+        val idx = shown.indexOfFirst { it.id == id }
+        if (idx < 0) return@LaunchedEffect
+        if (grid) {
+            val vis = gridState.layoutInfo.visibleItemsInfo.map { it.index }
+            val cols = gridCols.coerceAtLeast(1)
+            if (vis.size < cols || idx < vis.first() + cols || idx > vis.last() - cols) gridState.scrollToItem(gridScrollTarget(idx, cols))
+        } else {
+            val vis = listState.layoutInfo.visibleItemsInfo.map { it.index }
+            if (vis.size < 3 || idx <= vis.first() || idx >= vis.last()) listState.scrollToItem((idx - 2).coerceAtLeast(0))
+        }
+        androidx.compose.runtime.withFrameNanos { }
+        runCatching { targetFocus.requestFocus() }
+    }
+
+    val keys = Modifier.onPreviewKeyEvent { e ->
+        // Remote buttons: the keys mapped to Programme guide / Search open them from here too.
+        if (movingId == null) {
+            val n = e.nativeKeyEvent
+            when (remoteMap.actionFor(n.keyCode, n.scanCode, hold = false)) {
+                com.fenyx.jtv.data.RemoteAction.Guide -> {
+                    if (e.type == KeyEventType.KeyDown && n.repeatCount == 0) onGuideClick()
+                    return@onPreviewKeyEvent true
+                }
+                com.fenyx.jtv.data.RemoteAction.Search -> {
+                    if (e.type == KeyEventType.KeyDown && n.repeatCount == 0) onSearchClick()
+                    return@onPreviewKeyEvent true
+                }
+                else -> {}
+            }
+        }
+        val code = e.nativeKeyEvent.keyCode
+        val digit = when (code) {
+            in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 -> code - android.view.KeyEvent.KEYCODE_0
+            in android.view.KeyEvent.KEYCODE_NUMPAD_0..android.view.KeyEvent.KEYCODE_NUMPAD_9 -> code - android.view.KeyEvent.KEYCODE_NUMPAD_0
+            else -> -1
+        }
+        if (digit >= 0 && movingId == null) {
+            if (e.type == KeyEventType.KeyDown && digits.length < 4) digits += digit
+            return@onPreviewKeyEvent true
+        }
+        val id = movingId ?: return@onPreviewKeyEvent false
+        val list = workingOrder ?: return@onPreviewKeyEvent false
+        if (e.key == Key.Enter || e.key == Key.DirectionCenter || e.key == Key.NumPadEnter) {
+            if (e.type == KeyEventType.KeyUp) commitMove()
+            return@onPreviewKeyEvent true
+        }
+        if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        val step = when (e.key) {
+            Key.DirectionUp -> GridKey.Up
+            Key.DirectionDown -> GridKey.Down
+            Key.DirectionLeft -> GridKey.Left
+            Key.DirectionRight -> GridKey.Right
+            else -> return@onPreviewKeyEvent false
+        }
+        // List: Up/Down one place (Left/Right do nothing). Grid: Left/Right one place, Up/Down a whole row.
+        val from = list.indexOfFirst { it.id == id }
+        val to = gridMoveTarget(from, step, if (grid) gridCols.coerceAtLeast(1) else 1, list.size)
+        if (from >= 0 && to != from) workingOrder = FavoriteOrder.move(list, from, to)
+        true
+    }
+
+    val focusedChannel = shown.firstOrNull { it.id == focusedId } ?: shown.firstOrNull()
+
+    val listContent: @Composable (RowMetrics, Boolean) -> Unit = { m, touch ->
+        when {
+            gridPref == null -> {}
+            isLoading && shown.isEmpty() -> CenterMessage { CircularProgressIndicator(color = c.acc) ; Spacer(Modifier.height(14.dp)); Text(stringResource(R.string.home_loading_channels), style = textStyle(16.sp), color = c.t2) }
+            error != null && shown.isEmpty() -> CenterMessage {
+                Text(error ?: "", style = textStyle(17.sp), color = c.tx, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(16.dp))
+                JtvButton(stringResource(R.string.common_try_again), onClick = { viewModel.retry() }, primary = true)
+            }
+            shown.isEmpty() -> CenterMessage { Text(stringResource(R.string.home_no_channels_in_category), style = textStyle(16.sp), color = c.t2) }
+            grid -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                val cm = when (Jtv.form) { FormFactor.Tv -> TvCard; FormFactor.Tablet -> TabletCard; FormFactor.Phone -> PhoneCard }
+                val cols = gridColumns(maxWidth.value - 8f, cm.minCardDp, cm.gap.value, cm.minCols, cm.maxCols)
+                LaunchedEffect(cols) { gridCols = cols }
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(cols),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize().focusRestorer { if (restoreId != null && targetAttached[0]) targetFocus else FocusRequester.Default }.focusGroup(),
+                    // 4dp sides: the focused card scales up 3% and the grid clips what overflows it.
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(cm.gap),
+                    horizontalArrangement = Arrangement.spacedBy(cm.gap),
                 ) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = TvOnSurfaceVariant,
-                        modifier = Modifier.size(28.dp)
+                    gridItemsIndexed(shown, key = { _, ch -> ch.id }, contentType = { _, _ -> "card" }) { i, ch ->
+                        val programs = if (epgMode) epgData[ch.id] else null
+                        if (epgMode) LaunchedEffect(ch.id) { if (programs.isNullOrEmpty()) viewModel.fetchNativeEpgIfMissing(ch.id) }
+                        val nowProg = programs?.let { p -> p.firstOrNull { it.startMs <= now && now < it.stopMs } }
+                        if (ch.id == focusTargetId) TrackAttached(targetAttached)
+                        ChannelCard(
+                            channel = ch, nowProgram = nowProg, now = now, m = cm,
+                            isFavorite = !isFavoritesGroup && favoriteChannels.contains(ch.id),
+                            isMoving = ch.id == movingId,
+                            number = if (isFavoritesGroup) i + 1 else ch.channelNumber,
+                            onClick = { play(ch) },
+                            onLongClick = { if (movingId == null) menuChannel = ch },
+                            modifier = Modifier
+                                .then(if (ch.id == focusTargetId) Modifier.focusRequester(targetFocus) else Modifier)
+                                .onFocusChanged { if (it.isFocused) { focusedId = ch.id; restoreId = null; viewModel.prefetchSoon(ch.id) } }
+                                .then(if (movingId != null) Modifier.animateItem() else Modifier),
+                        )
+                    }
+                }
+            }
+            else -> LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().focusRestorer { if (restoreId != null && targetAttached[0]) targetFocus else FocusRequester.Default }.focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                contentPadding = PaddingValues(vertical = 4.dp),
+            ) {
+                itemsIndexed(shown, key = { _, ch -> ch.id }, contentType = { _, _ -> "row" }) { i, ch ->
+                    val programs = if (epgMode) epgData[ch.id] else null
+                    if (epgMode) LaunchedEffect(ch.id) { if (programs.isNullOrEmpty()) viewModel.fetchNativeEpgIfMissing(ch.id) }
+                    val nowProg = programs?.let { p -> p.firstOrNull { it.startMs <= now && now < it.stopMs } }
+                    if (ch.id == focusTargetId) TrackAttached(targetAttached)
+                    ChannelRow(
+                        channel = ch, nowProgram = nowProg, now = now, m = m,
+                        isFavorite = !isFavoritesGroup && favoriteChannels.contains(ch.id),
+                        isMoving = ch.id == movingId,
+                        number = if (isFavoritesGroup) i + 1 else ch.channelNumber,
+                        onClick = { play(ch) },
+                        onLongClick = { if (movingId == null) menuChannel = ch },
+                        
+                        modifier = Modifier
+                            .then(if (ch.id == focusTargetId) Modifier.focusRequester(targetFocus) else Modifier)
+                            .onFocusChanged { if (it.isFocused) { focusedId = ch.id; restoreId = null; viewModel.prefetchSoon(ch.id) } }
+                            .then(if (movingId != null) Modifier.animateItem() else Modifier),
                     )
                 }
             }
+        }
+    }
 
-            Spacer(modifier = Modifier.height(8.dp))
+    val onViewSelect: (Boolean) -> Unit = { g -> restoreId = focusedId; scope.launch { settingsManager.setChannelGrid(g) } }
 
-            // Channel name
-            Text(
-                channel.name,
-                style = MaterialTheme.typography.bodySmall,
-                color = TvOnSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Medium
-            )
-
-            // LIVE badge
-            Spacer(modifier = Modifier.height(4.dp))
-            Box(
-                modifier = Modifier
-                    .background(TvLiveRed.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    "LIVE",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TvLiveRed,
-                    letterSpacing = 1.sp
+    CompositionLocalProvider(LocalNow provides now) {
+        BoxWithConstraints(modifier.fillMaxSize().background(c.bg).then(keys)) {
+            val wide = Jtv.isTv || maxWidth >= 840.dp
+            if (wide) {
+                WideHome(
+                    categories = categories, selected = group, count = displayChannels.size,
+                    onSelect = { viewModel.setSelectedGroup(it) }, selectOnFocus = Jtv.isTv && movingId == null,
+                    onSearch = onSearchClick, onGuide = onGuideClick, onSettings = onSettingsClick,
+                    movingName = movingId?.let { id -> shown.firstOrNull { it.id == id }?.name },
+                    movingPos = movingId?.let { id -> shown.indexOfFirst { it.id == id } + 1 } ?: 0, total = shown.size,
+                    grid = grid, onViewSelect = onViewSelect,
+                    list = { listContent(if (Jtv.isTv) TvRow else TouchRow.copy(height = 64.dp), false) },
+                    info = {
+                        focusedChannel?.let { ch ->
+                            LaunchedEffect(ch.id) { delay(250); viewModel.fetchNativeEpgIfMissing(ch.id) }
+                            GridInfoBar(ch, epgData[ch.id], now, if (isFavoritesGroup) shown.indexOfFirst { it.id == ch.id } + 1 else ch.channelNumber)
+                        }
+                    },
+                    preview = {
+                        focusedChannel?.let { ch ->
+                            // The channel you rest on (after 0.25 s, so fast scrolling fetches nothing) and its
+                            // neighbours: one small guide request each, even with the guide setting off, and the
+                            // neighbours' pictures go into the image cache so the next row shows at once.
+                            val ctx = androidx.compose.ui.platform.LocalContext.current
+                            val near = remember(ch.id, shown) {
+                                val i = shown.indexOfFirst { it.id == ch.id }
+                                listOfNotNull(shown.getOrNull(i - 1), shown.getOrNull(i + 1))
+                            }
+                            LaunchedEffect(ch.id) {
+                                delay(250)
+                                viewModel.fetchNativeEpgIfMissing(ch.id)
+                                near.forEach { viewModel.fetchNativeEpgIfMissing(it.id) }
+                            }
+                            val nearPosters = near.mapNotNull { n -> epgData[n.id]?.let { nowNext(it, now) }?.now?.posterUrl }
+                            LaunchedEffect(nearPosters) {
+                                delay(250)
+                                nearPosters.forEach { coil.Coil.imageLoader(ctx).enqueue(posterRequest(ctx, it)) }
+                            }
+                            PreviewPane(
+                                ch, epgData[ch.id].orEmpty(), now,
+                                number = if (isFavoritesGroup) shown.indexOfFirst { it.id == ch.id } + 1 else ch.channelNumber,
+                                isFavorite = favoriteChannels.contains(ch.id),
+                                onWatch = { play(ch) },
+                                onFavorite = { if (favoriteChannels.contains(ch.id)) confirmUnfav = ch else viewModel.toggleFavorite(ch.id) },
+                                onOptions = { menuChannel = ch },
+                            )
+                        }
+                    },
+                )
+            } else {
+                PhoneHome(
+                    categories = categories, selected = group, count = displayChannels.size,
+                    onSelect = { viewModel.setSelectedGroup(it) },
+                    onSearch = onSearchClick, onGuide = onGuideClick, onSettings = onSettingsClick,
+                    grid = grid, onViewSelect = onViewSelect,
+                    list = { listContent(TouchRow, true) },
+                )
+            }
+            if (digits.isNotEmpty()) {
+                NumberBlock(
+                    digits.toInt(),
+                    Modifier.align(Alignment.TopEnd).padding(top = 27.dp, end = 48.dp).size(150.dp, 96.dp).clip(RoundedCornerShape(8.dp)),
+                    fontSize = 52.sp,
                 )
             }
         }
     }
 }
 
+/** Marks that the composable it sits in is on screen (see targetAttached in MainScreen). */
 @Composable
-fun EpgChannelRow(
-    channel: com.fenyx.jtv.data.Channel,
-    epgPrograms: List<com.fenyx.jtv.data.EpgProgram>,
+private fun TrackAttached(flag: BooleanArray) {
+    DisposableEffect(Unit) { flag[0] = true; onDispose { flag[0] = false } }
+}
+
+@Composable
+private fun CenterMessage(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) { content() }
+    }
+}
+
+@Composable
+private fun WideHome(
+    categories: List<Category>,
+    selected: String,
+    count: Int,
+    onSelect: (String) -> Unit,
+    selectOnFocus: Boolean,
+    onSearch: () -> Unit,
+    onGuide: () -> Unit,
+    onSettings: () -> Unit,
+    movingName: String?,
+    movingPos: Int,
+    total: Int,
+    grid: Boolean,
+    onViewSelect: (Boolean) -> Unit,
+    list: @Composable () -> Unit,
+    info: @Composable () -> Unit,
+    preview: @Composable () -> Unit,
+) {
+    val c = Jtv.colors
+    val tv = Jtv.isTv
+    val now = LocalNow.current
+    Column(Modifier.fillMaxSize().padding(horizontal = if (tv) 48.dp else 32.dp, vertical = if (tv) 27.dp else 24.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.home_title), style = textStyle(26.sp, FontWeight.Bold), color = c.tx)
+                Text(
+                    if (movingName != null) stringResource(R.string.home_moving, movingName, movingPos, total)
+                    else stringResource(
+                        R.string.home_header_line,
+                        categories.firstOrNull { it.key == selected }?.label ?: stringResource(R.string.home_cat_all_channels),
+                        pluralStringResource(R.plurals.common_channel_count, total, total),
+                    ),
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    style = textStyle(14.sp, if (movingName != null) FontWeight.SemiBold else FontWeight.Normal),
+                    color = if (movingName != null) c.acc else c.t3,
+                )
+            }
+            // Up from the channels reaches this (and the tabs next to it).
+            ViewToggle(grid, onViewSelect, Modifier.padding(end = 20.dp, top = 2.dp))
+            // TV: section tabs (Up from the list). Tablet: the left navigation rail does this job.
+            if (tv) TvTabs(PhoneTab.Live, { t ->
+                when (t) { PhoneTab.Guide -> onGuide(); PhoneTab.Search -> onSearch(); PhoneTab.Settings -> onSettings(); else -> {} }
+            }, Modifier.padding(end = 20.dp, top = 2.dp))
+            JtvClock(now)
+        }
+        Spacer(Modifier.height(14.dp))
+        // Favourites arrive after the channel list; without this the column keeps "All" pinned at the
+        // top (key-based scroll anchoring) and the selected category can sit hidden above the fold.
+        val catState = rememberLazyListState()
+        val selIndex = categories.indexOfFirst { it.key == selected }
+        LaunchedEffect(categories.size, selIndex) {
+            val vis = catState.layoutInfo.visibleItemsInfo
+            if (selIndex >= 0 && (vis.isEmpty() || selIndex <= vis.first().index || selIndex >= vis.last().index)) {
+                catState.scrollToItem((selIndex - 2).coerceAtLeast(0))
+            }
+        }
+        Row(Modifier.weight(1f)) {
+            LazyColumn(
+                state = catState,
+                modifier = Modifier.width(if (tv) 190.dp else 210.dp).fillMaxHeight().focusRestorer().focusGroup(),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(categories, key = { it.key }) { cat ->
+                    CategoryRow(
+                        cat.label, cat.count, cat.key == selected, onClick = { onSelect(cat.key) },
+                        modifier = if (selectOnFocus) Modifier.onFocusChanged { if (it.isFocused && cat.key != selected) onSelect(cat.key) } else Modifier,
+                        height = if (tv) 36.dp else 48.dp, fontSize = if (tv) 15.sp else 16.sp,
+                    )
+                }
+            }
+            Spacer(Modifier.width(20.dp))
+            if (grid) {
+                // Grid: the whole width for cards, the focused channel's details on a strip underneath.
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) { list() }
+                    Spacer(Modifier.height(8.dp))
+                    info()
+                }
+            } else {
+                Box(Modifier.weight(1f).fillMaxHeight()) { list() }
+                Spacer(Modifier.width(24.dp))
+                Box(Modifier.width(if (tv) 270.dp else 340.dp).fillMaxHeight()) { preview() }
+            }
+        }
+        if (tv) {
+            Spacer(Modifier.height(8.dp))
+            KeyHint(
+                if (movingName != null) listOf(
+                    (if (grid) stringResource(R.string.nav_key_arrows) else stringResource(R.string.nav_key_up_down)) to stringResource(R.string.nav_hint_move),
+                    stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_save),
+                    stringResource(R.string.nav_key_back) to stringResource(R.string.nav_hint_cancel),
+                )
+                else listOf(
+                    stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_watch),
+                    stringResource(R.string.nav_key_hold_ok) to stringResource(R.string.nav_hint_options),
+                    stringResource(R.string.nav_key_left) to stringResource(R.string.nav_hint_categories),
+                    stringResource(R.string.nav_key_digits) to stringResource(R.string.nav_hint_channel_number),
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun PhoneHome(
+    categories: List<Category>,
+    selected: String,
+    count: Int,
+    onSelect: (String) -> Unit,
+    onSearch: () -> Unit,
+    onGuide: () -> Unit,
+    onSettings: () -> Unit,
+    grid: Boolean,
+    onViewSelect: (Boolean) -> Unit,
+    list: @Composable () -> Unit,
+) {
+    val c = Jtv.colors
+    val now = LocalNow.current
+    val chipState = rememberLazyListState()
+    // Chips that appear later (Favourites, Recent) must not leave the row scrolled mid-chip.
+    val selChip = categories.indexOfFirst { it.key == selected }
+    LaunchedEffect(categories.size, selChip) { if (selChip >= 0) chipState.scrollToItem(if (selChip <= 3) 0 else selChip - 1) }
+    Column(Modifier.fillMaxSize()) {
+        // Compact header: the status bar already shows the time on phones.
+        Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.home_title), style = textStyle(24.sp, FontWeight.Bold), color = c.tx)
+            Spacer(Modifier.width(10.dp))
+            Text(pluralStringResource(R.plurals.common_channel_count, count, count), style = textStyle(14.sp), color = c.t3, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            ViewToggle(grid, onViewSelect)
+        }
+        LazyRow(
+            state = chipState,
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(categories, key = { it.key }) { cat ->
+                CategoryChip(if (cat.key == MainViewModel.GROUP_ALL) stringResource(R.string.home_cat_all) else cat.label, cat.count, cat.key == selected) { onSelect(cat.key) }
+            }
+        }
+        Box(Modifier.weight(1f).padding(horizontal = 6.dp)) { list() }
+    }
+}
+
+/**
+ * Jio serves show pictures only at 1920×1080 (~175 KB): decode them at 480×270 in RGB_565 so each costs
+ * ~250 KB of memory and decodes fast on cheap TV boxes. One builder, so prefetch and display share the
+ * same cache keys.
+ */
+private fun posterRequest(ctx: android.content.Context, url: String) =
+    coil.request.ImageRequest.Builder(ctx).data(url).size(480, 270).allowRgb565(true).crossfade(120).build()
+
+/**
+ * The running show's picture over the logo plate (its url only exists once the focused channel's guide
+ * has loaded, which is already debounced). Missing/failed: the logo plate stays.
+ */
+@Composable
+private fun ShowPicture(url: String?, modifier: Modifier) {
+    if (url == null) return
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val request = remember(url) { posterRequest(ctx, url) }
+    coil.compose.AsyncImage(
+        model = request, contentDescription = null,
+        contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = modifier,
+    )
+}
+
+/**
+ * Right-hand pane for the focused channel: logo picture with the amber number strap, what's on now
+ * (when the guide is on), what's next, and labelled buttons (no hidden-only actions for older users).
+ */
+@Composable
+private fun PreviewPane(
+    ch: Channel,
+    programs: List<EpgProgram>?,
     now: Long,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null,
-    isMoving: Boolean = false
+    number: Int,
+    isFavorite: Boolean,
+    onWatch: () -> Unit,
+    onFavorite: () -> Unit,
+    onOptions: () -> Unit,
 ) {
-    val context = LocalContext.current
-    // Reuse a single formatter instance instead of allocating per-recomposition
-    val timeFormat = remember { java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()) }
-    // `now` is a single shared 30s clock hoisted to MainScreen (one ticker for the whole list).
-    val currentProgram = remember(epgPrograms, now) { epgPrograms.find { it.startMs <= now && it.stopMs > now } }
-    val nextPrograms = remember(epgPrograms, now) { epgPrograms.filter { it.startMs > now }.take(3) }
-
-    Surface(
-        modifier = modifier.fillMaxWidth().heightIn(min = 100.dp),
-        onClick = onClick,
-        onLongClick = onLongClick,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isMoving) TvPrimaryContainer.copy(alpha = 0.45f) else TvDarkSurface,
-            focusedContainerColor = if (isMoving) TvPrimaryContainer.copy(alpha = 0.55f) else TvDarkSurfaceVariant
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(if (isMoving) 3.dp else 2.dp, if (isMoving) Color.White else TvFocusBorder),
-                shape = RoundedCornerShape(8.dp)
-            )
-        )
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().wrapContentHeight().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Logo and Name
-            Column(
-                modifier = Modifier.width(100.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                if (channel.logoUrl.isNotEmpty()) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(channel.logoUrl).size(96).build(),
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)).background(Color.White),
-                        contentScale = ContentScale.Fit
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)).background(TvDarkSurfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = channel.name.take(1),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(6.dp))
+    val c = Jtv.colors
+    val tv = Jtv.isTv
+    val nn = programs?.let { nowNext(it, now) }
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(c.plate)) {
+            ChannelPlate(ch.logoUrl, 132.dp, 74.dp, Modifier.align(Alignment.Center).padding(bottom = 20.dp))
+            ShowPicture(nn?.now?.posterUrl, Modifier.matchParentSize())
+            Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(if (tv) 42.dp else 48.dp).background(androidx.compose.ui.graphics.Color(0xFF141416))) {
+                NumberBlock(number, Modifier.fillMaxHeight().width(if (tv) 84.dp else 96.dp), fontSize = if (tv) 26.sp else 30.sp)
                 Text(
-                    channel.name,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TvOnSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
+                    ch.name, style = textStyle(if (tv) 16.sp else 17.sp, FontWeight.SemiBold), color = androidx.compose.ui.graphics.Color(0xFFECECEE),
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 12.dp),
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            // Timeline
-            Row(modifier = Modifier.weight(1f)) {
-                if (currentProgram != null) {
-                    val progress = ((now - currentProgram.startMs).toFloat() / (currentProgram.stopMs - currentProgram.startMs)).coerceIn(0f, 1f)
-                    
-                    Box(
-                        modifier = Modifier
-                            .weight(0.45f)
-                            .background(TvPrimaryContainer.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                            .border(1.dp, TvPrimary.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                            .padding(12.dp)
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(TvLiveRed))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("NOW PLAYING", color = TvLiveRed, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(currentProgram.title, color = TvOnBackground, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            androidx.compose.material3.LinearProgressIndicator(
-                                progress = { progress },
-                                modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(1.5.dp)),
-                                color = TvPrimary,
-                                trackColor = TvDarkSurface
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("${timeFormat.format(java.util.Date(currentProgram.startMs))} - ${timeFormat.format(java.util.Date(currentProgram.stopMs))}", color = TvOnSurfaceVariant, fontSize = 11.sp)
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                } else if (epgPrograms.isEmpty()) {
-                    Text("No EPG Data Available", color = TvOnSurfaceVariant, modifier = Modifier.align(Alignment.CenterVertically))
+        }
+        Spacer(Modifier.height(12.dp))
+        val p = nn?.now
+        if (p != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(c.s2).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                    Text(stringResource(R.string.home_now), style = textStyle(13.sp, FontWeight.SemiBold), color = c.tx, maxLines = 1)
                 }
-                
-                nextPrograms.forEach { prog ->
-                    Box(
-                        modifier = Modifier
-                            .weight(0.25f)
-                            .padding(end = 8.dp)
-                            .background(TvDarkBackground.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                            .padding(10.dp)
-                    ) {
-                        Column {
-                            Text(prog.title, color = TvOnSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(timeFormat.format(java.util.Date(prog.startMs)), color = TvOnSurfaceVariant, fontSize = 11.sp)
-                        }
-                    }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.home_time_range_left, formatTime(p.startMs), formatTime(p.stopMs),
+                        pluralStringResource(R.plurals.home_min_left, p.minutesLeft(now), p.minutesLeft(now))),
+                    style = textStyle(14.sp), color = c.t2, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(p.title, style = textStyle(if (tv) 20.sp else 22.sp, FontWeight.Bold), color = c.tx, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            if (p.description.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(p.description, style = textStyle(14.sp), color = c.t2, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.height(10.dp))
+            JtvProgress(p.progress(now))
+            Spacer(Modifier.height(8.dp))
+            nn.later.take(if (tv) 4 else 3).forEach { n ->
+                Row(Modifier.padding(vertical = 4.dp)) {
+                    Text(formatTime(n.startMs), style = numberStyle(15.sp).copy(fontWeight = FontWeight.Bold), color = c.t2, modifier = Modifier.width(88.dp))
+                    Text(n.title, style = textStyle(15.sp), color = c.tx, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
+        } else {
+            Text(groupLabel(ch.group), style = textStyle(16.sp, FontWeight.SemiBold), color = c.tx)
+            Text(languageLabel(ch.language), style = textStyle(15.sp), color = c.t2)
+        }
+        Spacer(Modifier.weight(1f))
+        // TV: OK on the row already plays and hold-OK opens options (shown in the key hint), so no
+        // duplicate buttons. Touch: one compact row — Watch + a favourite toggle, lifted above the
+        // tablet's floating mini player while it's showing (card ≈ 16:9 video + 66dp row + margin).
+        if (!tv) {
+            val miniShowing = com.fenyx.jtv.LocalMiniBarInset.current.value > 0.dp
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                JtvButton(stringResource(R.string.home_watch), onWatch, Modifier.weight(1f), icon = Icons.Filled.PlayArrow, primary = true, fontSize = 15.sp, minHeight = 44.dp)
+                JtvButton(
+                    if (isFavorite) stringResource(R.string.home_saved) else stringResource(R.string.home_favourite), onFavorite, Modifier.weight(1f),
+                    icon = if (isFavorite) Icons.Filled.Star else Icons.Outlined.Star, fontSize = 15.sp, minHeight = 44.dp,
+                )
+            }
+            if (miniShowing) Spacer(Modifier.height(com.fenyx.jtv.ui.player.MiniCardWidth * 9f / 16f + com.fenyx.jtv.ui.player.MiniBarHeight + 16.dp))
         }
     }
 }

@@ -40,7 +40,7 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 - **Guide with replays.** A time grid with a gentle "now" line. The **Replay** category lists channels Jio lets you watch again: press OK on a past show to watch it from the start, up to 7 days back.
 - **Pause and rewind live TV.** Pause keeps your place. Use ←/→ to rewind or skip, and **Live** to jump back.
 - **The channel card.** Change channel and a wide, see-through card shows the logo, number, show, time left and what's next.
-- **Browse without stopping the show.** Press ← to slide channel tiles over the picture; ↑ ↓ change category.
+- **Browse without stopping the show.** Press ← to open a two-pane channel list over the left of the picture: categories on the left, channels and the show on now on the right. The old strip is still in Settings → Channel browser.
 - **One clear Options panel (→).** Language, picture quality in plain words, aspect, Voice Boost, sleep timer and favourite.
 - **Your remote, your buttons.** Settings → Remote buttons: put any action on any button (holding a button counts too). There are profiles for Standard, Fire TV, Basic and Air-mouse remotes.
 
@@ -73,20 +73,23 @@ A ground-up redesign called **"Everyday"**. It has a calm near-black or light lo
 - ⭐ **Favourites that follow you.** Pair your phone and TV once with a 4-digit code (**Settings → Devices**). After that, favourites stay in sync over home Wi-Fi, with no server needed.
 - 📺 **Play on TV.** From your phone, open a channel's options and choose **Play on <TV name>**. The TV switches channel.
 - 🕘 **Recent.** Your last channels are one tap away, on the home screen and in Search.
+- 🔲 **List or grid.** Live TV can show channels as a list or as a grid of cards (Settings → Channel view).
+- 🔎 **Search every channel.** Search can look through all channels or only the languages you kept on (switch at the top of Search). Favourites stay in your Favourites list even when you hide their language.
 - 💾 **Favourites backup.** Save them to a file and restore them after a fresh install.
+- 🇮🇳 **हिन्दी में भी.** The whole app can be in Hindi: **Settings → App language**. Channel names and show titles stay as Jio sends them.
 - 🎨 **Your colour.** Pick the accent colour (amber, purple, blue, green, rose or teal) in Settings.
 - ⚡ **Fast.** Zapping up and down is near-instant, because the channels around you are fetched ahead of time.
 - 🪶 **Still tiny.** The APK is about **3 MB** and runs smoothly on cheap TV boxes.
 
-> **Beta notes:** v2 is released as a **pre-release**, so the stable app never updates to it by itself. Install the beta APK over 1.5.x and your login and favourites are kept. Once on the beta, you'll be offered newer betas and the final 2.0. Found something odd? [Open an issue](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/issues) and tell me your device. It really helps.
+> **Beta notes:** from beta 31, v2 is the **Latest** release, so the 1.5.x app offers it as an update. Install it over 1.5.x and your login and favourites are kept. Once on v2, you'll be offered newer betas and the final 2.0. Found something odd? [Open an issue](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/issues) and tell me your device. It really helps.
 
 ---
 
 ## 📥 Install
 
 1. Download the APK:
-   - **Stable:** `JTV-v1.5.x.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
-   - **Beta:** `JTV-v2.0-beta.10.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases), marked *Pre-release*.
+   - **Latest:** `JTV-v2.0-beta.31.apk` from [Releases → Latest](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/latest).
+   - **Older 1.5.x:** `JTV-v1.5.x.apk` from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases).
 2. **Install it on your TV.**
    - The easiest way is to copy it to a USB stick and open it with a file manager such as **X-plore** or **File Commander**.
    - Or use ADB:
@@ -148,19 +151,39 @@ It lifts the voice and lowers the background while keeping the bass full. **Medi
 
 ---
 
-## 🖥️ Companion server (optional)
+## 🖥️ Your own server (optional)
 
-A self-hosted server lets you **sign in once and share it with every TV** at home. It also gives you a web player and an M3U playlist for other apps. It's one Docker image (Node + React).
+A server at home lets you **sign in to Jio once and share it with every TV and phone**. Each device
+connects with a short access code, and the server keeps the login fresh, so no TV ever needs its own
+OTP. The app still plays channels straight from Jio; the server only hands out the login.
 
-- **One login for all your TVs.** The server keeps your Jio login fresh, and each TV connects with a short access code.
-- **Web player.** Channel grid, TV guide, catch-up and favourites in the browser.
-- **M3U and EPG for IPTV players.** VLC, TiviMate, OTT Navigator and Kodi, with a full programme guide.
+The app finds your server by itself: **Sign-in → Self-hosted server** lists the servers on your home
+network (beta 14+). Both kinds of server use one port, **29180**.
+
+| | **JTV server** (full) | **JTV lite** |
+|---|---|---|
+| What it is | Docker image (Node + React) | One small file, **under 1 MB** |
+| Runs on | NAS, home server, Raspberry Pi, any Docker host | OpenWrt routers, Raspberry Pi, any Linux or Windows PC, Docker |
+| One login for all TVs | ✅ | ✅ |
+| Found automatically by the app | ✅ | ✅ |
+| Web player in the browser | ✅ | — |
+| M3U playlist + EPG for VLC, TiviMate, Kodi… | ✅ | — |
+
+**JTV server**, the ready-made image (Portainer stack, `docker run` and compose in [`server/README.md`](server/README.md)):
 
 ```bash
-cd server && docker compose up -d --build   # then open http://<host>:8080
+docker run -d --name jtv-server --restart unless-stopped -p 29180:29180 \
+  -v jtv-data:/app/data ghcr.io/f-e-n-y-x/jiotv-server:latest
 ```
 
-See **[`server/README.md`](server/README.md)** for setup and the API.
+**JTV lite** on an OpenWrt router (download it for other machines from [Releases](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases/tag/lite-v0.1.0); details in [`lite/README.md`](lite/README.md)):
+
+```sh
+wget -qO- https://raw.githubusercontent.com/F-e-n-y-x/JioTV-AndroidTV-/v2-lab/lite/openwrt/install.sh | sh
+```
+
+Then open `http://<server-ip>:29180`, set a password, sign in to Jio with your number and OTP, and
+enter the access code in the app.
 
 ---
 
@@ -223,7 +246,7 @@ The stable app, version 1.5.x, on a TV.
 <details>
 <summary><b>📝 Changelog</b></summary>
 
-### v2.0-beta (pre-release)
+### v2.0-beta
 
 The **"Everyday"** redesign for TV, phone and tablet:
 - New home, guide, player strap, channel browser, options panel and search.
@@ -233,31 +256,6 @@ The **"Everyday"** redesign for TV, phone and tablet:
 - Show details: type, genre, rating, cast and director.
 - A Recent category.
 - Wi-Fi favourites sync with "Play on TV", plus favourites backup.
-
-### v1.5.12
-- **Open when the TV turns on** (#8). Settings → Playback → *Open When the TV Turns On*: after the box starts up, or also after standby. On Android 10+ JTV asks once for *Display over other apps*.
-- **Guide fixed after midnight.** Jio's guide sends the previous day for a few hours after midnight; JTV now loads the next day too, so the current show appears.
-
-### v1.5.11
-- **New version popup.** When an update is out, JTV offers it once on Home: **Download & Install**, **Later**, or **Ignore this version**.
-- **Mouse fix.** With an air mouse, lists no longer scroll by themselves under a still pointer.
-
-### v1.5.10
-- **↑ now goes to the next channel** (1 → 2 → 3), the same as CH+ (suggested by @sant009m in #5).
-- **Choose your own channel buttons.** Settings → Playback has two switches: *Up Arrow = Next Channel*
-  (turn off for the old way) and *Reverse CH+ / CH−*.
-
-### v1.5.9
-- **Streams no longer stop when Voice Boost is Off** (reported by @sant009m in #3). With Voice Boost
-  set to Off, the audio filter crashed on the empty buffer the player sends after every channel change
-  or stream reload, so playback stopped after a few retries. Fixed, with a test that reproduces it.
-- **A safety net for frozen playback.** If the picture stops moving for 8 seconds with no error, JTV
-  restarts the audio and then reloads the stream by itself.
-- **Sony Yay and other "recorded schedule" channels play correctly.** Jio streams these as one
-  recorded episode per programme. JTV now starts at the scheduled point and loads the next programme
-  when one ends, instead of playing an old episode from the beginning.
-- **Correct channel languages.** Ten of Jio's language IDs were mapped wrongly (for example Sony Yay
-  Tamil showed as Telugu), which could make "Group languages together" pick the wrong feed.
 
 ### v1.5.8
 - **Hold OK now keeps the menu open** (reported in issue #1). On remotes without a mouse, releasing a
@@ -384,6 +382,8 @@ See the [Releases page](https://github.com/F-e-n-y-x/JioTV-AndroidTV-/releases) 
 Built with reference to, and inspiration from:
 - [dineshintry/plugin.kodi.jiotv](https://github.com/dineshintry/plugin.kodi.jiotv)
 - [JioTV-Go/jiotv_go](https://github.com/JioTV-Go/jiotv_go)
+- [rathee-ashish/zee-playlist](https://github.com/rathee-ashish/zee-playlist) — channel playlists and stream metadata for Zee and sports feeds
+- Upstream live stream feeds and community playlist contributors
 
 The UI font is [Anek Latin](https://github.com/EkType/Anek) (SIL Open Font License).
 

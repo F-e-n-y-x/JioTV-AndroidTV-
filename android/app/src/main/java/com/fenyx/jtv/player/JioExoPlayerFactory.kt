@@ -45,7 +45,7 @@ object JioExoPlayerFactory {
         // speed control) is preserved.
         val sinkBuilder = DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(false)
-            .setEnableAudioTrackPlaybackParams(false)
+            .setEnableAudioOutputPlaybackParameters(false)
         if (dialogueProcessor != null) {
             sinkBuilder.setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(dialogueProcessor)
@@ -121,7 +121,7 @@ object JioExoPlayerFactory {
             .setBufferDurationsMs(
                 minBufferMs,
                 maxBufferMs,
-                1200,   // Buffer required to START — low so channels zap in ~1s instead of ~3s
+                600,    // Buffer required to START — low so channels zap in well under a second
                 5000    // Buffer required to resume after a rebuffer — short so a stall isn't a long freeze
             )
             .setPrioritizeTimeOverSizeThresholds(true)
@@ -156,10 +156,12 @@ object JioExoPlayerFactory {
             .setLoadControl(loadControl)
             .setBandwidthMeter(bandwidthMeter)
             .setLivePlaybackSpeedControl(liveSpeedControl)
-            // NOTE: experimentalSetDynamicSchedulingEnabled is deliberately NOT enabled. It is an
-            // *experimental* API in a *beta* Media3, it alters playback-loop timing, and it was live on
-            // the build where mid-playback stutter was reported. The theoretical CPU saving isn't worth
-            // risking a steady picture on a live TV app; revisit once it's stable.
+            // Dynamic scheduling is explicitly turned OFF. Since Media3 1.11 ExoPlayer.Builder enables
+            // it by default, so leaving the call out silently switched it on. It alters the playback
+            // loop's timing and was live on the build where mid-playback stutter was reported; the
+            // theoretical CPU saving isn't worth risking a steady picture on a live TV app. Revisit
+            // only with an on-device A/B on the weakest TV box.
+            .experimentalSetDynamicSchedulingEnabled(false)
             .build()
     }
 }

@@ -22,8 +22,8 @@ android {
         applicationId = "com.fenyx.jtv"
         minSdk = 24          // Android 7.0 — comfortably covers the user's Android 10 TV
         targetSdk = 36       // Android 16 (latest)
-        versionCode = 23
-        versionName = "1.5.12"
+        versionCode = 231   // v2 track (2.0-beta.x = 200..); stable 1.5.x stays below
+        versionName = "2.0-beta.31"
     }
 
     signingConfigs {
@@ -66,9 +66,23 @@ android {
       shaders = false
     }
 
+    // Only ship the UI languages JTV supports; drops ~80 locales of AndroidX/Material strings.
+    androidResources {
+      localeFilters += listOf("en", "hi")
+    }
+
+    // Hindi must stay complete: the release build's lint-vital pass fails on an untranslated string.
+    lint {
+      fatal += listOf("MissingTranslation", "ExtraTranslation", "StringFormatMatches", "StringFormatCount")
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     packaging {
       resources {
-        excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        excludes += listOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/*.version", "/META-INF/*.kotlin_module", "kotlin/**", "DebugProbesKt.bin")
       }
     }
 }
@@ -90,6 +104,8 @@ dependencies {
   // Arch Components
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
+  // Already in the APK via lifecycle-runtime (runtime scope); declared so LAN sync can use ProcessLifecycleOwner.
+  implementation(libs.androidx.lifecycle.process)
 
   // Compose
   implementation(libs.androidx.compose.ui)
@@ -126,6 +142,9 @@ dependencies {
   implementation(libs.androidx.media3.exoplayer.hls)
   implementation(libs.androidx.media3.exoplayer.dash)
   implementation(libs.androidx.media3.datasource)
+  // Streams go over one shared OkHttp client (HTTP/2, pooled; data/Net.kt), the same one Coil uses.
+  implementation(libs.androidx.media3.datasource.okhttp)
+  implementation(libs.okhttp)
   implementation(libs.androidx.media3.ui)
 
   // DataStore
@@ -139,4 +158,24 @@ dependencies {
   // play on weak TV CPUs.
   implementation(libs.androidx.profileinstaller)
   baselineProfile(project(":baselineprofile"))
+}
+
+// Dev convenience: after every RELEASE build (fast, minified, release-signed), copy the APK to the folder
+// named by the `jtvLabApkDir` Gradle property (set per machine in ~/.gradle/gradle.properties, not in the
+// repo) as JTV-v<versionName>-build<N>.apk, where N counts up on this machine (~/.gradle/jtv-build-number).
+providers.gradleProperty("jtvLabApkDir").orNull?.let { labDir ->
+  tasks.matching { it.name == "assembleRelease" }.configureEach {
+    doLast {
+      val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
+      if (apk.exists()) {
+        val counter = File(System.getProperty("user.home"), ".gradle/jtv-build-number")
+        val n = (counter.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() ?: 0) + 1
+        counter.writeText(n.toString())
+        val dest = file(labDir).apply { mkdirs() }
+        val out = dest.resolve("JTV-v${android.defaultConfig.versionName}-build$n.apk")
+        apk.copyTo(out, overwrite = true)
+        println("Release APK copied to $out")
+      }
+    }
+  }
 }

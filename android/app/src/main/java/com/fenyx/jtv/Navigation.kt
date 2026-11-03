@@ -1,22 +1,51 @@
 package com.fenyx.jtv
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.offset
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import androidx.compose.ui.platform.LocalContext
 import com.fenyx.jtv.data.SettingsManager
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
 import com.fenyx.jtv.ui.login.LoginScreen
 import com.fenyx.jtv.ui.main.MainScreen
 import com.fenyx.jtv.ui.main.MainViewModel
+import com.fenyx.jtv.ui.main.PhoneTab
 import com.fenyx.jtv.ui.settings.SettingsScreen
 import com.fenyx.jtv.ui.player.TvPlayerScreen
 import kotlinx.coroutines.launch
@@ -27,11 +56,83 @@ private const val SETUP_LOADING = "__loading__"
 @Composable
 private fun LoadingScreen() {
     androidx.compose.foundation.layout.Box(
-        modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black),
+        modifier = Modifier.fillMaxSize().background(com.fenyx.jtv.theme.Jtv.colors.bg),
         contentAlignment = Alignment.Center
     ) {
-        androidx.compose.material3.CircularProgressIndicator(color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+        androidx.compose.material3.CircularProgressIndicator(color = com.fenyx.jtv.theme.Jtv.colors.acc)
     }
+}
+
+/**
+ * Phone/tablet player session. The player lives OUTSIDE NavDisplay (in [PlayerHost], drawn above it)
+ * so it can shrink into the in-app mini player and keep playing while the user browses. TV keeps the
+ * [Player] nav entry instead (Back leaves the player there, as before).
+ */
+@Immutable
+private data class PlayerSession(
+    val channelIndex: Int,
+    val group: String?,
+    val mini: Boolean = false,
+    /** Bumped on every open, so an already-running player retunes instead of being rebuilt. */
+    val token: Int = 0,
+    /** Catch-up: replay this programme (null = live). */
+    val catchup: com.fenyx.jtv.data.CatchupRequest? = null,
+)
+
+private val PlayerSessionSaver = Saver<MutableState<PlayerSession?>, Any>(
+    save = { st ->
+        val s = st.value
+        if (s == null) arrayListOf<Any?>()
+        else arrayListOf<Any?>(s.channelIndex, s.group, s.mini, s.token, ArrayList(com.fenyx.jtv.ui.player.catchupToList(s.catchup)))
+    },
+    restore = { v ->
+        val l = v as List<*>
+        mutableStateOf(
+            if (l.size < 4) null
+            else PlayerSession(
+                l[0] as Int, l[1] as String?, l[2] as Boolean, l[3] as Int,
+                catchup = (l.getOrNull(4) as? List<*>)?.let { com.fenyx.jtv.ui.player.catchupFromList(it) },
+            )
+        )
+    },
+)
+
+/**
+ * Bottom space the phone mini bar takes (0 when there is none). A State read only by [TopLevel], so a
+ * minimise / expand re-lays out the tab screen and nothing else.
+ */
+/** Non-zero while the player is minimised (phone bar height). Screens read it to keep content clear. */
+val LocalMiniBarInset = staticCompositionLocalOf<State<Dp>> { mutableStateOf(0.dp) }
+
+/** Phone: a top-level screen above the bottom tab bar. Tablet: beside the nav rail. TV: as-is. */
+@Composable
+private fun TopLevel(
+    tab: PhoneTab,
+    onTab: (PhoneTab) -> Unit,
+    content: @Composable (Modifier) -> Unit,
+) {
+    when (if (Jtv.isPhoneLandscape) FormFactor.Tablet else Jtv.form) {
+        FormFactor.Phone -> {
+            val inset = LocalMiniBarInset.current
+            Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+                // Room for the docked mini bar, read in layout only (no recomposition on toggle).
+                Box(Modifier.weight(1f).miniInsetPadding(inset)) { content(Modifier) }
+                com.fenyx.jtv.ui.main.PhoneBottomBar(tab, onTab)
+            }
+        }
+        FormFactor.Tablet -> Row(Modifier.fillMaxSize().safeDrawingPadding()) {
+            com.fenyx.jtv.ui.main.TabletNavRail(tab, onTab)
+            Box(Modifier.weight(1f)) { content(Modifier) }
+        }
+        FormFactor.Tv -> content(Modifier.safeDrawingPadding())
+    }
+}
+
+/** Bottom padding from a State, applied in the layout phase. */
+private fun Modifier.miniInsetPadding(inset: State<Dp>): Modifier = this.layout { measurable, constraints ->
+    val pad = inset.value.roundToPx()
+    val p = measurable.measure(constraints.offset(vertical = -pad))
+    layout(p.width, constraints.constrainHeight(p.height + pad)) { p.place(0, 0) }
 }
 
 @Composable
@@ -42,11 +143,51 @@ fun MainNavigation() {
 
     val backStack = rememberNavBackStack(Main)
     val mainViewModel: MainViewModel = viewModel()
+    // Phone tabs replace each other on top of Live TV (Back from a tab returns to Live TV).
+    val onTab: (PhoneTab) -> Unit = { tab ->
+        while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+        when (tab) {
+            PhoneTab.Live -> {}
+            PhoneTab.Guide -> backStack.add(Guide)
+            PhoneTab.Search -> backStack.add(Search)
+            PhoneTab.Settings -> backStack.add(Settings)
+        }
+    }
+
+    // Phone/tablet player session (null = no player). Held as a State and never read here, so opening,
+    // minimising or expanding recomposes only the host (and TopLevel's inset), not the nav screens.
+    val isTv = Jtv.isTv
+    val session = rememberSaveable(saver = PlayerSessionSaver) { mutableStateOf<PlayerSession?>(null) }
+    val miniBarInset = remember {
+        derivedStateOf { if (session.value?.mini == true) com.fenyx.jtv.ui.player.MiniBarHeight else 0.dp }
+    }
+
+    /**
+     * THE way to start playback of a channel: [group] the list it was picked from (null = all) and
+     * [index] relative to it: favourites / all-global index inside their own list, null or any other
+     * group index `displayChannels` (see `playIndex`). TV pushes the Player screen; phone/tablet open (or retune) the player
+     * host in its expanded state — the same running player is reused if one is already up (mini).
+     */
+    fun openPlayer(index: Int, group: String?, catchup: com.fenyx.jtv.data.CatchupRequest? = null) {
+        if (isTv) {
+            // Guarantee only one Player ever lives on TV backStack
+            while (backStack.any { it is Player }) {
+                val idx = backStack.indexOfFirst { it is Player }
+                if (idx >= 0) backStack.removeAt(idx) else break
+            }
+            backStack.add(Player(channelIndex = index, group = group, catchup = catchup))
+        } else {
+            val prev = session.value
+            session.value = PlayerSession(index, group, mini = false, token = (prev?.token ?: 0) + 1, catchup = catchup)
+        }
+    }
 
     val autoplayLastChannel by settingsManager.autoplayLastChannelFlow.collectAsState(initial = null)
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
     val lastChannelGroup by settingsManager.lastChannelGroupFlow.collectAsState(initial = null)
     val hasAutoPlayed = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Autoplay asks for the channel load once; a load that ends empty then falls through to home.
+    val autoplayFetchRequested = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     // Use the COLLAPSED (display) list the player actually navigates, and wait for it to be populated
     // before autoplaying — otherwise autoplay fired against the raw list (wrong index) or before the
     // collapse ran (0 channels), which is what caused the black "0 channels / Loading…" screen on boot.
@@ -62,12 +203,23 @@ fun MainNavigation() {
                     // just show the home screen.
                     lastChannelId == null -> hasAutoPlayed.value = true
                     // Kick off the channel load (served from cache when fresh, so this is fast).
-                    allChannels.isEmpty() && !isLoading -> mainViewModel.fetchChannels()
+                    allChannels.isEmpty() && !isLoading && !autoplayFetchRequested.value -> {
+                        autoplayFetchRequested.value = true
+                        mainViewModel.fetchChannels()
+                    }
                     allChannels.isNotEmpty() -> {
                         hasAutoPlayed.value = true
+                        val inGroup = lastChannelId?.let { id ->
+                            lastChannelGroup?.let {
+                                com.fenyx.jtv.ui.main.playIndex(id, it, mainViewModel.getChannelsByGroup(it), allChannels)
+                            }
+                        }
                         val channelIndex = allChannels.indexOfFirst { it.id == lastChannelId }
-                        if (channelIndex != -1) {
-                            backStack.add(Player(channelIndex = channelIndex, group = lastChannelGroup))
+                        // A favourite/global channel may be absent from displayChannels (e.g. language filter): still open it.
+                        val idx = inGroup ?: channelIndex.takeIf { it >= 0 }
+                        if (idx != null && session.value == null) {
+                            // Group no longer holds the channel (e.g. unfavourited): play it from all.
+                            openPlayer(idx, if (inGroup != null) lastChannelGroup else null)
                         }
                     }
                     // Load finished but produced no channels (e.g. offline first run) -> fall through
@@ -78,6 +230,25 @@ fun MainNavigation() {
             false -> hasAutoPlayed.value = true
             else -> { /* null: setting not loaded yet */ }
         }
+    }
+
+    // ── LAN sync: "Play on TV" from a paired phone opens the player on that channel. ──
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.fenyx.jtv.sync.LanSync.playRequests.collect { channelId ->
+            val index = mainViewModel.displayChannels.value.indexOfFirst { it.id == channelId }
+            if (index >= 0) {
+                // TV: replace a player already on top instead of stacking a second one.
+                if (backStack.lastOrNull() is Player) backStack.removeAt(backStack.lastIndex)
+                openPlayer(index, null)
+            }
+        }
+    }
+
+    // Signing out ends any player session (it must not reappear after the next sign-in).
+    val hadAuth = remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(authData) {
+        if (authData != null) hadAuth.value = true
+        else if (hadAuth.value) { session.value = null; hadAuth.value = false }
     }
 
     // Onboarding router. When not logged in, pick the setup flow from the chosen method:
@@ -114,86 +285,235 @@ fun MainNavigation() {
     } else if (autoplayLastChannel == null || (autoplayLastChannel == true && !hasAutoPlayed.value)) {
         // Show blank loading screen while evaluating autoplay
         LoadingScreen()
-    } else {
+    } else Box(Modifier.fillMaxSize()) {
+      androidx.compose.runtime.CompositionLocalProvider(LocalMiniBarInset provides miniBarInset) {
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
+            // One short cross-fade for every screen change — forward, Back, tab switch AND the system
+            // predictive-back gesture (which otherwise shrinks the page), so going home always looks the same.
+            transitionSpec = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) },
+            popTransitionSpec = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) },
+            predictivePopTransitionSpec = { _ -> androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) },
+            // While the player is expanded it covers everything: skip drawing the screens under it
+            // (read in the draw phase only, so this never recomposes them).
+            modifier = Modifier.fillMaxSize().drawWithContent { if (session.value?.mini != false) drawContent() },
             entryProvider =
                 entryProvider {
                 entry<Main> {
+                  TopLevel(PhoneTab.Live, onTab) { m ->
                     MainScreen(
-                        onChannelClick = { index, group ->
-                            backStack.add(Player(channelIndex = index, group = group))
-                        },
+                        onChannelClick = { index, group -> openPlayer(index, group) },
                         onSettingsClick = {
                             backStack.add(Settings)
                         },
                         onSearchClick = {
                             backStack.add(Search)
                         },
+                        onGuideClick = { backStack.add(Guide) },
                         viewModel = mainViewModel,
-                        modifier = Modifier.safeDrawingPadding()
+                        modifier = m
                     )
+                  }
+                }
+                entry<Guide> {
+                  TopLevel(PhoneTab.Guide, onTab) { m ->
+                    com.fenyx.jtv.ui.guide.GuideScreen(
+                        viewModel = mainViewModel,
+                        onPlay = { index, group -> openPlayer(index, group) },
+                        onOpenSettings = { onTab(PhoneTab.Settings) },
+                        modifier = m,
+                        onTab = onTab,
+                        onReplay = { index, group, cu -> openPlayer(index, group, cu) }, // catch-up
+                    )
+                  }
                 }
                 entry<Search> {
+                  TopLevel(PhoneTab.Search, onTab) { m ->
                     com.fenyx.jtv.ui.search.SearchScreen(
                         viewModel = mainViewModel,
-                        onChannelClick = { index, group ->
-                            backStack.add(Player(channelIndex = index, group = group))
-                        },
-                        modifier = Modifier.safeDrawingPadding()
+                        onTab = onTab,
+                        onChannelClick = { index, group -> openPlayer(index, group) },
+                        modifier = m
                     )
+                  }
                 }
                 entry<Settings> {
+                  TopLevel(PhoneTab.Settings, onTab) { m ->
                     SettingsScreen(
-                        modifier = Modifier.safeDrawingPadding(),
-                        mainViewModel = mainViewModel
-                    )
-                }
-                entry<Player> { playerArgs ->
-                    val groups by mainViewModel.groups.collectAsState()
-                    // Reactive (not a one-shot snapshot) so if the player is opened while the collapsed
-                    // list is still being built, it recomposes and fills in — no more Settings-and-back
-                    // workaround to recover from a "0 channels" launch.
-                    val allChannels by mainViewModel.displayChannels.collectAsState()
-
-                    // Memoize the expensive per-group grouping + index lookups so they run once per
-                    // channel-list change, not on every recomposition (this was a real source of
-                    // player-open / settings-open lag: it re-filtered all ~1300 channels for every group).
-                    // Favorites is offered as the first category inside the player too, so CH+/CH- and
-                    // the category list follow the user's own favorites order. The order is snapshotted
-                    // per channel-list change (NOT keyed on favorites): toggling a favorite mid-playback
-                    // would otherwise reshuffle the zapping list under the current index and jump channels.
-                    val channels = androidx.compose.runtime.remember(playerArgs.group, allChannels) {
-                        if (playerArgs.group != null) mainViewModel.getChannelsByGroup(playerArgs.group)
-                        else allChannels
-                    }
-                    val playerGroups = androidx.compose.runtime.remember(groups, allChannels) {
-                        if (mainViewModel.favoriteOrder.value.isEmpty()) groups
-                        else listOf(MainViewModel.GROUP_FAVORITES) + groups
-                    }
-                    val allChannelsByGroup = androidx.compose.runtime.remember(playerGroups, allChannels) {
-                        playerGroups.associateWith { group -> mainViewModel.getChannelsByGroup(group) }
-                    }
-                    val filteredIndex = androidx.compose.runtime.remember(channels, allChannels, playerArgs.channelIndex) {
-                        val targetChannel = allChannels.getOrNull(playerArgs.channelIndex)
-                        if (targetChannel != null) channels.indexOf(targetChannel).coerceAtLeast(0) else 0
-                    }
-
-                    TvPlayerScreen(
-                        channels = channels,
-                        initialIndex = filteredIndex,
-                        allChannelsByGroup = allChannelsByGroup,
-                        groups = playerGroups,
+                        modifier = m,
+                        mainViewModel = mainViewModel,
                         onBack = { backStack.removeLastOrNull() },
-                        onSettings = {
-                            backStack.add(Settings)
+                        onTab = onTab
+                    )
+                  }
+                }
+                // TV only (phone/tablet use the PlayerHost below). Unchanged from before the mini player.
+                entry<Player> { playerArgs ->
+                    val view = androidx.compose.ui.platform.LocalView.current
+                    androidx.compose.runtime.DisposableEffect(Unit) {
+                        val window = (view.context as? android.app.Activity)?.window
+                        val ctl = window?.let { androidx.core.view.WindowInsetsControllerCompat(it, view) }
+                        ctl?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        ctl?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                        onDispose {
+                            if (!com.fenyx.jtv.theme.DeviceKind.isTv(context)) {
+                                ctl?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                            }
+                        }
+                    }
+                    val isTop = backStack.lastOrNull() == playerArgs
+                    PlayerForChannel(
+                        channelIndex = playerArgs.channelIndex,
+                        group = playerArgs.group,
+                        catchup = playerArgs.catchup, // catch-up
+                        mainViewModel = mainViewModel,
+                        onBack = { backStack.removeLastOrNull() },
+                        onSettings = { backStack.add(Settings) },
+                        // Remote buttons: Guide / Search replace the player (Back then goes to Live).
+                        onRemoteScreen = { a ->
+                            backStack.removeLastOrNull()
+                            backStack.add(if (a == com.fenyx.jtv.data.RemoteAction.Search) Search else Guide)
                         },
-                        variantsFor = { id -> mainViewModel.variantsFor(id) },
-                        initialGroup = playerArgs.group
+                        isActive = isTop,
                     )
                 }
             },
         )
+      }
+        if (!isTv) PlayerHost(
+            session = session,
+            mainViewModel = mainViewModel,
+            onSettings = { onTab(PhoneTab.Settings) },
+            onRemoteScreen = { a -> onTab(if (a == com.fenyx.jtv.data.RemoteAction.Search) PhoneTab.Search else PhoneTab.Guide) },
+        )
     }
+}
+
+/**
+ * Phone/tablet player layer, drawn above NavDisplay. Composes [TvPlayerScreen] ONCE per session and
+ * keeps it composed while minimised, so the ExoPlayer and its effects keep running (no rebuffer).
+ * Expanded = the player page or full screen (the player handles the system bars); mini = phone bar docked above the tab bar,
+ * or a 360dp card at the bottom-right on tablet (system bars shown).
+ */
+@Composable
+private fun BoxScope.PlayerHost(
+    session: MutableState<PlayerSession?>,
+    mainViewModel: MainViewModel,
+    onSettings: () -> Unit,
+    onRemoteScreen: (com.fenyx.jtv.data.RemoteAction) -> Unit = {},
+) {
+    val s = session.value ?: return
+    val mini = s.mini
+    val phone = Jtv.isPhonePortrait
+
+    // System bars: the player itself hides them, and only in true full screen (phone landscape, tablet
+    // full screen). The portrait phone page and the tablet page keep them (see TvPlayerScreen).
+
+    val frame = when {
+        !mini -> Modifier
+        phone -> Modifier.align(Alignment.BottomCenter)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+            .padding(bottom = com.fenyx.jtv.ui.main.PhoneBottomBarHeight)
+        else -> Modifier.align(Alignment.BottomEnd)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(16.dp)
+    }
+    PlayerForChannel(
+        channelIndex = s.channelIndex,
+        group = s.group,
+        mainViewModel = mainViewModel,
+        onBack = { session.value = null },
+        onSettings = {
+            session.value = session.value?.copy(mini = true)
+            onSettings()
+        },
+        mini = mini,
+        onMinimize = { session.value = session.value?.copy(mini = true) },
+        onExpand = { session.value = session.value?.copy(mini = false) },
+        openToken = s.token,
+        catchup = s.catchup, // catch-up
+        modifier = frame,
+        onRemoteScreen = { a ->
+            session.value = session.value?.copy(mini = true)
+            onRemoteScreen(a)
+        },
+    )
+}
+
+/** Builds the player's channel lists for one channel/group and shows [TvPlayerScreen]. */
+@Composable
+private fun PlayerForChannel(
+    channelIndex: Int,
+    group: String?,
+    mainViewModel: MainViewModel,
+    onBack: () -> Unit,
+    onSettings: () -> Unit,
+    mini: Boolean = false,
+    onMinimize: (() -> Unit)? = null,
+    onExpand: () -> Unit = {},
+    openToken: Int = 0,
+    catchup: com.fenyx.jtv.data.CatchupRequest? = null, // catch-up
+    modifier: Modifier = Modifier,
+    onRemoteScreen: (com.fenyx.jtv.data.RemoteAction) -> Unit = {},
+    isActive: Boolean = true,
+) {
+    val groups by mainViewModel.groups.collectAsState()
+    // Reactive (not a one-shot snapshot) so if the player is opened while the collapsed
+    // list is still being built, it recomposes and fills in — no more Settings-and-back
+    // workaround to recover from a "0 channels" launch.
+    val allChannels by mainViewModel.displayChannels.collectAsState()
+
+    // Memoize the expensive per-group grouping + index lookups so they run once per
+    // channel-list change, not on every recomposition (this was a real source of
+    // player-open / settings-open lag: it re-filtered all ~1300 channels for every group).
+    // Favorites is offered as the first category inside the player too, so CH+/CH- and
+    // the category list follow the user's own favorites order. The order is snapshotted
+    // per channel-list change (NOT keyed on favorites): toggling a favorite mid-playback
+    // would otherwise reshuffle the zapping list under the current index and jump channels.
+    val channels = remember(group, allChannels) {
+        if (group != null) mainViewModel.getChannelsByGroup(group)
+        else allChannels
+    }
+    val catPrefs by mainViewModel.categoryPrefs.collectAsState()
+    val playerGroups = remember(groups, allChannels, catPrefs) {
+        val base = if (mainViewModel.favoriteOrder.value.isEmpty()) groups else listOf(MainViewModel.GROUP_FAVORITES) + groups
+        catPrefs.arrange(base, MainViewModel.GROUP_ALL)
+    }
+    val allChannelsByGroup = remember(playerGroups, allChannels) {
+        playerGroups.associateWith { g -> mainViewModel.getChannelsByGroup(g) }
+    }
+    val filteredIndex = remember(channels, allChannels, channelIndex, group) {
+        if (group == MainViewModel.GROUP_FAVORITES || group == MainViewModel.GROUP_ALL_GLOBAL) {
+            channelIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+        } else {
+            val targetChannel = allChannels.getOrNull(channelIndex)
+            if (targetChannel != null) {
+                val idx = channels.indexOf(targetChannel)
+                if (idx >= 0) idx else channelIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            } else {
+                channelIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            }
+        }
+    }
+    val variantsFor = remember(mainViewModel) { { id: String -> mainViewModel.variantsFor(id) } }
+
+    TvPlayerScreen(
+        channels = channels,
+        initialIndex = filteredIndex,
+        allChannelsByGroup = allChannelsByGroup,
+        groups = playerGroups,
+        onBack = onBack,
+        onSettings = onSettings,
+        variantsFor = variantsFor,
+        initialGroup = group,
+        modifier = modifier,
+        mini = mini,
+        onMinimize = onMinimize,
+        onExpand = onExpand,
+        openToken = openToken,
+        catchup = catchup, // catch-up
+        onRemoteScreen = onRemoteScreen,
+        isActive = isActive,
+    )
 }

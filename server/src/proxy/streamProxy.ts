@@ -2,7 +2,8 @@ import { getStreamData, GeturlAuthError, type StreamData, type CatchupParams } f
 import type { AuthData } from "../jio/types";
 import { extractHdneaToken, extractTokenExpiryEpochSec } from "../jio/hdnea";
 import { refreshNow } from "../refresh";
-import { getStoredCredentials } from "../store/db";
+import { getStoredCredentials, saveStreamMode } from "../store/db";
+import { isExtraChannel, getExtraChannel } from "../jio/extraChannels";
 
 interface CachedStream {
   key: string;
@@ -20,6 +21,9 @@ const HDNEA_MARKER = "__hdnea__=";
 const cache = new Map<string, CachedStream>();
 const deadCache = new Map<string, DeadCacheEntry>();
 const DEAD_CACHE_TTL_MS = 60_000; // 60 seconds cooldown for 404/403/down channels
+/** Upstream timeouts: API-ish calls (manifest probe, license) vs. media segments (bigger bodies). */
+const API_TIMEOUT_MS = 15_000;
+const SEGMENT_TIMEOUT_MS = 20_000;
 
 /**
  * A playback key is either "channelId" (live) or "cu.<base64url-json>" (catch-up), where the JSON is
@@ -44,11 +48,19 @@ function parseKey(key: string): { channelId: string; catchup?: CatchupParams } {
 // use the Widevine DASH instead. Decided once (first play) then reused so we skip the extra check.
 const streamMode = new Map<string, "hls" | "drm">();
 
+/** Remembers the decision for this process AND persists it (SQLite) for `/playlist.m3u?drm=hide`. */
+function learnMode(channelId: string, mode: "hls" | "drm"): void {
+  streamMode.set(channelId, mode);
+  try { saveStreamMode(channelId, mode, Date.now()); } catch (e) {
+    console.warn("[proxy] could not persist stream mode:", (e as Error).message);
+  }
+}
+
 /** A manifest URL is "alive" if it returns 2xx and looks like a real HLS/DASH manifest (not a 404 page).
  *  Some channels (e.g. Zee TV HD) hand back a token-signed URL whose CDN path doesn't actually exist. */
 async function masterAlive(url: string, headers: Record<string, string>): Promise<boolean> {
   try {
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(API_TIMEOUT_MS) });
     if (res.status < 200 || res.status >= 300) return false;
     const t = (await res.text()).trimStart();
     return t.startsWith("#EXTM3U") || t.startsWith("<?xml") || t.startsWith("<MPD");
@@ -57,7 +69,22 @@ async function masterAlive(url: string, headers: Record<string, string>): Promis
   }
 }
 
-async function resolve(key: string): Promise<CachedStream> {
+/** In-flight resolves per key: concurrent requests for the same channel / catch-up share one geturl. */
+const resolving = new Map<string, Promise<CachedStream>>();
+
+/** Single-flight wrapper: a player opening a channel fires several requests at once (manifest, key,
+ *  first segments); without this each would call Jio's geturl separately. */
+function resolve(key: string): Promise<CachedStream> {
+  const pending = resolving.get(key);
+  if (pending) return pending;
+  const p = resolveOnce(key).finally(() => {
+    if (resolving.get(key) === p) resolving.delete(key);
+  });
+  resolving.set(key, p);
+  return p;
+}
+
+async function resolveOnce(key: string): Promise<CachedStream> {
   const dead = deadCache.get(key);
   if (dead && Date.now() < dead.expiresAtMs) {
     throw dead.error;
@@ -116,17 +143,27 @@ async function resolve(key: string): Promise<CachedStream> {
         // HLS Fallback is dead — try the Widevine DASH.
         const drm = await getStreamData(channelId, activeCreds, { preferDrm: true });
         if (drm.isMpd && drm.streamUrl && (await masterAlive(drm.streamUrl, drm.streamHeaders))) {
-          data = drm; streamMode.set(channelId, "drm");
+          data = drm; learnMode(channelId, "drm");
         } else {
           throw down();
         }
       } else {
-        streamMode.set(channelId, "hls");
+        learnMode(channelId, "hls");
       }
     } else if (!(await masterAlive(data.streamUrl, data.streamHeaders))) {
       throw down();
     } else {
-      streamMode.set(channelId, "drm");
+      learnMode(channelId, "drm");
+    }
+  } else if (catchup && !data.isMpd && data.streamUrl) {
+    if (!(await masterAlive(data.streamUrl, data.streamHeaders))) {
+      // Catch-up HLS returned 404/dead (e.g. Sony YAY / Sony channels) — fall back to Widevine DASH
+      try {
+        const drm = await getStreamData(channelId, activeCreds, { catchup, preferDrm: true });
+        if (drm.isMpd && drm.streamUrl && (await masterAlive(drm.streamUrl, drm.streamHeaders))) {
+          data = drm;
+        }
+      } catch {}
     }
   }
 
@@ -155,38 +192,57 @@ function withFreshToken(url: string, hdnea: string): string {
   return i >= 0 ? url.slice(0, i + HDNEA_MARKER.length) + hdnea : url;
 }
 
+/** Lower-cased hostname of an http(s) URL, or "" for anything else. */
+function httpHost(raw: string): string {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.hostname.toLowerCase() : "";
+  } catch { return ""; }
+}
+
+/** Jio's own servers — the only hosts the account's Jio credentials (ssoToken, Accesstoken, __hdnea__…) may go to. */
+export function isJioHost(raw: string): boolean {
+  const h = httpHost(raw);
+  return h === "jio.com" || h.endsWith(".jio.com") || h.endsWith(".jiocdn.com");
+}
+
 /**
- * The proxy attaches the account's Jio credentials (ssoToken, Accesstoken…) to what it fetches, so it
- * must only ever talk to Jio's own servers. Without this, `/seg?u=https://anything` would send those
- * tokens to any host (or reach the LAN / cloud metadata) and stream the answer back.
+ * Hosts the proxy may fetch at all: Jio, plus the third-party CDNs extra (non-Jio) channels stream
+ * from. Without this, `/seg?u=https://anything` would reach the LAN / cloud metadata and stream the
+ * answer back. Third-party hosts only ever get an extra channel's own headers (see proxyUpstream).
  */
 export function isJioUpstream(raw: string): boolean {
-  let u: URL;
-  try { u = new URL(raw); } catch { return false; }
-  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-  const h = u.hostname.toLowerCase();
-  return h === "jio.com" || h.endsWith(".jio.com") || h.endsWith(".jiocdn.com");
+  const h = httpHost(raw);
+  return (
+    isJioHost(raw) ||
+    h.endsWith(".workers.dev") ||
+    h.endsWith(".pages.dev") ||
+    h.endsWith(".cloudfront.net") ||
+    h.endsWith(".allinonereborn2.online") ||
+    h.endsWith("githubusercontent.com")
+  );
 }
 
 /** A live channel id ("154") or a catch-up key ("cu.<base64url>"); anything else is rejected. */
 export function isValidStreamKey(key: string): boolean {
-  return /^\d{1,7}$/.test(key) || /^cu\.[A-Za-z0-9_-]{1,2048}$/.test(key);
+  return /^\d{1,7}$/.test(key) || /^cu\.[A-Za-z0-9_-]{1,2048}$/.test(key) || /^zee_[A-Za-z0-9_.-]+$/i.test(key) || isExtraChannel(key);
 }
 
-/** fetch() that follows redirects only while they stay on Jio hosts (credentials ride along). */
-async function fetchJio(url: string, init: RequestInit, hops = 3): Promise<Response> {
-  if (!isJioUpstream(url)) throw new Error("Refusing to fetch a non-Jio URL through the stream proxy");
-  const res = await fetch(url, { ...init, redirect: "manual" });
+/** fetch() that follows redirects only while they stay on allowed hosts (credentials ride along).
+ *  `jioOnly`: the request carries Jio credentials, so every hop must stay on a Jio host. */
+export async function fetchJio(url: string, init: RequestInit, jioOnly: boolean, hops = 3): Promise<Response> {
+  if (!(jioOnly ? isJioHost(url) : isJioUpstream(url))) throw new Error("Refusing to fetch an untrusted URL through the stream proxy");
+  const res = await fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(SEGMENT_TIMEOUT_MS) });
   const loc = res.headers.get("location");
   if (res.status >= 300 && res.status < 400 && loc && hops > 0) {
-    return fetchJio(new URL(loc, url).toString(), init, hops - 1);
+    return fetchJio(new URL(loc, url).toString(), init, jioOnly, hops - 1);
   }
   return res;
 }
 
 /**
  * Proxies one upstream request (manifest or segment) with a fresh token + the stream headers, so the
- * browser never talks to the Jio CDN directly (defeats CORS) and never sees an expired token.
+ * browser never talks to the CDN directly (defeats CORS) and never sees an expired token.
  */
 export async function proxyUpstream(
   channelId: string,
@@ -194,7 +250,21 @@ export async function proxyUpstream(
   rangeHeader?: string
 ): Promise<Response> {
   if (!isValidStreamKey(channelId)) throw new Error("Invalid channel id");
-  if (!isJioUpstream(targetUrl)) throw new Error("Refusing to fetch a non-Jio URL through the stream proxy");
+  const extra = isExtraChannel(channelId);
+  // Third-party hosts are only for extra channels; a Jio channel's request carries the account's tokens.
+  if (!(extra ? isJioUpstream(targetUrl) : isJioHost(targetUrl))) throw new Error("Refusing to fetch an untrusted URL through the stream proxy");
+
+  if (extra) {
+    const ch = await getExtraChannel(channelId);
+    const headers: Record<string, string> = {};
+    if (ch?.userAgent) headers["User-Agent"] = ch.userAgent;
+    if (ch?.referer) headers["Referer"] = ch.referer;
+    if (ch?.origin) headers["Origin"] = ch.origin;
+    if (ch?.cookie) headers["Cookie"] = ch.cookie;
+    if (rangeHeader) headers["Range"] = rangeHeader;
+    return fetchJio(targetUrl, { headers }, false);
+  }
+
   const c = await getStream(channelId);
   const url = withFreshToken(targetUrl, c.hdnea);
   // The AES-128 key for the non-DRM "Fallback" HLS lives on tv.media.jio.com and authenticates like
@@ -205,7 +275,7 @@ export async function proxyUpstream(
   const headers: Record<string, string> = { ...(isKey ? c.data.licenseHeaders : c.data.streamHeaders) };
   if (!isKey && c.hdnea) headers["Cookie"] = HDNEA_MARKER + c.hdnea;
   if (rangeHeader) headers["Range"] = rangeHeader;
-  return fetchJio(url, { headers });
+  return fetchJio(url, { headers }, true);
 }
 
 /** Forwards a Widevine license challenge to Jio's license server with the correct headers. */
@@ -216,6 +286,7 @@ export async function proxyLicense(channelId: string, challenge: Buffer): Promis
     method: "POST",
     headers: c.data.licenseHeaders,
     body: new Uint8Array(challenge),
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`License request failed (HTTP ${res.status})`);
   return Buffer.from(await res.arrayBuffer());
@@ -322,6 +393,20 @@ export function rewriteManifest(
 
 /** The real manifest URL + DRM flags the web player needs to configure Shaka. `key` is the cid. */
 export async function getPlaybackInfo(key: string) {
+  if (isExtraChannel(key)) {
+    const ch = await getExtraChannel(key);
+    if (ch) {
+      return {
+        channelId: key,
+        isMpd: ch.isMpd,
+        manifestUrl: ch.streamUrl,
+        hasDrm: ch.isMpd && !!ch.licenseKey,
+        licenseKey: ch.licenseKey,
+        entitled: true,
+      };
+    }
+  }
+
   const c = await getStream(key);
   // "PayWall" in the URL = not subscribed. (A plain "Fallback" is a real non-DRM stream — entitled.)
   const entitled = !/paywall/i.test(c.data.streamUrl);

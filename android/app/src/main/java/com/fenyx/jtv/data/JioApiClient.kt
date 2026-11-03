@@ -2,8 +2,12 @@ package com.fenyx.jtv.data
 
 import android.util.Base64
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.OutputStreamWriter
@@ -89,6 +93,16 @@ object JioApiClient {
     /** Jio refused this one channel (geturl 403 even with fresh credentials). Not a login problem. */
     class ChannelBlockedException(message: String) : Exception(message)
 
+    /**
+     * Jio refused several different channels in a row, even after a credential refresh: the account or
+     * the network (VPN, IP outside India) is refused, not one channel (issue #4).
+     */
+    class AllChannelsRefusedException(message: String) : Exception(message)
+
+    /** Live channels that got a geturl 403 since the last stream Jio handed out. */
+    private val refusedInARow = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+    private const val REFUSED_CHANNELS_LIMIT = 4
+
     /** Jio handed back stream URLs, but every one of them is dead on its CDN (404 / not a manifest). */
     class ChannelUnavailableException(message: String) : Exception(message)
 
@@ -98,30 +112,115 @@ object JioApiClient {
      * Remembered so each channel only pays for the manifest check once.
      */
     private val streamModeCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    /** When each [streamModeCache] entry was learned (epoch ms), for the on-disk copy's expiry. */
+    private val streamModeLearnedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    @Volatile private var streamModesLoaded = false
+    private const val STREAM_MODE_FILE = "stream_modes.tsv"
+    /** A learned mode is trusted for a day, then re-probed (a dead DASH can come back, or die). */
+    private const val STREAM_MODE_TTL_MS = 24 * 60 * 60 * 1000L
+
+    /**
+     * Loads the per-channel DASH/HLS choice saved by an earlier run, so the first zap after an app
+     * restart doesn't redo the manifest probe. Lines are `channelId<TAB>mode<TAB>learnedAtMs`.
+     */
+    private fun ensureStreamModesLoaded(context: android.content.Context) {
+        if (streamModesLoaded) return
+        synchronized(streamModeCache) {
+            if (streamModesLoaded) return
+            try {
+                val f = java.io.File(context.filesDir, STREAM_MODE_FILE)
+                if (f.exists()) {
+                    val now = System.currentTimeMillis()
+                    f.forEachLine { line ->
+                        val parts = line.split('\t')
+                        val at = parts.getOrNull(2)?.toLongOrNull() ?: return@forEachLine
+                        val mode = parts[1]
+                        if ((mode == "mpd" || mode == "hls") && now - at in 0 until STREAM_MODE_TTL_MS) {
+                            streamModeCache.putIfAbsent(parts[0], mode)
+                            streamModeLearnedAt.putIfAbsent(parts[0], at)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Couldn't read saved stream modes: ${e.message}")
+            }
+            streamModesLoaded = true
+        }
+    }
+
+    /** Remembers [mode] for [channelId] in memory and on disk (atomic rewrite of a tiny file). */
+    private fun rememberStreamMode(context: android.content.Context, channelId: String, mode: String) {
+        streamModeCache[channelId] = mode
+        streamModeLearnedAt[channelId] = System.currentTimeMillis()
+        try {
+            synchronized(streamModeCache) {
+                val dir = context.filesDir
+                val tmp = java.io.File(dir, "$STREAM_MODE_FILE.tmp")
+                tmp.writeText(buildString {
+                    streamModeCache.forEach { (id, m) ->
+                        append(id).append('\t').append(m).append('\t')
+                            .append(streamModeLearnedAt[id] ?: System.currentTimeMillis()).append('\n')
+                    }
+                })
+                if (!tmp.renameTo(java.io.File(dir, STREAM_MODE_FILE))) tmp.delete()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't save stream modes: ${e.message}")
+        }
+    }
+
+    /**
+     * Live stream URLs resolved ahead of a zap for the channels next to the one playing (see
+     * [prefetchStreamUrl]). [getStreamUrl] hands a valid entry out once instead of calling geturl.
+     */
+    private val streamUrlCache = StreamUrlCache(maxEntries = 6, marginSec = 20)
+
+    /**
+     * Resolves [channelId]'s live stream URL in the background and keeps it in [streamUrlCache] for
+     * the next zap. Network only (geturl + the one-off manifest probe). Never refreshes credentials: a
+     * prefetch that hits an expired token just gives up and the real zap handles it. Returns true
+     * when a usable entry is cached.
+     */
+    suspend fun prefetchStreamUrl(context: android.content.Context, channelId: String, authData: AuthData): Boolean {
+        if (streamUrlCache.hasValid(channelId, authData.authToken)) return true
+        val data = getStreamUrl(context, channelId, authData, allowRefreshRetry = false, useCache = false)
+            .getOrNull() ?: return false
+        return streamUrlCache.put(channelId, data, authData.authToken)
+    }
+
+    /** Drops [channelId]'s prefetched URL (e.g. its stream failed). */
+    fun invalidateStreamUrl(channelId: String) = streamUrlCache.remove(channelId)
 
     /**
      * True when [url] answers 2xx with something that looks like an HLS/DASH manifest. A network error
      * counts as alive (let the player try and report it) so a flaky probe never blocks a good channel.
      */
     private fun manifestAlive(url: String, headers: Map<String, String>): Boolean {
-        var conn: HttpURLConnection? = null
+        // On the shared OkHttp client: the connection this opens to the CDN (HTTP/2 where offered)
+        // goes back to the pool and is reused by the player's own manifest request right after.
+        // Only the first bytes are read; closing the response releases the connection.
         return try {
-            conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 5000
-                readTimeout = 5000
-                headers.forEach { (k, v) -> setRequestProperty(k, v) }
-            }
-            if (conn.responseCode !in 200..299) return false
-            val head = ByteArray(256)
-            val n = conn.inputStream.use { it.read(head) }
-            if (n <= 0) return false
-            val text = String(head, 0, n, Charsets.UTF_8).trimStart('\uFEFF', ' ', '\n', '\r', '\t')
-            text.startsWith("#EXTM3U") || text.startsWith("<?xml") || text.startsWith("<MPD")
+            val req = okhttp3.Request.Builder().url(url).apply {
+                headers.forEach { (k, v) -> header(k, v) }
+            }.build()
+            Net.client.newBuilder()
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+                .newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return false
+                    val head = resp.body?.source()?.let { src ->
+                        src.request(256)
+                        val buf = src.buffer
+                        buf.readByteArray(minOf(256L, buf.size))
+                    } ?: return false
+                    if (head.isEmpty()) return false
+                    val text = String(head, Charsets.UTF_8).trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+                    text.startsWith("#EXTM3U") || text.startsWith("<?xml") || text.startsWith("<MPD")
+                }
         } catch (e: java.io.IOException) {
             Log.w(TAG, "Manifest probe failed (treating as alive): ${e.message}")
             true
-        } finally {
-            conn?.disconnect()
         }
     }
 
@@ -147,6 +246,7 @@ object JioApiClient {
             
             val url = URL("https://jiotvapi.media.jio.com/userservice/apis/v1/loginotp/send")
             val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000; connection.readTimeout = 15000
             connection.requestMethod = "POST"
             connection.setRequestProperty("user-agent", USER_AGENT)
             connection.setRequestProperty("os", OS)
@@ -187,6 +287,7 @@ object JioApiClient {
 
             val url = URL("https://jiotvapi.media.jio.com/userservice/apis/v1/loginotp/verify")
             val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000; connection.readTimeout = 15000
             connection.requestMethod = "POST"
             connection.setRequestProperty("user-agent", USER_AGENT)
             connection.setRequestProperty("os", OS)
@@ -256,6 +357,7 @@ object JioApiClient {
 
             val url = URL("https://auth.media.jio.com/tokenservice/apis/v1/refreshtoken?langId=6")
             val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000; connection.readTimeout = 15000
             connection.requestMethod = "POST"
             connection.setRequestProperty("ssotoken", authData.ssoToken)
             // The CURRENT access token must ride along as a header, or Jio always answers "refresh token
@@ -288,13 +390,16 @@ object JioApiClient {
                 val newAuthToken = json.optString("authToken", "")
                 val newRefreshToken = json.optString("refreshToken", "")
                 if (newSsoToken.isNotEmpty() || newAuthToken.isNotEmpty()) {
-                    settingsManager.saveAuthData(
-                        authData.copy(
-                            ssoToken = newSsoToken.ifEmpty { authData.ssoToken },
-                            authToken = newAuthToken.ifEmpty { authData.authToken },
-                            refreshToken = newRefreshToken.ifEmpty { authData.refreshToken }
+                    // Jio has already rotated the tokens: a cancelled caller must not lose them.
+                    withContext(NonCancellable) {
+                        settingsManager.saveAuthData(
+                            authData.copy(
+                                ssoToken = newSsoToken.ifEmpty { authData.ssoToken },
+                                authToken = newAuthToken.ifEmpty { authData.authToken },
+                                refreshToken = newRefreshToken.ifEmpty { authData.refreshToken }
+                            )
                         )
-                    )
+                    }
                     Log.d(TAG, "Token refreshed successfully")
                     return@withContext Result.success(true)
                 }
@@ -305,6 +410,8 @@ object JioApiClient {
             val jioMessage = runCatching { JSONObject(errText).optString("message") }.getOrNull().orEmpty()
             if (code in 400..499) Result.failure(RefreshRejectedException("Refresh rejected ($code): $jioMessage"))
             else Result.failure(Exception("Refresh failed with code $code"))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Exception in refreshToken", e)
             Result.failure(e)
@@ -335,7 +442,7 @@ object JioApiClient {
             val tok = settingsManager.serverTokenFlow.first()
             if (urls.all { it.isBlank() }) return Result.failure(Exception("No server configured"))
             ServerClient.refreshCredentials(urls, tok).fold(
-                onSuccess = { auth -> settingsManager.saveAuthData(auth); Result.success(true) },
+                onSuccess = { auth -> withContext(NonCancellable) { settingsManager.saveAuthData(auth) }; Result.success(true) },
                 onFailure = { Result.failure(it) }
             )
         } else {
@@ -348,9 +455,12 @@ object JioApiClient {
                 // The refresh token is gone. Rebuild the session from the SSO token instead of making
                 // the user sign in again; only if that fails too is the session really over.
                 val mobile = settingsManager.authMobileFlow.first()
-                val recovered = withContext(Dispatchers.IO) { recoverSession(current, mobile) }
+                // NonCancellable: exchangetoken issues a new pair; a cancel here (withContext's return
+                // included) would drop it and the old pair is already dead.
+                val recovered = withContext(Dispatchers.IO + NonCancellable) {
+                    recoverSession(current, mobile)?.also { settingsManager.saveAuthData(it) }
+                }
                 if (recovered != null) {
-                    settingsManager.saveAuthData(recovered)
                     Log.i(TAG, "Session recovered without a new sign-in")
                     return@withLock Result.success(true)
                 }
@@ -433,7 +543,7 @@ object JioApiClient {
         val settingsManager = com.fenyx.jtv.data.SettingsManager(context)
         val auth = settingsManager.authDataFlow.first() ?: return null
         val exp = jwtExpirySec(auth.authToken)
-        val nowMs = System.currentTimeMillis()
+        val nowMs = JioClock.nowMs()
         if (exp > 0 && exp - nowMs / 1000 < ACCESS_TOKEN_REFRESH_LEAD_SEC &&
             nowMs - lastProactiveRefreshMs > PROACTIVE_RETRY_GAP_MS) {
             lastProactiveRefreshMs = nowMs
@@ -450,7 +560,7 @@ object JioApiClient {
         else
             "Your Jio sign-in has expired. Open Settings → Logout and sign in again with OTP."
 
-    private const val CHANNEL_CACHE_FILE = "channels_cache.json"
+    private const val CHANNEL_CACHE_FILE = "channels_cache_v2.json" // v2: older caches lost catch-up on third-party-overridden channels
     const val CHANNEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000L // 24 hours
 
     private fun channelCacheFile(context: android.content.Context): java.io.File {
@@ -458,11 +568,16 @@ object JioApiClient {
         return java.io.File(cacheDir, CHANNEL_CACHE_FILE)
     }
 
-    /** Reads the persisted channel list regardless of age. Returns null if there is no usable cache. */
-    fun readChannelCache(context: android.content.Context): List<Channel>? {
+    /**
+     * Reads the persisted channel list regardless of age. Returns null if there is no usable cache.
+     * This is a suspend function so Zee channels can be loaded without runBlocking (which can deadlock
+     * the IO thread pool on phones/tablets with fewer cores).
+     */
+    suspend fun readChannelCache(context: android.content.Context): List<Channel>? =
+        withContext(Dispatchers.IO) {
         val cacheFile = channelCacheFile(context)
-        if (!cacheFile.exists()) return null
-        return try {
+        if (!cacheFile.exists()) return@withContext null
+        try {
             val jsonArray = org.json.JSONArray(cacheFile.readText())
             val channels = mutableListOf<Channel>()
             for (i in 0 until jsonArray.length()) {
@@ -477,21 +592,52 @@ object JioApiClient {
                     channelNumber = obj.optInt("channelNumber", 0),
                     licenseUrl = if (obj.has("licenseUrl")) obj.getString("licenseUrl") else null,
                     language = obj.optString("language", "English"),
-                    isCatchup = obj.optBoolean("isCatchup", false)
+                    isCatchup = obj.optBoolean("isCatchup", false),
+                    stbNumber = obj.optInt("stbNumber", 0),
+                    isPremium = obj.optBoolean("isPremium", false),
+                    planType = obj.optString("planType", ""),
+                    aspectRatio = obj.optString("aspectRatio", "")
                 ))
             }
-            channels.ifEmpty { null }
+            // Clean up any legacy dummy Zee channels (e.g. "zee_9001" or group "Zee") from previous builds
+            channels.removeAll { it.id.startsWith("zee_") || it.group == "Zee" }
+
+            // Third-party channels from the on-disk playlist/token copies only: startup never waits on
+            // the network. [refreshThirdPartyChannels] updates them in the background afterwards.
+            mergeThirdParty(channels, ZeeRepository.loadZeeChannels(context, network = false)).ifEmpty { null }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read channel cache", e)
             null
         }
     }
 
+    /**
+     * [channels] with each third-party channel replacing the entry of the same number (keeping that
+     * entry's Jio catch-up flag) and the rest added, sorted by number.
+     */
+    private fun mergeThirdParty(channels: List<Channel>, thirdParty: List<Channel>): List<Channel> {
+        val byNumber = thirdParty.associateBy { it.channelNumber }
+        val merged = channels.map { ch -> byNumber[ch.channelNumber]?.copy(isCatchup = ch.isCatchup) ?: ch }.toMutableList()
+        val existing = merged.mapTo(HashSet()) { it.channelNumber }
+        thirdParty.filterTo(merged) { it.channelNumber !in existing }
+        return merged.sortedBy { it.channelNumber }
+    }
+
+    /**
+     * Downloads the third-party playlists + live tokens (concurrently) and merges them into [channels].
+     * Run in the background after a cached list is shown; the caller re-publishes when the result differs.
+     */
+    suspend fun refreshThirdPartyChannels(context: android.content.Context, channels: List<Channel>): List<Channel> =
+        mergeThirdParty(channels, ZeeRepository.loadZeeChannels(context, network = true))
+
     /** True if a cache exists and is younger than the TTL. */
     fun isChannelCacheFresh(context: android.content.Context): Boolean {
         val cacheFile = channelCacheFile(context)
         return cacheFile.exists() && System.currentTimeMillis() - cacheFile.lastModified() < CHANNEL_CACHE_TTL_MS
     }
+
+    /** Jio's v3.1 list came back empty: an outage, never something to cache as the channel list. */
+    internal fun useStaleCache(v31Count: Int): Boolean = v31Count == 0
 
     /**
      * @param forceNetwork when true, skip the fresh-cache shortcut and always fetch from the network
@@ -512,6 +658,7 @@ object JioApiClient {
             try {
                 val dictUrl = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/dictionary/dictionary?langId=6")
                 val dictConn = dictUrl.openConnection() as HttpURLConnection
+                dictConn.connectTimeout = 10000; dictConn.readTimeout = 15000
                 dictConn.requestMethod = "GET"
                 dictConn.setRequestProperty("User-Agent", USER_AGENT)
                 if (dictConn.responseCode in 200..299) {
@@ -540,9 +687,10 @@ object JioApiClient {
 
             val finalChannelsMap = mutableMapOf<Int, Channel>()
 
-            fun parseChannels(urlStr: String) {
+            fun parseChannels(urlStr: String, into: MutableMap<Int, Channel>) {
                 try {
                     val conn = URL(urlStr).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 10000; conn.readTimeout = 15000
                     conn.requestMethod = "GET"
                     conn.setRequestProperty("User-Agent", USER_AGENT)
                     if (conn.responseCode in 200..299) {
@@ -560,6 +708,10 @@ object JioApiClient {
                                     var langId = ""
                                     var isDrm = false
                                     var isCatchup = false
+                                    var stb = 0
+                                    var isPremium = false
+                                    var planType = ""
+                                    var aspectRatio = ""
                                     while (reader.hasNext()) {
                                         when (reader.nextName()) {
                                             "channel_id" -> channelId = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
@@ -569,12 +721,16 @@ object JioApiClient {
                                             "channelLanguageId" -> langId = try { reader.nextString() } catch(e: Exception) { reader.nextInt().toString() }
                                             "isDrm" -> isDrm = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
                                             "isCatchupAvailable" -> isCatchup = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
+                                            "stbChannelNumber" -> stb = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
+                                            "is_premium" -> isPremium = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
+                                            "plan_type" -> planType = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
+                                            "aspectRatio" -> aspectRatio = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
                                             else -> reader.skipValue()
                                         }
                                     }
                                     reader.endObject()
-                                    if (channelId > 0 && !finalChannelsMap.containsKey(channelId)) {
-                                        finalChannelsMap[channelId] = Channel(
+                                    if (channelId > 0 && !into.containsKey(channelId)) {
+                                        into[channelId] = Channel(
                                             id = channelId.toString(),
                                             name = channelName.ifEmpty { "Unknown" },
                                             logoUrl = "https://jiotvimages.cdn.jio.com/dare_images/images/$logoUrl",
@@ -583,7 +739,11 @@ object JioApiClient {
                                             channelNumber = channelId,
                                             streamUrl = "",
                                             language = JIO_LANG_MAP[langId] ?: "Other",
-                                            isCatchup = isCatchup
+                                            isCatchup = isCatchup,
+                                            stbNumber = stb.coerceAtLeast(0),
+                                            isPremium = isPremium,
+                                            planType = planType,
+                                            aspectRatio = aspectRatio
                                         )
                                     }
                                 }
@@ -600,18 +760,39 @@ object JioApiClient {
                 }
             }
 
-            // Fetch v1.4 (Sony/Zee) and v3.1 (Star/Disney)
-            parseChannels("https://jiotvapi.cdn.jio.com/apis/v1.4/getMobileChannelList/get/?langId=6&devicetype=phone&os=android&usertype=JIO&version=422")
-            parseChannels("https://jiotvapi.cdn.jio.com/apis/v3.1/getMobileChannelList/get/?langId=6&os=android&devicetype=phone&usertype=JIO&version=422")
+            // Jio's current list is v3.1; v1.4 only contributes the few allow-listed ids that still play
+            // (see ChannelSources). Both lists download + parse IN PARALLEL, then merge with v3.1 winning.
+            val v14 = mutableMapOf<Int, Channel>()
+            val v31 = mutableMapOf<Int, Channel>()
+            val zee = mutableListOf<Channel>()
+            kotlinx.coroutines.coroutineScope {
+                launch(Dispatchers.IO) { parseChannels(ChannelSources.V31_URL, v31) }
+                launch(Dispatchers.IO) { parseChannels(ChannelSources.V14_URL, v14) }
+                launch(Dispatchers.IO) {
+                    // A third-party failure must never cancel the Jio list loading next to it.
+                    try {
+                        zee.addAll(ZeeRepository.loadZeeChannels(context))
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        Log.e(TAG, "Third-party channels failed to load", e)
+                    }
+                }
+            }
+            finalChannelsMap.putAll(ChannelSources.merge(v31, v14))
+            // A third-party stream replaces Jio's entry for live, but the channel still has Jio catch-up.
+            zee.forEach { zc -> finalChannelsMap[zc.channelNumber] = zc.copy(isCatchup = finalChannelsMap[zc.channelNumber]?.isCatchup ?: zc.isCatchup) }
 
-            if (finalChannelsMap.isEmpty()) {
-                // Network produced nothing — fall back to whatever we have on disk (even if stale)
-                // so a transient outage doesn't wipe the channel list.
+            if (useStaleCache(v31.size)) {
+                // Jio's list failed (the third-party channels alone would still fill the map, and were
+                // once cached as a fresh 24 h list). Serve whatever is on disk, even if stale, and leave
+                // the cache file untouched so the next start tries Jio again.
                 readChannelCache(context)?.let {
                     Log.w(TAG, "Channel fetch empty; serving stale cache (${it.size} channels)")
                     return@withContext Result.success(it)
                 }
-                return@withContext Result.failure(Exception("Failed to fetch channels from endpoints"))
+                // No cache either: show what did load (third-party / v1.4), but don't save it.
+                if (finalChannelsMap.isEmpty()) return@withContext Result.failure(Exception("Failed to fetch channels from endpoints"))
+                return@withContext Result.success(finalChannelsMap.values.sortedBy { it.channelNumber })
             }
 
             val finalChannels = finalChannelsMap.values.sortedBy { it.channelNumber }
@@ -630,10 +811,14 @@ object JioApiClient {
                     obj.put("channelNumber", ch.channelNumber)
                     obj.put("language", ch.language)
                     obj.put("isCatchup", ch.isCatchup)
+                    if (ch.stbNumber > 0) obj.put("stbNumber", ch.stbNumber)
+                    if (ch.isPremium) obj.put("isPremium", true)
+                    if (ch.planType.isNotEmpty()) obj.put("planType", ch.planType)
+                    if (ch.aspectRatio.isNotEmpty()) obj.put("aspectRatio", ch.aspectRatio)
                     ch.licenseUrl?.let { obj.put("licenseUrl", it) }
                     jsonArray.put(obj)
                 }
-                cacheFile.writeText(jsonArray.toString())
+                cacheFile.writeTextAtomically(jsonArray.toString())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to write cache", e)
             }
@@ -661,17 +846,74 @@ object JioApiClient {
         return m.groupValues[1].toLongOrNull() ?: 0
     }
 
+    /** True when [url]'s `__hdnea__` token has an `exp` that is already past (Jio time). No token = false. */
+    fun isStreamTokenExpired(url: String, nowSec: Long = JioClock.nowMs() / 1000): Boolean =
+        extractTokenExpiryEpochSec(extractHdneaToken(url)) in 1..nowSec
+
+    private const val STREAM_EXPIRED_MESSAGE =
+        "This channel's stream link has expired at its source and no fresh one is available right now. " +
+        "Try again in a few minutes or pick another channel."
+
+    /**
+     * The form body of a geturl request. Live: `stream_type=Live&channel_id=…`. Catch-up: the same
+     * fields, in the same order and encoding, as the companion server (server/src/jio/stream.ts) and
+     * the Kodi plugin send: srno, programId (the guide's showId), begin/end as epoch MILLISECONDS
+     * (Jio echoes them into the catch-up URL), and the guide's showtime.
+     */
+    internal fun geturlBody(channelId: String, catchup: CatchupParams?): String {
+        val enc = ::encodeUriComponent
+        return if (catchup != null) {
+            "stream_type=Catchup&channel_id=${enc(channelId)}&srno=${enc(catchup.srno)}" +
+                "&programId=${enc(catchup.programId)}&begin=${catchup.beginMs}&end=${catchup.endMs}" +
+                "&showtime=${enc(catchup.showtime)}"
+        } else {
+            "stream_type=Live&channel_id=${enc(channelId)}"
+        }
+    }
+
+    /** JavaScript's encodeURIComponent (what the server uses), so both send byte-identical bodies. */
+    internal fun encodeUriComponent(s: String): String =
+        java.net.URLEncoder.encode(s, "UTF-8")
+            .replace("+", "%20").replace("%21", "!").replace("%27", "'")
+            .replace("%28", "(").replace("%29", ")").replace("%7E", "~")
+
     suspend fun getStreamUrl(
         context: android.content.Context,
         channelId: String,
         authData: AuthData,
         allowRefreshRetry: Boolean = true,
-        catchup: CatchupParams? = null
+        catchup: CatchupParams? = null,
+        // false = always ask geturl (token refresh loop, prefetch). A cached URL is taken (removed) on
+        // use, so a load that fails with it retries against the network.
+        useCache: Boolean = true
     ): Result<StreamData> = withContext(Dispatchers.IO) {
         try {
             // Use the newest stored credentials (refreshed ahead of expiry if needed); the caller's copy
             // may be stale if a refresh happened since it read them.
             val authData = if (allowRefreshRetry) (ensureFreshAccessToken(context) ?: authData) else authData
+            if (catchup == null && useCache) {
+                streamUrlCache.take(channelId, authData.authToken)?.let {
+                    Log.d(TAG, "Stream URL for $channelId from prefetch")
+                    return@withContext Result.success(it)
+                }
+            }
+            // Catch-up always goes through Jio's geturl: the third-party feed is live only.
+            if (catchup == null && ZeeRepository.isZeeChannel(channelId)) {
+                // No forced refresh: getStreamDataForChannel re-fetches the live tokens itself once the
+                // token is expired. Forcing it on every zap reloaded all third-party playlists each time.
+                val streamData = ZeeRepository.getStreamDataForChannel(
+                    context = context,
+                    channelId = channelId,
+                    forceRefresh = false
+                )
+                if (streamData != null) {
+                    if (isStreamTokenExpired(streamData.streamUrl)) {
+                        return@withContext Result.failure(ChannelUnavailableException(STREAM_EXPIRED_MESSAGE))
+                    }
+                    return@withContext Result.success(streamData)
+                }
+            }
+            ensureStreamModesLoaded(context)
             val url = URL("https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
@@ -706,18 +948,14 @@ object JioApiClient {
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             connection.doOutput = true
 
-            val body = if (catchup != null) {
-                val enc = { s: String -> java.net.URLEncoder.encode(s, "UTF-8") }
-                "stream_type=Catchup&channel_id=$channelId&srno=${enc(catchup.srno)}&programId=${enc(catchup.programId)}&begin=${catchup.beginMs}&end=${catchup.endMs}&showtime=${enc(catchup.showtime)}"
-            } else {
-                "stream_type=Live&channel_id=$channelId"
-            }
+            val body = geturlBody(channelId, catchup)
             val writer = OutputStreamWriter(connection.outputStream)
             writer.write(body)
             writer.flush()
             writer.close()
 
             val responseCode = connection.responseCode
+            JioClock.learn(connection.date)
             
             val tokenExpired = responseCode == 401 || responseCode == 419
             if (tokenExpired && allowRefreshRetry) {
@@ -744,6 +982,28 @@ object JioApiClient {
             // 403 from geturl is per channel: Jio refuses this one (e.g. most Zee Entertainment
             // channels since Jio dropped them). No refresh or retry can fix it.
             if (responseCode == 403) {
+                // Sony-backed channels (Sony Yay, Vizha...) key a replay by its srno: Jio answers the
+                // showId with "Sony Srno data is not mapped". Retry once with programId = srno.
+                if (catchup != null && catchup.programId != catchup.srno &&
+                    readResponseBody(connection, isError = true).contains("Srno data is not mapped", ignoreCase = true)) {
+                    return@withContext getStreamUrl(context, channelId, authData, allowRefreshRetry = false,
+                        catchup = catchup.copy(programId = catchup.srno), useCache = false)
+                }
+                if (catchup == null) refusedInARow.add(channelId)
+                if (catchup == null && refusedInARow.size >= REFUSED_CHANNELS_LIMIT) {
+                    if (allowRefreshRetry) {
+                        Log.d(TAG, "geturl 403 on ${refusedInARow.size} channels in a row, refreshing credentials once")
+                        if (refreshCredentials(context, failedAuthToken = authData.authToken).isSuccess) {
+                            val newAuthData = com.fenyx.jtv.data.SettingsManager(context).authDataFlow.first()
+                            if (newAuthData != null) {
+                                return@withContext getStreamUrl(context, channelId, newAuthData, allowRefreshRetry = false, catchup = null)
+                            }
+                        }
+                    }
+                    return@withContext Result.failure(AllChannelsRefusedException(
+                        "Jio refused ${refusedInARow.size} different channels in a row (HTTP 403)."
+                    ))
+                }
                 return@withContext Result.failure(ChannelBlockedException(
                     "Jio isn't providing this channel right now (it refused the stream request). " +
                     "This is on Jio's side, not a login problem. Try another channel."
@@ -751,6 +1011,7 @@ object JioApiClient {
             }
 
             if (responseCode in 200..299) {
+                refusedInARow.clear()
                 val responseText = readResponseBody(connection, isError = false)
                 val json = JSONObject(responseText)
 
@@ -770,16 +1031,29 @@ object JioApiClient {
                 }
                 val hlsUsable = hlsUrl.startsWith("http")
                 var useMpd = mpdUrl.isNotEmpty()
+                // Catch-up: clear VOD HLS first, but verify it is alive; if dead/404 (e.g. Sony YAY / Sony channels),
+                // fall back to Widevine DASH (MPD) so replay succeeds!
+                if (catchup != null && hlsUsable && !hlsUrl.contains("paywall", ignoreCase = true)) {
+                    val hlsAlive = manifestAlive(hlsUrl, probeHeaders(hlsUrl))
+                    useMpd = !hlsAlive && mpdUrl.isNotEmpty()
+                }
                 if (catchup == null && useMpd) {
                     val mode = streamModeCache[channelId]
                     if (mode == "hls" && hlsUsable) {
                         useMpd = false
                     } else if (mode == null) {
-                        if (manifestAlive(mpdUrl, probeHeaders(mpdUrl))) {
-                            streamModeCache[channelId] = "mpd"
-                        } else if (hlsUsable && manifestAlive(hlsUrl, probeHeaders(hlsUrl))) {
+                        // Check DASH and HLS at the SAME time (was one after the other): the first open
+                        // of a channel waits for one round trip instead of two.
+                        val (mpdAlive, hlsAlive) = kotlinx.coroutines.coroutineScope {
+                            val m = async(Dispatchers.IO) { manifestAlive(mpdUrl, probeHeaders(mpdUrl)) }
+                            val h = async(Dispatchers.IO) { hlsUsable && manifestAlive(hlsUrl, probeHeaders(hlsUrl)) }
+                            m.await() to h.await()
+                        }
+                        if (mpdAlive) {
+                            rememberStreamMode(context, channelId, "mpd")
+                        } else if (hlsAlive) {
                             Log.i(TAG, "DASH is dead for $channelId, using HLS")
-                            streamModeCache[channelId] = "hls"
+                            rememberStreamMode(context, channelId, "hls")
                             useMpd = false
                         } else {
                             return@withContext Result.failure(ChannelUnavailableException(
@@ -795,11 +1069,14 @@ object JioApiClient {
                             "It's a Jio-side problem, not your login. Try again later or pick another channel."
                         ))
                     }
-                    streamModeCache[channelId] = "hls"
+                    rememberStreamMode(context, channelId, "hls")
                 }
 
                 val isMpd = useMpd
                 val streamUrl = if (isMpd) mpdUrl else hlsUrl
+                if (isStreamTokenExpired(streamUrl)) {
+                    return@withContext Result.failure(ChannelUnavailableException(STREAM_EXPIRED_MESSAGE))
+                }
                 val licenseUrl = if (isMpd) mpdKey else ""
 
                 // Extract cookie from response or headers

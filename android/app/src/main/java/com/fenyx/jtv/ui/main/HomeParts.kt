@@ -1,0 +1,340 @@
+package com.fenyx.jtv.ui.main
+
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Icon
+import androidx.tv.material3.Text
+import com.fenyx.jtv.data.Channel
+import com.fenyx.jtv.data.EpgProgram
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.ChannelPlate
+import com.fenyx.jtv.ui.components.JtvClickable
+import com.fenyx.jtv.ui.components.JtvProgress
+import com.fenyx.jtv.ui.components.numberStyle
+import com.fenyx.jtv.ui.components.progress
+import com.fenyx.jtv.ui.components.textStyle
+
+/** Sizes for one channel row, per form factor. */
+@Immutable
+data class RowMetrics(
+    val height: Dp,
+    val numberWidth: Dp,
+    val numberSize: TextUnit,
+    val plateW: Dp,
+    val plateH: Dp,
+    val nameSize: TextUnit,
+    val subSize: TextUnit,
+)
+
+val TvRow = RowMetrics(56.dp, 46.dp, 16.sp, 52.dp, 30.dp, 16.sp, 14.sp)
+val TouchRow = RowMetrics(64.dp, 42.dp, 16.sp, 52.dp, 30.dp, 16.sp, 14.sp)
+
+/**
+ * One channel in the list: number · logo · name / what's on · progress. Focus = inverted fill.
+ * [now] is null when the programme guide is off; the subline then shows the category.
+ */
+@Composable
+fun ChannelRow(
+    channel: Channel,
+    nowProgram: EpgProgram?,
+    now: Long,
+    m: RowMetrics,
+    isFavorite: Boolean,
+    isMoving: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onMore: (() -> Unit)? = null,
+    /** The number shown: the Jio number, or the position (1, 2, 3…) in Favourites (#7). */
+    number: Int = channel.channelNumber,
+) {
+    val c = Jtv.colors
+    JtvClickable(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        // Min height, not fixed: a large system font grows the row instead of clipping it.
+        modifier = modifier.fillMaxWidth().heightIn(min = m.height),
+        container = if (isMoving) c.acc else Color.Transparent,
+        focusedContainer = if (isMoving) c.acc else c.inv,
+    ) { focused ->
+        val inverted = focused || isMoving
+        val fg = if (isMoving) c.accTx else if (focused) c.invTx else c.tx
+        val fg2 = if (isMoving) c.accTx else if (focused) c.invTx.copy(alpha = 0.75f) else c.t2
+        Row(
+            Modifier.align(Alignment.CenterStart).padding(start = 10.dp, end = if (onMore != null) 0.dp else 14.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                number.takeIf { it > 0 }?.toString() ?: "",
+                style = numberStyle(m.numberSize), color = fg, textAlign = TextAlign.End,
+                modifier = Modifier.width(m.numberWidth), maxLines = 1,
+            )
+            Box(Modifier.width(12.dp))
+            ChannelPlate(channel.logoUrl, m.plateW, m.plateH)
+            Box(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        channel.name, style = textStyle(m.nameSize, FontWeight.SemiBold), color = fg,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (isFavorite) {
+                        Icon(
+                            Icons.Filled.Star, contentDescription = stringResource(R.string.home_favourite),
+                            tint = if (inverted) fg else c.acc, modifier = Modifier.padding(start = 6.dp).size(14.dp),
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        nowProgram?.title ?: groupLabel(channel.group), style = textStyle(m.subSize), color = fg2, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                if (nowProgram != null) {
+                    JtvProgress(
+                        nowProgram.progress(now), Modifier.padding(top = 4.dp),
+                        color = if (inverted) fg else c.t3,
+                        track = if (inverted) fg.copy(alpha = 0.22f) else c.line,
+                    )
+                }
+            }
+            if (onMore != null) {
+                JtvClickable(onClick = onMore, modifier = Modifier.size(56.dp), focusedContainer = c.s2) {
+                    Icon(
+                        Icons.Filled.MoreVert, contentDescription = stringResource(R.string.home_options_for, channel.name),
+                        tint = fg2, modifier = Modifier.align(Alignment.Center).size(24.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A category in the TV / tablet left column: name + count. Selected = s2 fill; focused = inverted. */
+@Composable
+fun CategoryRow(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    height: Dp = 38.dp,
+    fontSize: TextUnit = 16.sp,
+) {
+    val c = Jtv.colors
+    JtvClickable(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth().height(height),
+        container = if (selected) c.s2 else Color.Transparent,
+    ) { focused ->
+        Row(
+            Modifier.padding(horizontal = 12.dp).align(Alignment.CenterStart),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label, style = textStyle(fontSize, if (selected || focused) FontWeight.SemiBold else FontWeight.Normal),
+                color = if (focused) c.invTx else if (selected) c.tx else c.t2, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            Text(
+                count.toString(), style = textStyle(fontSize * 0.85f),
+                color = if (focused) c.invTx.copy(alpha = 0.7f) else c.t3, maxLines = 1,
+            )
+        }
+    }
+}
+
+/** Phone category chip. */
+@Composable
+fun CategoryChip(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {
+    val c = Jtv.colors
+    JtvClickable(
+        onClick = onClick,
+        modifier = Modifier.height(36.dp),
+        shape = RoundedCornerShape(18.dp),
+        container = if (selected) c.inv else c.s1,
+        focusedContainer = c.inv,
+    ) { focused ->
+        val fg = if (selected || focused) c.invTx else c.t2
+        Row(Modifier.align(Alignment.Center).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = textStyle(14.sp, if (selected) FontWeight.SemiBold else FontWeight.Normal), color = fg, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 200.dp))
+            Text("  $count", style = textStyle(13.sp), color = fg.copy(alpha = 0.7f), maxLines = 1)
+        }
+    }
+}
+
+/** Labelled top action on TV / tablet headers (Search, Guide, Settings). */
+@Composable
+fun HeaderAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = Jtv.colors
+    JtvClickable(onClick = onClick, modifier = modifier.height(if (Jtv.isTv) 38.dp else 48.dp)) { focused ->
+        Row(Modifier.align(Alignment.Center).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = if (focused) c.invTx else c.t2, modifier = Modifier.size(20.dp))
+            Box(Modifier.width(8.dp))
+            Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** Phone bottom navigation item; current = amber bar on top + bold label. */
+@Composable
+fun BottomNavItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = Jtv.colors
+    JtvClickable(onClick = onClick, modifier = modifier.height(PhoneBottomBarHeight), shape = RoundedCornerShape(0.dp), focusedContainer = c.s2) {
+        if (selected) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth(0.6f).height(3.dp).background(c.acc))
+        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = null, tint = if (selected) c.acc else c.t2, modifier = Modifier.size(24.dp))
+            Text(label, style = textStyle(12.sp, if (selected) FontWeight.Bold else FontWeight.Normal), color = if (selected) c.tx else c.t2, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
+        }
+    }
+}
+
+/** Phone tabs. Shown under every top-level screen (Live TV, Guide, Search, Settings), never in the player. */
+enum class PhoneTab { Live, Guide, Search, Settings }
+
+@Composable
+fun PhoneBottomBar(selected: PhoneTab, onSelect: (PhoneTab) -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Jtv.colors.s1)) {
+        BottomNavItem(stringResource(R.string.nav_live_tv), Icons.Filled.Home, selected == PhoneTab.Live, { onSelect(PhoneTab.Live) }, Modifier.weight(1f))
+        BottomNavItem(stringResource(R.string.nav_guide), Icons.Filled.DateRange, selected == PhoneTab.Guide, { onSelect(PhoneTab.Guide) }, Modifier.weight(1f))
+        BottomNavItem(stringResource(R.string.nav_search), Icons.Filled.Search, selected == PhoneTab.Search, { onSelect(PhoneTab.Search) }, Modifier.weight(1f))
+        BottomNavItem(stringResource(R.string.nav_settings), Icons.Filled.Settings, selected == PhoneTab.Settings, { onSelect(PhoneTab.Settings) }, Modifier.weight(1f))
+    }
+}
+
+/**
+ * TV: the four sections as a tab row in every top-level screen's header (Up from the content reaches
+ * it). The current one has an s2 fill + amber underline; focus is the usual inverted fill.
+ */
+@Composable
+fun TvTabs(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier = Modifier) {
+    val c = Jtv.colors
+    Row(modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(
+            Triple(PhoneTab.Live, stringResource(R.string.nav_live_tv), Icons.Filled.Home),
+            Triple(PhoneTab.Guide, stringResource(R.string.nav_guide), Icons.Filled.DateRange),
+            Triple(PhoneTab.Search, stringResource(R.string.nav_search), Icons.Filled.Search),
+            Triple(PhoneTab.Settings, stringResource(R.string.nav_settings), Icons.Filled.Settings),
+        ).forEach { (tab, label, icon) ->
+            val sel = tab == selected
+            JtvClickable(
+                onClick = { if (!sel) onSelect(tab) },
+                // Underline drawn behind (a fillMaxWidth child would stretch the tab across the header).
+                modifier = Modifier.height(40.dp).then(
+                    if (sel) Modifier.drawBehind {
+                        val w = size.width * 0.7f
+                        drawRect(c.acc, topLeft = androidx.compose.ui.geometry.Offset((size.width - w) / 2, size.height - 2.dp.toPx()),
+                            size = androidx.compose.ui.geometry.Size(w, 2.dp.toPx()))
+                    } else Modifier
+                ),
+                container = if (sel) c.s2 else Color.Transparent,
+            ) { focused ->
+                Row(Modifier.align(Alignment.Center).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, contentDescription = null, tint = if (focused) c.invTx else if (sel) c.acc else c.t2, modifier = Modifier.size(20.dp))
+                    Box(Modifier.width(8.dp))
+                    Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+/** Height of [PhoneBottomBar] (the mini player docks right above it). */
+val PhoneBottomBarHeight = 60.dp
+
+/** Width of [TabletNavRail]. */
+val TabletRailWidth = 80.dp
+
+/** Tablet: the same four tabs as the phone bottom bar, as an 80dp rail on the left. */
+@Composable
+fun TabletNavRail(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier = Modifier) {
+    val c = Jtv.colors
+    Row(modifier.fillMaxHeight()) {
+        Column(
+            Modifier.width(TabletRailWidth - 1.dp).fillMaxHeight().background(c.s1).padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            RailItem(stringResource(R.string.nav_live_tv), Icons.Filled.Home, selected == PhoneTab.Live) { onSelect(PhoneTab.Live) }
+            RailItem(stringResource(R.string.nav_guide), Icons.Filled.DateRange, selected == PhoneTab.Guide) { onSelect(PhoneTab.Guide) }
+            RailItem(stringResource(R.string.nav_search), Icons.Filled.Search, selected == PhoneTab.Search) { onSelect(PhoneTab.Search) }
+            RailItem(stringResource(R.string.nav_settings), Icons.Filled.Settings, selected == PhoneTab.Settings) { onSelect(PhoneTab.Settings) }
+        }
+        Box(Modifier.width(1.dp).fillMaxHeight().background(c.line))
+    }
+}
+
+/** Rail item: icon over a 12sp label; current = amber icon + 3dp amber bar on the left edge. */
+@Composable
+private fun RailItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val c = Jtv.colors
+    JtvClickable(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(64.dp),
+        shape = RoundedCornerShape(0.dp),
+        focusedContainer = c.s2,
+    ) {
+        if (selected) Box(Modifier.align(Alignment.Center).size(56.dp, 52.dp).clip(RoundedCornerShape(12.dp)).background(c.s2))
+        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = null, tint = if (selected) c.acc else c.t2, modifier = Modifier.size(24.dp))
+            Text(
+                label, style = textStyle(12.sp, if (selected) FontWeight.Bold else FontWeight.Normal),
+                color = if (selected) c.tx else c.t2, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
+    }
+}

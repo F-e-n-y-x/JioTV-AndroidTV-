@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JTV lite</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1b1d21;--mute:#666b75;--line:#dde0e5;--acc:#1f5fd6;--bad:#c62828;--ok:#2e7d32}
+@media (prefers-color-scheme:dark){:root{--bg:#121316;--card:#1c1e22;--fg:#e8e9ec;--mute:#9a9fa8;--line:#2e3137;--acc:#7aa7ff;--bad:#ff8a80;--ok:#81c784}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,sans-serif}
+main{max-width:560px;margin:0 auto;padding:16px}h1{font-size:1.3rem;margin:8px 0 16px}h2{font-size:1rem;margin:0 0 10px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+input,button{font:inherit;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);min-height:44px}
+input{width:100%;margin-bottom:8px}button{background:var(--acc);color:#fff;border:0;cursor:pointer}button.sec{background:transparent;color:var(--acc);border:1px solid var(--line)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row input{flex:1;margin:0;min-width:140px}
+.mute{color:var(--mute);font-size:.9rem}.err{color:var(--bad)}.ok{color:var(--ok)}code,.code{font-family:ui-monospace,monospace;font-size:1.05rem;letter-spacing:.06em}
+ul{list-style:none;padding:0;margin:0 0 10px}li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+pre{white-space:pre-wrap;word-break:break-all;font-size:.8rem;max-height:240px;overflow:auto}
+</style></head><body><main id="app"><p class="mute">Loading…</p></main>
+<script>
+const app=document.getElementById('app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const when=ms=>ms?new Date(ms).toLocaleString():'—';
+async function api(p,b,m){const r=await fetch(p,{method:m||(b?'POST':'GET'),headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined});
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'HTTP '+r.status);return j}
+let msg='',otpFor='';
+function act(fn){return async e=>{e&&e.preventDefault();msg='';try{await fn()}catch(x){msg='<p class="err">'+esc(x.message)+'</p>'}load()}}
+const val=id=>document.getElementById(id).value;
+async function load(){const s=await api('/api/admin/state');
+ if(s.needsSetup){app.innerHTML=`<h1>Set up JTV lite</h1><section><form id=f><p>Choose an admin password for this page.</p>
+  <input id=p1 type=password autocomplete=new-password placeholder="Password (4+ characters)" required minlength=4>
+  <input id=p2 type=password autocomplete=new-password placeholder="Repeat password" required><button>Save</button></form>${msg}</section>`;
+  f.onsubmit=act(async()=>{if(val('p1')!==val('p2'))throw new Error('Passwords do not match');await api('/api/setup',{password:val('p1')})});return}
+ if(!s.authed){app.innerHTML=`<h1>JTV lite</h1><section><form id=f><input id=pw type=password autocomplete=current-password placeholder="Admin password" required autofocus>
+  <button>Sign in</button></form>${msg}</section>`;f.onsubmit=act(()=>api('/api/admin/login',{password:val('pw')}));return}
+ const j=s.jio,h=location.hostname,addrs=[...new Set([...(/^(localhost|127\.)/.test(h)?[]:[h]),...s.addrs])];
+ app.innerHTML=`<h1>${esc(s.name)} <span class="mute">· JTV lite ${esc(s.version)}</span></h1>${msg}
+ <section><h2>Server address</h2><p class="mute">In the JTV app, pick this server or type:</p>
+  ${addrs.map(a=>`<div class="code">http://${esc(a)}:${s.port}</div>`).join('')}</section>
+ <section><h2>Jio account</h2>${j.signedIn?`<p class="ok">Signed in${j.mobile?' as '+esc(j.mobile):''}</p>
+  <p class="mute">Token expires ${when(j.expiresAt)} · updated ${when(j.updatedAt)}${j.hasRefreshToken?'':' · no refresh token, sign in again'}</p>
+  <div class="row"><button id=rf>Refresh now</button><button class=sec id=so>Sign out of Jio</button></div>`
+  :`<form id=jf><p class="mute">Sign in with your Jio mobile number. The OTP goes to that phone.</p>
+  <div class="row"><input id=mob inputmode=numeric autocomplete=tel placeholder="10-digit Jio number" value="${esc(otpFor)}" required>
+  <button ${otpFor?'class=sec':''} id=snd type=button>${otpFor?'Resend':'Send OTP'}</button></div>
+  ${otpFor?`<div class="row" style="margin-top:8px"><input id=otp inputmode=numeric autocomplete=one-time-code placeholder="OTP" required><button>Verify</button></div>`:''}</form>`}</section>
+ <section><h2>Access codes</h2><p class="mute">Each TV or phone enters one code. Delete a code to cut that device off.</p>
+  <ul>${s.codes.map(c=>`<li><span><span class="code">${esc(c.code)}</span> <span class="mute">${esc(c.name)}</span></span>
+  <button class=sec data-del="${esc(c.code)}">Delete</button></li>`).join('')||'<li class="mute">No codes yet</li>'}</ul>
+  <form id=cf class="row"><input id=cn placeholder="Name, e.g. Living room TV" maxlength=40><button>Create code</button></form></section>
+ ${s.reports.length?`<section><h2>Problem reports (${s.reports.length})</h2>${s.reports.slice().reverse().map(r=>`<details><summary>${esc(r.kind)} · ${esc(r.device)} · ${when(r.receivedAt)}</summary>
+  <p class="mute">App ${esc(r.appVersion)} · Android ${esc(r.android)}</p><pre>${esc(r.text)}</pre></details>`).join('')}</section>`:''}
+ <p><button class=sec id=lo>Log out</button></p>`;
+ const on=(id,fn)=>{const e=document.getElementById(id);if(e)e.onclick=act(fn)};
+ on('rf',()=>api('/api/admin/refresh',{}));on('lo',()=>api('/api/admin/logout',{}));
+ on('so',async()=>{if(confirm('Sign out of Jio? TVs stop working until you sign in again.'))await api('/api/admin/logout-jio',{})});
+ on('snd',async()=>{const m=val('mob');await api('/api/login/otp/send',{mobile:m});otpFor=m;msg='<p class="ok">OTP sent.</p>'});
+ if(window.jf)jf.onsubmit=act(async()=>{await api('/api/login/otp/verify',{mobile:val('mob'),otp:val('otp')});otpFor=''});
+ cf.onsubmit=act(()=>api('/api/admin/codes',{name:val('cn')}));
+ app.querySelectorAll('[data-del]').forEach(b=>b.onclick=act(async()=>{if(confirm('Delete code '+b.dataset.del+'?'))await api('/api/admin/codes/'+b.dataset.del,null,'DELETE')}));
+}
+load().catch(e=>app.innerHTML='<p class="err">'+esc(e.message)+'</p>');
+</script></body></html>

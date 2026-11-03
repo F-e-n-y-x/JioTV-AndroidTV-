@@ -1,0 +1,14 @@
+services:
+  jtv-lite:
+    build: .
+    image: jtv-lite
+    container_name: jtv-lite
+    restart: unless-stopped
+    ports:
+      - "29180:29180"
+    environment:
+      SERVER_NAME: ${SERVER_NAME:-JTV lite}
+    volumes:
+      - jtv-lite-data:/data
+volumes:
+  jtv-lite-data:

@@ -1,0 +1,318 @@
+package com.fenyx.jtv.ui.player
+
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Icon
+import com.fenyx.jtv.data.Channel
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.JText
+import com.fenyx.jtv.ui.components.JtvClickable
+import com.fenyx.jtv.ui.components.formatTime
+
+/** Everything the options panel and quick menu show. Built by the player from its playback state. */
+@Immutable
+internal data class OptionsModel(
+    val favourite: Boolean,
+    /** The one Language choice: in-stream sound tracks plus sibling-language channels. */
+    val langChoices: List<Pair<String, String>>,
+    val langCurrent: String,
+    /** The playing language, for display. */
+    val langLabel: String,
+    val quality: String,
+    val aspect: Int,
+    val voice: Int,
+    val autoVolume: Boolean,
+    val sleep: Int,
+    val paused: Boolean,
+    val showRefresh: Boolean,
+    val refreshing: Boolean,
+)
+
+/** Player actions the overlays can trigger. */
+internal interface PlayerActions {
+    fun toggleFavourite()
+    /** A value from [OptionsModel.langChoices]. */
+    fun pickLanguage(value: String)
+    fun pickQuality(value: String)
+    fun pickAspect(mode: Int)
+    fun pickVoice(level: Int)
+    fun toggleAutoVolume()
+    fun pickSleep(minutes: Int)
+    fun togglePause()
+    fun openChannelList()
+    fun openSettings()
+    fun refreshLogin()
+    fun zap(delta: Int)
+    fun tune(group: String?, index: Int)
+    fun back()
+    /** Leave the player (on-screen Back button). */
+    fun leave()
+    /** Phone/tablet: the player can shrink into the in-app mini player (TV: false, Back leaves). */
+    val canMinimize: Boolean get() = false
+    /** Shrink into the mini player; where that isn't offered it leaves, like Back. */
+    fun minimize() = leave()
+    fun retry()
+    /** Phone: go to landscape full screen, or back. */
+    fun fullScreen(on: Boolean) {}
+    /** Timeshift: seek within the live window (window coordinates; at the right end = live). */
+    fun seekTo(ms: Long) {}
+    /** Back to the live point, and play. */
+    fun goLive() {}
+    /** Replay [p], the show on now, from its start (Jio catch-up); live again when it catches up. */
+    fun watchFromStart(p: com.fenyx.jtv.data.EpgProgram) {}
+}
+
+/**
+ * The options panel: labelled rows on the main page, each opening an inline list where focus lands on
+ * the current value. [entry] is the page it was opened on: picking a value there closes the panel
+ * (opened from the quick menu or a phone button), otherwise it returns to the main page.
+ */
+@Composable
+internal fun OptionsPanel(
+    page: OptionsPage,
+    entry: OptionsPage,
+    model: OptionsModel,
+    channel: Channel?,
+    epg: EpgSource,
+    actions: PlayerActions,
+    touch: Boolean,
+    onPage: (OptionsPage) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rowH = if (touch) 60.dp else 52.dp
+    val first = remember { FocusRequester() }
+    val current = remember { FocusRequester() }
+    var lastSub by remember { mutableStateOf<OptionsPage?>(null) }
+    val subFocus = remember { OptionsPage.entries.associateWith { FocusRequester() } }
+
+    LaunchedEffect(page) {
+        if (touch) return@LaunchedEffect // touch shows a press effect only, never a focus highlight
+        withFrameNanos { }
+        runCatching {
+            when {
+                page != OptionsPage.Main -> current.requestFocus()
+                lastSub != null -> subFocus.getValue(lastSub!!).requestFocus()
+                else -> first.requestFocus()
+            }
+        }
+    }
+
+    fun done() {
+        if (entry == OptionsPage.Main) onPage(OptionsPage.Main) else onClose()
+    }
+    fun open(p: OptionsPage) { lastSub = p; onPage(p) }
+
+    Column(modifier.verticalScroll(rememberScrollState())) {
+        val title = when (page) {
+            OptionsPage.Main -> stringResource(R.string.player_options)
+            OptionsPage.Language -> stringResource(R.string.player_language)
+            OptionsPage.Quality -> stringResource(R.string.player_quality)
+            OptionsPage.Aspect -> stringResource(R.string.player_aspect)
+            OptionsPage.Voice -> stringResource(R.string.player_voice_boost)
+            OptionsPage.Sleep -> stringResource(R.string.player_sleep_timer)
+        }
+        JText(title, 22.sp, weight = FontWeight.Bold)
+        if (channel != null) {
+            JText(
+                shownNumber(channel).let { if (it > 0) "$it  ${channel.name}" else channel.name },
+                16.sp, color = Jtv.colors.t2, modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        if (page == OptionsPage.Voice) {
+            JText(stringResource(R.string.player_voice_boost_hint), 14.sp, color = Jtv.colors.t2, maxLines = 2,
+                modifier = Modifier.padding(top = 6.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+
+        when (page) {
+            OptionsPage.Main -> {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // The show on now, from its start: only live (not while replaying) and when Jio can.
+                    val airing = if (channel != null && LocalReplay.current == null) rememberNowNext(epg, channel.id, always = true)?.now else null
+                    val startOver = airing?.takeIf { channel != null && com.fenyx.jtv.data.Catchup.startOver(channel, it, com.fenyx.jtv.data.JioClock.nowMs()) != null }
+                    if (startOver != null) {
+                        OptionRow(
+                            stringResource(R.string.guide_watch_from_start), stringResource(R.string.player_started_at, formatTime(startOver.startMs)),
+                            rowH, Modifier.focusRequester(first),
+                        ) { actions.watchFromStart(startOver); onClose() }
+                    }
+                    val pickable = model.langChoices.size > 1
+                    if (pickable) {
+                        OptionRow(stringResource(R.string.player_language), model.langLabel, rowH, (if (startOver == null) Modifier.focusRequester(first) else Modifier).focusRequester(subFocus.getValue(OptionsPage.Language))) { open(OptionsPage.Language) }
+                    } else {
+                        InfoRow(stringResource(R.string.player_language), model.langLabel, rowH)
+                    }
+                    OptionRow(
+                        stringResource(R.string.player_quality), qualityLabel(model.quality), rowH,
+                        (if (pickable || startOver != null) Modifier else Modifier.focusRequester(first)).focusRequester(subFocus.getValue(OptionsPage.Quality)),
+                    ) { open(OptionsPage.Quality) }
+                    OptionRow(stringResource(R.string.player_aspect), aspectLabel(model.aspect), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Aspect))) { open(OptionsPage.Aspect) }
+                    OptionRow(stringResource(R.string.player_voice_boost), voiceLabel(model.voice), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Voice))) { open(OptionsPage.Voice) }
+                    OptionRow(stringResource(R.string.player_auto_volume), onOff(model.autoVolume), rowH) { actions.toggleAutoVolume() }
+                    OptionRow(stringResource(R.string.player_sleep_timer), sleepLabel(model.sleep), rowH, Modifier.focusRequester(subFocus.getValue(OptionsPage.Sleep))) { open(OptionsPage.Sleep) }
+                    OptionRow(stringResource(R.string.player_favourite), onOff(model.favourite), rowH) { actions.toggleFavourite() }
+                    if (model.showRefresh) {
+                        OptionRow(stringResource(R.string.player_refresh_sign_in), stringResource(if (model.refreshing) R.string.player_refreshing else R.string.player_refresh), rowH) { actions.refreshLogin() }
+                    }
+                    OptionRow(stringResource(R.string.common_settings), "", rowH) { actions.openSettings() }
+                    // LAN sync: send this channel to a paired TV on the same Wi-Fi (phone/tablet only).
+                    if (touch && channel != null) {
+                        val tvs by com.fenyx.jtv.sync.LanSync.playTargets.collectAsState()
+                        tvs.forEach { tv ->
+                            OptionRow(stringResource(R.string.player_play_on, tv.name), "", rowH) {
+                                com.fenyx.jtv.sync.LanSync.playOn(tv.id, channel.id); onClose()
+                            }
+                        }
+                    }
+                    if (touch) OptionRow(stringResource(R.string.common_close), "", rowH) { onClose() }
+                }
+            }
+            else -> {
+                val (choices, cur) = when (page) {
+                    OptionsPage.Language -> model.langChoices to model.langCurrent
+                    OptionsPage.Quality -> QUALITY_OPTIONS.map { it.first to stringResource(it.second) } to model.quality
+                    OptionsPage.Aspect -> ASPECT_OPTIONS.map { it.first.toString() to stringResource(it.second) } to (when (model.aspect) { 1 -> 3; 2 -> 4; else -> model.aspect }).toString()
+                    OptionsPage.Voice -> VOICE_OPTIONS.map { it.first.toString() to stringResource(it.second) } to model.voice.toString()
+                    OptionsPage.Sleep -> SLEEP_OPTIONS.map { it.toString() to sleepLabel(it) } to model.sleep.toString()
+                    OptionsPage.Main -> emptyList<Pair<String, String>>() to ""
+                }
+                val curIndex = choices.indexOfFirst { it.first == cur }.coerceAtLeast(0)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    choices.forEachIndexed { i, (value, label) ->
+                        ChoiceRow(
+                            label, value == cur, rowH,
+                            if (i == curIndex) Modifier.focusRequester(current) else Modifier,
+                        ) {
+                            when (page) {
+                                OptionsPage.Language -> actions.pickLanguage(value)
+                                OptionsPage.Quality -> actions.pickQuality(value)
+                                OptionsPage.Aspect -> actions.pickAspect(value.toInt())
+                                OptionsPage.Voice -> actions.pickVoice(value.toInt())
+                                OptionsPage.Sleep -> actions.pickSleep(value.toInt())
+                                OptionsPage.Main -> {}
+                            }
+                            done()
+                        }
+                    }
+                    if (touch) OptionRow(stringResource(R.string.common_back), "", rowH) { done() }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptionRow(label: String, value: String, h: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val c = Jtv.colors
+    JtvClickable(onClick = onClick, modifier = modifier.fillMaxWidth().height(h)) { focused ->
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
+            JText(label, 18.sp, color = if (focused) c.invTx else c.tx, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (value.isNotEmpty()) JText(value, 16.sp, color = if (focused) c.invTx else c.t2)
+        }
+    }
+}
+
+/** A fact, not a choice (one language only): never focusable, so the D-pad skips it. */
+@Composable
+private fun InfoRow(label: String, value: String, h: Dp) {
+    val c = Jtv.colors
+    Row(Modifier.fillMaxWidth().height(h).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        JText(label, 18.sp, color = c.tx, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        JText(value, 16.sp, color = c.t2)
+    }
+}
+
+@Composable
+private fun ChoiceRow(label: String, selected: Boolean, h: Dp, modifier: Modifier, onClick: () -> Unit) {
+    val c = Jtv.colors
+    JtvClickable(onClick = onClick, modifier = modifier.fillMaxWidth().height(h)) { focused ->
+        val fg = if (focused) c.invTx else c.tx
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
+            JText(label, 18.sp, color = fg, weight = if (selected) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = if (focused) c.invTx else c.acc, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(6.dp))
+                JText(stringResource(R.string.player_current), 14.sp, color = if (focused) c.invTx else c.t2)
+            }
+        }
+    }
+}
+
+/** Hold OK / Menu key / right-click / long-press: a small menu over the video. Focus on the first item. */
+@Composable
+internal fun QuickMenu(
+    model: OptionsModel,
+    channel: Channel?,
+    actions: PlayerActions,
+    touch: Boolean,
+    onOpenPage: (OptionsPage) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = Jtv.colors
+    val rowH = if (touch) 56.dp else 48.dp
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (touch) return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { first.requestFocus() }
+    }
+    Column(
+        modifier.width(380.dp).clip(RoundedCornerShape(8.dp)).background(c.s1).padding(14.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        if (channel != null) {
+            JText(
+                shownNumber(channel).let { if (it > 0) "$it  ${channel.name}" else channel.name },
+                18.sp, weight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 10.dp),
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            OptionRow(stringResource(R.string.player_favourite), onOff(model.favourite), rowH, Modifier.focusRequester(first)) { actions.toggleFavourite() }
+            if (model.langChoices.size > 1) OptionRow(stringResource(R.string.player_language), model.langLabel, rowH) { onOpenPage(OptionsPage.Language) }
+            OptionRow(stringResource(R.string.player_quality), qualityLabel(model.quality), rowH) { onOpenPage(OptionsPage.Quality) }
+            OptionRow(stringResource(R.string.player_aspect), aspectLabel(model.aspect), rowH) { onOpenPage(OptionsPage.Aspect) }
+            OptionRow(stringResource(if (model.paused) R.string.player_play else R.string.player_pause), "", rowH) { actions.togglePause(); onClose() }
+            OptionRow(stringResource(R.string.player_channel_list), "", rowH) { actions.openChannelList() }
+            OptionRow(stringResource(R.string.common_settings), "", rowH) { actions.openSettings() }
+            if (touch) OptionRow(stringResource(R.string.common_close), "", rowH) { onClose() }
+        }
+    }
+}
+
+@Composable
+private fun onOff(on: Boolean) = stringResource(if (on) R.string.common_on else R.string.common_off)

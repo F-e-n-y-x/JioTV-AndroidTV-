@@ -17,6 +17,10 @@ import { getStoredCredentials, updateTokens } from "./store/db";
 const CHECK_INTERVAL_MS = 30 * 60 * 1000; // look every 30 min
 const REFRESH_LEAD_MS = 2 * 60 * 60 * 1000; // refresh when < 2 h of the 12 h token remain
 const FALLBACK_MAX_AGE_MS = 6 * 60 * 60 * 1000; // token without a readable exp: refresh every 6 h
+// Upper bound for one whole refresh (refresh + optional SSO recovery = up to ~3 Jio calls of 15 s each).
+// Every Jio call already times out on its own; this is a backstop so the single-flight lock can never
+// stay held forever and block every later refresh.
+const REFRESH_TIMEOUT_MS = 90_000;
 
 let timer: NodeJS.Timeout | null = null;
 let inflight: Promise<{ ok: boolean; error?: string }> | null = null;
@@ -46,7 +50,7 @@ function needsRefresh(authToken: string, updatedAt: number, now: number): boolea
  */
 export function refreshNow(opts: { force?: boolean } = {}): Promise<{ ok: boolean; error?: string }> {
   if (inflight) return inflight;
-  inflight = (async () => {
+  const work = (async (): Promise<{ ok: boolean; error?: string }> => {
     const stored = getStoredCredentials();
     if (!stored) return { ok: false, error: "No credentials — sign in to Jio first." };
     if (rejectedForAuthToken && rejectedForAuthToken === stored.authToken) {
@@ -78,10 +82,20 @@ export function refreshNow(opts: { force?: boolean } = {}): Promise<{ ok: boolea
       }
       return { ok: false, error };
     }
-  })().finally(() => {
-    inflight = null;
+  })();
+  let guard: NodeJS.Timeout | undefined;
+  const timeout = new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    guard = setTimeout(
+      () => resolve({ ok: false, error: "Token refresh timed out — Jio did not answer. Try again in a minute." }),
+      REFRESH_TIMEOUT_MS
+    );
   });
-  return inflight;
+  const p = Promise.race([work, timeout]).finally(() => {
+    clearTimeout(guard);
+    if (inflight === p) inflight = null;
+  });
+  inflight = p;
+  return p;
 }
 
 export function startRefreshScheduler(): void {

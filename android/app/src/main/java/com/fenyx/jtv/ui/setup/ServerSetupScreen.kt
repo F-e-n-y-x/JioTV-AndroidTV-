@@ -17,7 +17,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -25,13 +24,29 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.MaterialTheme
-import com.fenyx.jtv.theme.Surface
 import androidx.tv.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.fenyx.jtv.R
+import com.fenyx.jtv.i18n.UiText
+import com.fenyx.jtv.i18n.text
+import com.fenyx.jtv.data.userText
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.ui.components.JtvButton
+import com.fenyx.jtv.ui.components.textStyle
 import com.fenyx.jtv.data.ServerClient
 import com.fenyx.jtv.data.SettingsManager
-import com.fenyx.jtv.theme.*
+import com.fenyx.jtv.data.ServerDiscovery
+import com.fenyx.jtv.ui.components.JtvClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.tv.material3.Icon
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -56,7 +71,7 @@ fun ServerSetupScreen(
     var serverUrl by remember { mutableStateOf("") }
     var token by remember { mutableStateOf("") }
     var isConnecting by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<UiText?>(null) }
 
     // Prefill from any previously saved config (e.g. re-connecting from Settings). In JTV mode the URL
     // is hardcoded, so we only prefill the code.
@@ -65,21 +80,42 @@ fun ServerSetupScreen(
         token = settingsManager.serverTokenFlow.first()
     }
 
-    val urlFocus = remember { FocusRequester() }
     val tokenFocus = remember { FocusRequester() }
     val connectFocus = remember { FocusRequester() }
-    // Focus the code field first in JTV mode (there's no URL field to focus). Landing focus on a field
-    // opens the system keyboard for it.
-    LaunchedEffect(Unit) { runCatching { (if (jtvMode) tokenFocus else urlFocus).requestFocus() } }
+    val scanFocus = remember { FocusRequester() }
+    val firstServerFocus = remember { FocusRequester() }
+    val scanInteraction = remember { MutableInteractionSource() }
+    val scanFocused by scanInteraction.collectIsFocusedAsState()
+
+    // LAN scan for JTV servers. JTV mode scans too (without showing the list) so Connect tries them first.
+    var servers by remember { mutableStateOf(emptyList<ServerDiscovery.Server>()) }
+    var scanning by remember { mutableStateOf(true) }
+    var scanRun by remember { mutableIntStateOf(0) }
+    LaunchedEffect(scanRun) {
+        scanning = true
+        servers = emptyList()
+        ServerDiscovery.scan(context).collect { servers = it }
+        scanning = false
+    }
+    // The first server found takes focus from "Scan again" (only if the user hasn't moved on).
+    LaunchedEffect(servers.isNotEmpty()) {
+        if (servers.isNotEmpty() && scanFocused) runCatching { firstServerFocus.requestFocus() }
+    }
+
+    // JTV mode starts on the code field (landing focus on a field opens the keyboard). Self-hosted mode
+    // starts on "Scan again" on TV, above the server list, so no keyboard pops up over it.
+    // On touch devices nothing is pre-focused (a focused row would look picked).
+    val tv = Jtv.isTv
+    LaunchedEffect(Unit) { runCatching { if (jtvMode) tokenFocus.requestFocus() else if (tv) scanFocus.requestFocus() } }
 
     fun connect() {
-        if (!jtvMode && serverUrl.isBlank()) { error = "Enter the server URL."; return }
-        if (token.isBlank()) { error = "Enter your access code."; return }
+        if (!jtvMode && serverUrl.isBlank()) { error = UiText.of(R.string.setup_error_enter_url); return }
+        if (token.isBlank()) { error = UiText.of(R.string.setup_error_enter_code); return }
         isConnecting = true
         error = null
         scope.launch {
             val result = if (jtvMode)
-                ServerClient.fetchCredentials(ServerClient.JTV_SERVER_URLS, token)
+                ServerClient.fetchCredentials(ServerClient.candidateUrls("jtv", ""), token)
             else
                 ServerClient.fetchCredentials(serverUrl, token)
             isConnecting = false
@@ -93,104 +129,181 @@ fun ServerSetupScreen(
                     settingsManager.setSetupMode("server")
                 }
                 settingsManager.saveAuthData(authData) // flips Navigation into the app
-            }.onFailure { error = it.message ?: "Connection failed." }
+            }.onFailure { error = it.userText(UiText.of(R.string.setup_error_connection_failed)) }
         }
     }
 
     // Hardware BACK returns to the setup chooser instead of exiting the app.
     androidx.activity.compose.BackHandler { onBack() }
 
-    // Full-bleed dark background across the WHOLE window (behind any keyboard/inset area) so the IME
+    val c = Jtv.colors
+    val isTv = Jtv.isTv
+    val isPhone = Jtv.form == FormFactor.Phone
+
+    // Full-bleed background across the WHOLE window (behind any keyboard/inset area) so the IME
     // opening doesn't reveal a black bar where safeDrawingPadding pushes the content up.
-    Box(modifier = Modifier.fillMaxSize().background(TvDarkBackground)) {
+    Box(modifier = Modifier.fillMaxSize().background(c.bg)) {
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .tvOverscan(),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .statusBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = if (isTv) 48.dp else 16.dp, vertical = if (isTv) 27.dp else 16.dp),
+            horizontalAlignment = if (isPhone) Alignment.Start else Alignment.CenterHorizontally,
             // Top-anchored (not centered) so the fields stay in the upper area — the keyboard overlays
             // the empty lower area and NOTHING shifts when it opens.
             verticalArrangement = Arrangement.Top
         ) {
-            Spacer(Modifier.height(TvDimens.SpaceXl))
+            Spacer(Modifier.height(if (isPhone) 8.dp else 24.dp))
             Text(
-                if (jtvMode) "Connect to JTV Server" else "Connect to JTV Proxy Server",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = TvOnBackground
+                stringResource(if (jtvMode) R.string.setup_code_title else R.string.setup_server_title),
+                style = textStyle(if (isPhone) 28.sp else 32.sp, FontWeight.Bold),
+                color = c.tx
             )
-            Spacer(Modifier.height(TvDimens.SpaceSm))
+            Spacer(Modifier.height(8.dp))
             Text(
-                if (jtvMode) "Just enter your access code — the server address is built in."
-                else "Pull shared credentials from your self-hosted server.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = TvOnSurfaceVariant
+                stringResource(if (jtvMode) R.string.setup_code_subtitle else R.string.setup_server_subtitle),
+                style = textStyle(18.sp),
+                color = c.t2
             )
-            Spacer(Modifier.height(TvDimens.SpaceXl))
+            Spacer(Modifier.height(24.dp))
 
             error?.let {
-                Text(it, color = TvError, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(TvDimens.SpaceMd))
+                Text(it.text(), color = c.error, style = textStyle(18.sp, FontWeight.SemiBold))
+                Spacer(Modifier.height(12.dp))
             }
 
-            // Self-hosted mode shows the URL field; JTV mode hides it (URL is hardcoded).
+            // Self-hosted mode shows found servers + the URL field; JTV mode hides both (URL is built in).
             if (!jtvMode) {
+                ServerList(
+                    servers = servers,
+                    scanning = scanning,
+                    onPick = { serverUrl = it.url; error = null; runCatching { tokenFocus.requestFocus() } },
+                    onScanAgain = { scanRun++ },
+                    scanModifier = Modifier.focusRequester(scanFocus),
+                    scanInteraction = scanInteraction,
+                    firstServerFocus = firstServerFocus,
+                )
+                Spacer(Modifier.height(24.dp))
+                SectionTitle(stringResource(R.string.setup_custom_server))
+                Spacer(Modifier.height(8.dp))
                 TvField(
-                    label = "Server URL",
+                    label = stringResource(R.string.setup_server_address),
                     value = serverUrl,
                     onValueChange = { serverUrl = it },
                     placeholder = "http://192.168.1.10:8080",
                     keyboardType = KeyboardType.Uri,
                     imeAction = ImeAction.Next,
                     keyboardActions = KeyboardActions(onNext = { runCatching { tokenFocus.requestFocus() } }),
-                    modifier = Modifier.focusRequester(urlFocus)
                 )
-                Spacer(Modifier.height(TvDimens.SpaceMd))
+                Spacer(Modifier.height(16.dp))
             }
             TvField(
-                label = "Access Code",
+                label = stringResource(R.string.setup_access_code),
                 value = token,
                 onValueChange = { token = it },
                 // Purely illustrative placeholder — must NOT resemble any real/active code.
-                placeholder = "e.g. 7XK2Q9",
+                placeholder = stringResource(R.string.setup_access_code_hint),
                 keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Done,
                 keyboardActions = KeyboardActions(onDone = { runCatching { connectFocus.requestFocus() } }),
                 modifier = Modifier.focusRequester(tokenFocus)
             )
-            Spacer(Modifier.height(TvDimens.SpaceXl))
+            Spacer(Modifier.height(28.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(TvDimens.SpaceMd)) {
-                Surface(
-                    onClick = { onBack() },
-                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-                    // No focus-scale — the border/colour marks focus (per user preference).
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = TvDarkSurfaceVariant,
-                        focusedContainerColor = TvDarkSurface
-                    )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                JtvButton(stringResource(R.string.common_back), { onBack() }, fontSize = 18.sp, minHeight = if (isTv) 48.dp else 56.dp)
+                JtvButton(
+                    stringResource(if (isConnecting) R.string.setup_connecting else R.string.setup_connect),
+                    { if (!isConnecting) connect() },
+                    Modifier.focusRequester(connectFocus),
+                    primary = true,
+                    fontSize = 18.sp,
+                    minHeight = if (isTv) 48.dp else 56.dp
+                )
+            }
+        }
+    }
+}
+
+/** Section width: full width on phones, the form column (560dp) elsewhere. */
+@Composable
+private fun sectionWidth() = if (Jtv.form == FormFactor.Phone) Modifier.fillMaxWidth() else Modifier.width(560.dp)
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, style = textStyle(20.sp, FontWeight.SemiBold), color = Jtv.colors.tx, modifier = sectionWidth())
+}
+
+/** "Servers on your network": scanning line, one row per server, empty state, and "Scan again". */
+@Composable
+private fun ServerList(
+    servers: List<ServerDiscovery.Server>,
+    scanning: Boolean,
+    onPick: (ServerDiscovery.Server) -> Unit,
+    onScanAgain: () -> Unit,
+    scanModifier: Modifier,
+    scanInteraction: MutableInteractionSource,
+    firstServerFocus: FocusRequester,
+) {
+    val c = Jtv.colors
+    Column(sectionWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.setup_servers_nearby), style = textStyle(20.sp, FontWeight.SemiBold), color = c.tx, modifier = Modifier.weight(1f))
+            JtvClickable(
+                onClick = onScanAgain,
+                modifier = scanModifier.heightIn(min = 48.dp),
+                interactionSource = scanInteraction,
+                focusedScale = 1.03f,
+            ) { focused ->
+                Row(
+                    Modifier.align(Alignment.Center).padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("Back", modifier = Modifier.padding(horizontal = 28.dp, vertical = 14.dp), color = TvOnSurface)
+                    val fg = if (focused) c.invTx else c.tx
+                    Icon(Icons.Filled.Refresh, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+                    Text(stringResource(R.string.setup_scan_again), style = textStyle(16.sp, FontWeight.Medium), color = fg)
                 }
-                Surface(
-                    onClick = { if (!isConnecting) connect() },
-                    modifier = Modifier.focusRequester(connectFocus),
-                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-                    colors = ClickableSurfaceDefaults.colors(
-                        containerColor = TvPrimaryContainer,
-                        focusedContainerColor = TvPrimary
-                    )
+            }
+        }
+        servers.forEachIndexed { i, s ->
+            JtvClickable(
+                onClick = { onPick(s) },
+                modifier = Modifier.fillMaxWidth().height(64.dp)
+                    .then(if (i == 0) Modifier.focusRequester(firstServerFocus) else Modifier),
+                container = c.s1,
+                focusedScale = 1.02f,
+            ) { focused ->
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(s.name, style = textStyle(18.sp, FontWeight.SemiBold), color = if (focused) c.invTx else c.tx,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(s.url, style = textStyle(14.sp), color = if (focused) c.invTx else c.t2,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                     Text(
-                        if (isConnecting) "Connecting…" else "Connect",
-                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
-                        color = TvOnBackground,
-                        fontWeight = FontWeight.SemiBold
+                        stringResource(if (s.lite) R.string.setup_server_lite else R.string.setup_server_full),
+                        style = textStyle(14.sp, FontWeight.Medium),
+                        color = if (focused) c.invTx else c.t2,
+                        modifier = Modifier
+                            .border(1.dp, if (focused) c.invTx else c.line, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
                     )
                 }
             }
+        }
+        if (scanning) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CircularProgressIndicator(color = c.acc, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Text(stringResource(R.string.setup_scanning), style = textStyle(16.sp), color = c.t2)
+            }
+        } else if (servers.isEmpty()) {
+            Text(stringResource(R.string.setup_no_server_found), style = textStyle(18.sp, FontWeight.Medium), color = c.tx)
+            Text(stringResource(R.string.setup_no_server_hint, ServerDiscovery.PROBE_PORT), style = textStyle(14.sp), color = c.t2)
         }
     }
 }
@@ -211,18 +324,19 @@ private fun TvField(
     val keyboard = LocalSoftwareKeyboardController.current
     val view = LocalView.current
     var focused by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.width(520.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = TvOnSurfaceVariant)
+    val c = Jtv.colors
+    Column(modifier = if (Jtv.form == FormFactor.Phone) Modifier.fillMaxWidth() else Modifier.width(560.dp)) {
+        Text(label, style = textStyle(16.sp, FontWeight.SemiBold), color = c.t2, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         Spacer(Modifier.height(6.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(TvDarkSurfaceVariant)
+                .height(60.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(c.s1)
                 .border(
-                    BorderStroke(if (focused) 2.dp else 1.dp, if (focused) TvPrimary else TvPrimary.copy(alpha = 0.4f)),
-                    RoundedCornerShape(10.dp)
+                    BorderStroke(if (focused) 2.dp else 1.dp, if (focused) c.acc else c.line),
+                    RoundedCornerShape(8.dp)
                 )
                 .padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart
@@ -231,8 +345,8 @@ private fun TvField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = TextStyle(color = TvOnSurface, fontSize = 16.sp),
-                cursorBrush = SolidColor(TvPrimary),
+                textStyle = textStyle(20.sp).copy(color = c.tx),
+                cursorBrush = SolidColor(c.acc),
                 keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
                 keyboardActions = keyboardActions,
                 // The caller's focusRequester (initial focus / Next-Done chaining) rides on the field.
@@ -254,7 +368,7 @@ private fun TvField(
                         }
                     },
                 decorationBox = { inner ->
-                    if (value.isEmpty()) Text(placeholder, color = TvOnSurfaceVariant, fontSize = 16.sp)
+                    if (value.isEmpty()) Text(placeholder, color = c.t2, style = textStyle(20.sp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     inner()
                 }
             )

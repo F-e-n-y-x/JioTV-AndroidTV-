@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Routes, Route, Navigate, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { api, type AccessCode, type Channel } from "./api";
+import { api, type AccessCode, type Channel, type ProblemReport } from "./api";
 import { WatchPage } from "./Player";
 import { GuidePage } from "./Guide";
 import {
@@ -302,7 +302,36 @@ function Account() {
         <div className="grid gap-5 mt-5">
           <CodesCard />
           <M3uCard />
+          <ReportsCard />
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Problem reports (crashes / ANRs uploaded by the TV apps) ──────────── */
+function ReportsCard() {
+  const [reports, setReports] = useState<ProblemReport[]>([]);
+  const load = () => api.reports().then((r) => setReports(r.reports)).catch(() => {});
+  useEffect(() => { load(); }, []);
+  if (reports.length === 0) return null;
+  return (
+    <div className="card">
+      <h3>Problem reports</h3>
+      <p className="text-muted text-sm mt-1">Crashes and freezes sent by your TVs (newest first, last 50 kept). Tokens are removed before they're stored.</p>
+      <div className="flex flex-col gap-2 mt-4">
+        {reports.map((r) => (
+          <details key={r.id} className="rounded-lg border border-[var(--border)] p-3 min-w-0">
+            <summary className="cursor-pointer text-sm flex flex-wrap gap-x-3 gap-y-1 items-center">
+              <span className={`badge ${r.kind === "crash" || r.kind === "native" ? "badge-error" : "badge-accent"}`}>{r.kind}</span>
+              <span>{new Date(r.at).toLocaleString()}</span>
+              <span className="text-muted">{r.device} · Android {r.android} · v{r.appVersion}</span>
+              <button className="icon-btn !w-8 !h-8 !border-0 hover:!text-error ml-auto" title="Delete"
+                onClick={async (e) => { e.preventDefault(); try { await api.deleteReport(r.id); } catch {} load(); }}><IconTrash /></button>
+            </summary>
+            <pre className="mt-3 text-xs whitespace-pre-wrap break-all max-h-96 overflow-auto">{r.text}</pre>
+          </details>
+        ))}
       </div>
     </div>
   );

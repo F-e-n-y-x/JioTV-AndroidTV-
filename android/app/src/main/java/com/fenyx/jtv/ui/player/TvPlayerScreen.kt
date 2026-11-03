@@ -1,80 +1,87 @@
 package com.fenyx.jtv.ui.player
 
+import com.fenyx.jtv.R
+import androidx.compose.ui.res.stringResource
 import android.annotation.SuppressLint
-import androidx.compose.animation.*
-import androidx.compose.animation.core.animateDpAsState
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import com.fenyx.jtv.theme.JtvDark
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.view.Gravity
+import android.view.View
+import android.widget.FrameLayout
+import androidx.compose.ui.layout.layout
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Icon
-import androidx.tv.material3.MaterialTheme
-import com.fenyx.jtv.theme.Surface
-import androidx.tv.material3.Text
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.fenyx.jtv.data.Channel
 import com.fenyx.jtv.data.SettingsManager
-import com.fenyx.jtv.theme.*
-import com.fenyx.jtv.ui.settings.SettingsItem
+import com.fenyx.jtv.theme.FormFactor
+import com.fenyx.jtv.theme.Jtv
+import com.fenyx.jtv.theme.JtvDarkOnly
+import com.fenyx.jtv.theme.LocalJtvColors
+import com.fenyx.jtv.ui.main.MainViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.*
 
-/** One selectable audio track from the currently playing stream. */
+/** One audio track of the playing stream, raw (de-duplicated later by [buildLanguageChoices]). */
 @androidx.annotation.OptIn(UnstableApi::class)
 private data class AudioOption(
-    val label: String,
     val group: androidx.media3.common.TrackGroup,
     val trackIndex: Int,
-    val selected: Boolean
+    val language: String?,
+    val name: String?,
+    val selected: Boolean,
+    val supported: Boolean,
 )
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -89,9 +96,29 @@ fun TvPlayerScreen(
     onSettings: () -> Unit = {},
     variantsFor: (String) -> List<com.fenyx.jtv.data.ChannelLanguage.Variant> = { emptyList() },
     initialGroup: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Phone/tablet: drawn as the in-app mini player (bar / card). Overlays, keys and focus are off. */
+    mini: Boolean = false,
+    /** Phone/tablet: shrink into the mini player (Back / chevron / swipe down). null (TV): Back leaves. */
+    onMinimize: (() -> Unit)? = null,
+    /** Mini player tapped. */
+    onExpand: () -> Unit = {},
+    /**
+     * Bumped by the host each time a channel is opened while this player is already composed (e.g. from
+     * the screen behind the mini player): the SAME player retunes to [initialIndex]/[initialGroup]
+     * instead of a second ExoPlayer being built.
+     */
+    openToken: Int = 0,
+    /** Catch-up: replay this programme of the launch channel instead of playing it live (null = live). */
+    catchup: com.fenyx.jtv.data.CatchupRequest? = null,
+    /** Remote buttons: open the programme guide or search (the host navigates). */
+    onRemoteScreen: (com.fenyx.jtv.data.RemoteAction) -> Unit = {},
+    /** TV: true when this player is on top of backStack, false when obscured (Settings/Guide opened). */
+    isActive: Boolean = true,
 ) {
     val context = LocalContext.current
+    // The app theme (the player itself is dark-only); the mini player matches the app.
+    val appColors = Jtv.colors
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
 
@@ -104,11 +131,27 @@ fun TvPlayerScreen(
     var currentIndex by rememberSaveable { mutableIntStateOf(initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))) }
     // Derived from the saved group so it rebuilds correctly after a state restore. For pseudo-categories
     // ("All"/"Favorites") there's no per-group entry, so fall back to the passed `channels` list.
-    val currentChannels = remember(currentGroup, allChannelsByGroup, channels) {
-        val g = currentGroup
-        if (g != null) (allChannelsByGroup[g] ?: channels) else channels
+    // The shared MainViewModel (activity-scoped, same instance Navigation uses) for the guide data and
+    // categories the player wasn't handed (e.g. "All" when launched from News).
+    val vm = remember(context) {
+        context.findActivity()?.let { runCatching { ViewModelProvider(it)[MainViewModel::class.java] }.getOrNull() }
+    }
+    fun resolveGroup(g: String?): List<Channel> = when {
+        g == null -> channels
+        g == initialGroup -> allChannelsByGroup[g] ?: channels
+        else -> allChannelsByGroup[g] ?: vm?.getChannelsByGroup(g) ?: emptyList()
+    }
+    val currentChannels = remember(currentGroup, allChannelsByGroup, channels) { resolveGroup(currentGroup) }
+    // The list can change under the saved index (a favourite removed, a language hidden, a refresh):
+    // stay on the channel being watched; the old index is kept only when that channel is gone.
+    var playingId by rememberSaveable { mutableStateOf<String?>(null) }
+    remember(currentChannels) {
+        val id = Snapshot.withoutReadObservation { playingId }
+        val i = if (id == null) -1 else currentChannels.indexOfFirst { it.id == id }
+        if (i >= 0 && i != Snapshot.withoutReadObservation { currentIndex }) currentIndex = i
     }
     val currentChannel = remember(currentIndex, currentChannels) { currentChannels.getOrNull(currentIndex) }
+    SideEffect { currentChannel?.id?.let { if (it != playingId) playingId = it } }
 
     // Collapsed per-language feeds for the channel on screen (empty when it isn't a language family).
     val currentVariants = remember(currentChannel) { currentChannel?.let { variantsFor(it.id) } ?: emptyList() }
@@ -117,26 +160,60 @@ fun TvPlayerScreen(
     // derived lower down, once `language` (the preferred audio language) is in scope.
     var langOverride by remember { mutableStateOf<Channel?>(null) }
     LaunchedEffect(currentChannel) { langOverride = null }
-    var showLangSelector by remember { mutableStateOf(false) }
 
-    var showOverlay by remember { mutableStateOf(true) }
-    var showChannelList by remember { mutableStateOf(false) }
-    var showCategoryList by remember { mutableStateOf(false) }
-    var showSettingsOverlay by remember { mutableStateOf(false) }
+    // ── Catch-up (replay) state ──
+    // The programme being replayed (null = live). Set from the launch request and each re-open; any
+    // zap / tune / "Go live" clears it. Only applies to the channel it was made for.
+    var replay by rememberSaveable(stateSaver = CatchupRequestSaver) { mutableStateOf(catchup) }
+    var replayEnded by remember { mutableStateOf(false) }
+    val activeReplay = replay?.takeIf { it.channelId == currentChannel?.id }
+    val replayRef = rememberUpdatedState(activeReplay)
+    // Last replay loaded and where it was, so a re-fetch (expired token, error) resumes in place.
+    val replayResume = remember { object { var req: com.fenyx.jtv.data.CatchupRequest? = null } }
+    // ── end catch-up state ──
+
+    // True when the user paused (quick menu "Pause" or the Play/Pause key).
+    var userPaused by remember { mutableStateOf(false) }
+
+    // A channel opened again from outside (mini player host): retune this same player.
+    var seenOpenToken by rememberSaveable { mutableIntStateOf(openToken) }
+    LaunchedEffect(openToken) {
+        if (openToken != seenOpenToken) {
+            seenOpenToken = openToken
+            currentGroup = initialGroup
+            currentIndex = initialIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
+            // Set now, not in SideEffect, so the remap on the group's list change keeps this target.
+            playingId = resolveGroup(initialGroup).getOrNull(currentIndex)?.id
+            userPaused = false
+            replay = catchup // catch-up
+            replayEnded = false
+        }
+    }
+
+    // Overlay state (banner / browse / options / menu / number entry) lives apart from playback state.
+    val ui = remember { PlayerUi(PlayerOverlay.Banner) }
+    // Live timeshift (DVR window) state for the seek bar, the Live button and "Behind live".
+    val ts = remember { Timeshift() }
+    // Recorded-schedule channels ("VOD playout", e.g. some Sony Yay feeds): Jio's geturl returns the
+    // CURRENT programme's file (SonyLIV, partner=jiotvvod), not a live stream. We start it at the
+    // scheduled position and load the next file when it ends. Known from the URL at load, and from
+    // the timeline (a non-live, non-placeholder window) once it is prepared.
+    var vodItem by remember { mutableStateOf(false) }
+    // The loaded stream URL without its query: a refreshed token is only applied to the same file.
+    val streamBase = remember { java.util.concurrent.atomic.AtomicReference("") }
     
     val settingsManager = remember { SettingsManager(context) }
     val favoriteChannels by settingsManager.favoriteChannelsFlow.collectAsState(initial = emptySet())
     val playerSetupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
+    val upIsNext by settingsManager.upIsNextChannelFlow.collectAsState(initial = true)
     // "Refresh Login" (server mode) state shown in the right-side overlay.
     var refreshingCreds by remember { mutableStateOf(false) }
 
-    // Auto-hide overlay
-    LaunchedEffect(showOverlay) {
-        if (showOverlay && !showChannelList && !showCategoryList) {
-            delay(5000)
-            showOverlay = false
-        }
-    }
+    // Programme guide: the channel being watched always gets its guide; other rows follow the setting.
+    val epgModeState = settingsManager.epgModeFlow.collectAsState(initial = false)
+    // TV channel browser: two-pane panel (default) or the old tile strip.
+    val browserPanel by settingsManager.playerBrowserPanelFlow.collectAsState(initial = true)
+    val epg = remember(vm) { EpgSource(vm, epgModeState) }
 
     var quality by remember { mutableStateOf("auto") }
     var language by remember { mutableStateOf("hi") }
@@ -149,9 +226,8 @@ fun TvPlayerScreen(
         currentVariants.firstOrNull { it.langCode == language }?.channel
     }
     val playingChannel = langOverride ?: preferredVariant ?: currentChannel
+    val playingRef = rememberUpdatedState(playingChannel)
     
-    var showAudioSelector by remember { mutableStateOf(false) }
-    var showQualitySelector by remember { mutableStateOf(false) }
 
     // Real audio tracks exposed by the current stream (for reliable language switching).
     var audioTracks by remember { mutableStateOf<List<AudioOption>>(emptyList()) }
@@ -177,18 +253,21 @@ fun TvPlayerScreen(
         resizeMode = settingsManager.playerResizeModeFlow.first()
         prefsLoaded = true
     }
+    LaunchedEffect(Unit) {
+        settingsManager.playerResizeModeFlow.collect { mode ->
+            resizeMode = mode
+        }
+    }
 
     // Player state
     var isBuffering by remember { mutableStateOf(true) }
-    // "Recorded schedule" channels (e.g. Sony Yay): Jio's geturl returns a SonyLIV VOD file for the
-    // programme on air (slivcdn / partner=jiotvvod), not a live stream. We start it at the scheduled
-    // point and load the next programme's file when it ends, instead of playing it from 0:00 forever.
-    var vodProgramEndMs by remember { mutableStateOf(0L) }
-    val vodPendingSeekMs = remember { java.util.concurrent.atomic.AtomicLong(-1L) }
-    // True when the user paused via long-press OK.
-    var userPaused by remember { mutableStateOf(false) }
+    // A load may finish after Home / Settings: it must not start the sound then (read in the load effect).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val isActiveState = rememberUpdatedState(isActive)
+    // Held CH+/CH-/Up/Down: the zap came from a key repeat, so the load waits for the hold to end.
+    val zapHold = remember { object { var repeat = false } }
     // Non-null only when playback has failed and auto-recovery has been exhausted.
-    var playbackError by remember { mutableStateOf<String?>(null) }
+    var playbackError by remember { mutableStateOf<PlayerError?>(null) }
 
     // Stream auto-recovery: Jio live URLs carry a short-lived Akamai cookie (__hdnea__) that expires
     // after a while, which surfaces as a sudden black screen. On error we re-fetch the stream URL
@@ -204,19 +283,28 @@ fun TvPlayerScreen(
     // Player-affecting prefs. Read reactively (NEVER block the main thread here — doing so caused
     // jank/black-screen on entry). Tunneling is applied live via track-selection params below; the
     // hardware-decoder mode can only be set at construction, so the player is keyed on it.
-    val tunnelingPref by settingsManager.tunnelingFlow.collectAsState(initial = false)
-    val hardwareOnlyPref by settingsManager.hardwareDecoderFlow.collectAsState(initial = true)
-    val bufferSecPref by settingsManager.playbackBufferSecFlow.collectAsState(initial = 60)
-    val upIsNextChannel by settingsManager.upIsNextChannelFlow.collectAsState(initial = true)
-    val reverseChPlusMinus by settingsManager.reverseChPlusMinusFlow.collectAsState(initial = false)
+    // null until DataStore answers: the player is built once, with the saved values (building it with
+    // defaults first meant a second ExoPlayer and a second stream load on every open).
+    val tunnelingPref by settingsManager.tunnelingFlow.collectAsState(initial = null)
+    val hardwareOnlyPref by settingsManager.hardwareDecoderFlow.collectAsState(initial = null)
+    val bufferSecPref by settingsManager.playbackBufferSecFlow.collectAsState(initial = null)
 
     // Audio enhancement settings + the effect engine.
     val voiceBoost by settingsManager.voiceBoostFlow.collectAsState(initial = 2)
     val audioNormalize by settingsManager.audioNormalizeFlow.collectAsState(initial = false)
     // LoudnessEnhancer handles makeup loudness; the dialogue processor does center-channel voice
-    // isolation. The processor is stable across player rebuilds and reads its level live.
+    // isolation. Keyed on player build settings so rebuilt players get their own processor instance.
     val audioEnhancer = remember { com.fenyx.jtv.player.AudioEnhancer() }
-    val dialogueProcessor = remember { com.fenyx.jtv.player.DialogueAudioProcessor() }
+    val tunnelingOn = tunnelingPref
+    val hardwareOnly = hardwareOnlyPref
+    val bufferSec = bufferSecPref
+    if (tunnelingOn == null || hardwareOnly == null || bufferSec == null) {
+        Box(modifier.fillMaxSize().background(Color.Black))
+        return
+    }
+    val dialogueProcessor = remember(hardwareOnlyPref, tunnelingPref, bufferSecPref) {
+        com.fenyx.jtv.player.DialogueAudioProcessor()
+    }
 
     // ExoPlayer is built using our custom factory to ensure Android TV optimizations. Keyed on the
     // settings that can only be applied at construction so changing any of them rebuilds the player;
@@ -225,11 +313,20 @@ fun TvPlayerScreen(
         com.fenyx.jtv.player.JioExoPlayerFactory.create(
             context,
             language,
-            tunneling = tunnelingPref,
-            hardwareOnly = hardwareOnlyPref,
-            maxBufferSec = bufferSecPref,
+            tunneling = tunnelingOn,
+            hardwareOnly = hardwareOnly,
+            maxBufferSec = bufferSec,
             dialogueProcessor = dialogueProcessor
         )
+    }
+
+    LaunchedEffect(resizeMode, exoPlayer) {
+        val targetScaling = if (resizeMode == 3 || resizeMode == 4 || resizeMode == 6) {
+            C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        } else {
+            C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        }
+        exoPlayer.videoScalingMode = targetScaling
     }
 
     // Deterministic audio session id: generate one and bind the player to it so audio-effect
@@ -249,12 +346,13 @@ fun TvPlayerScreen(
     // so sending the CDN stream headers there gets a 403 and the stream never decrypts.
     val keyHeadersHolder = remember { java.util.concurrent.atomic.AtomicReference<Map<String, String>>(emptyMap()) }
 
-    // Reuse data source factories to avoid GC pressure on every channel switch
+    // Reuse data source factories to avoid GC pressure on every channel switch. Manifests, segments
+    // and AES keys go over the app's ONE OkHttp client (data/Net.kt): HTTP/2 to the CDN, pooled
+    // connections shared with the zap prefetch's manifest probe and with Coil. Redirects (incl.
+    // http<->https) are followed by the client; timeouts are set there (connect 8 s, read 15 s).
+    // The Widevine license request is not routed here: it keeps Media3's default DRM HTTP stack.
     val httpDataSourceFactory = remember {
-        DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
+        OkHttpDataSource.Factory(com.fenyx.jtv.data.Net.client)
     }
     // Applies the latest Akamai token to EVERY request (manifest + segments) two ways, because Jio
     // authorizes segments via BOTH the URL query token AND a `Cookie: __hdnea__=...` header:
@@ -337,23 +435,16 @@ fun TvPlayerScreen(
                         for (i in 0 until g.length) {
                             val f = g.getTrackFormat(i)
                             val lang = f.language
-                            val label = f.label
-                                ?: lang?.takeIf { it.isNotBlank() && it != "und" }?.let {
-                                    runCatching { java.util.Locale(it).displayLanguage }
-                                        .getOrNull()?.replaceFirstChar { c -> c.uppercase() }
-                                }
-                                ?: "Audio ${i + 1}"
                             diag.append("\n  [${lang ?: "?"}] label=${f.label} codec=${f.codecs ?: f.sampleMimeType} " +
                                 "ch=${f.channelCount} supported=${g.isTrackSupported(i)} selected=${g.isTrackSelected(i)}")
-                            // Keep offering every track (don't hide unsupported ones — that would look
-                            // like the language is "missing"); the log records support so we can tell
-                            // whether a silent track is an unsupported codec vs. genuinely absent.
-                            opts.add(AudioOption(label, g.mediaTrackGroup, i, g.isTrackSelected(i)))
+                            opts.add(AudioOption(g.mediaTrackGroup, i, lang, f.label, g.isTrackSelected(i), g.isTrackSupported(i)))
                         }
                     }
                 }
-                android.util.Log.d("TvPlayerAudio", "audio tracks (${opts.size} playable):$diag")
-                audioTracks = opts
+                android.util.Log.d("TvPlayerAudio", "audio tracks (${opts.size}):$diag")
+                // Offer only tracks the device can play, unless none are (then offer all, so the
+                // language never looks "missing"; the log above says which codec failed).
+                audioTracks = opts.filter { it.supported }.ifEmpty { opts }
 
                 // Diagnostic: which VIDEO rendition did ABR actually pick? Filter logcat by tag
                 // "TvPlayerVideo" to confirm the quality setting is being honoured (the selected line
@@ -371,28 +462,39 @@ fun TvPlayerScreen(
                 }
                 android.util.Log.d("TvPlayerVideo", "video renditions:$vdiag")
             }
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                if (timeline.isEmpty) return
+                val w = timeline.getWindow(exoPlayer.currentMediaItemIndex.coerceIn(0, timeline.windowCount - 1),
+                    androidx.media3.common.Timeline.Window())
+                // A replay is a file too, but not a recorded-schedule channel (catch-up).
+                if (!w.isPlaceholder && !w.isLive && !vodItem && replayRef.value == null) vodItem = true
+            }
             override fun onPlaybackStateChanged(state: Int) {
+                // Catch-up: the replayed programme is over -> "Watch next programme" / "Go live".
+                if (state == Player.STATE_ENDED && replayRef.value != null) replayEnded = true
+                // Schedule file finished: Jio now hands out the next programme's file.
+                if (state == Player.STATE_ENDED && vodItem) {
+                    android.util.Log.d("TvPlayer", "Schedule file ended: loading the next programme")
+                    streamRefreshTrigger++
+                }
                 isBuffering = state == Player.STATE_BUFFERING
                 if (state == Player.STATE_READY) {
                     // Playback recovered -> clear any error and reset the recovery budget so the
                     // next expiry (minutes/hours later) gets a fresh set of retries.
                     retryCount.intValue = 0
                     playbackError = null
-                    val seek = vodPendingSeekMs.getAndSet(-1L)
-                    val dur = exoPlayer.duration
-                    if (seek > 0 && !exoPlayer.isCurrentMediaItemLive && (dur <= 0 || seek < dur - 5_000)) {
-                        android.util.Log.d("TvPlayer", "Recorded schedule: start at ${seek / 1000}s of ${dur / 1000}s")
-                        exoPlayer.seekTo(seek)
-                    }
-                }
-                if (state == Player.STATE_ENDED && vodProgramEndMs > 0) {
-                    // The programme's file finished: ask Jio again, it now returns the next one.
-                    android.util.Log.d("TvPlayer", "Recorded schedule: programme ended, loading next")
-                    retryCount.intValue = 0
-                    streamRefreshTrigger++
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
+                // Paused (or rewound) past the start of the DVR window: the stream itself is fine, so go
+                // back to live on the same source instead of re-fetching the URL.
+                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                    android.util.Log.d("TvPlayer", "Behind the live window: back to live")
+                    ts.reset()
+                    exoPlayer.seekToDefaultPosition()
+                    exoPlayer.prepare()
+                    return
+                }
                 // Token/cookie expiration (often 403 Forbidden) causes a black screen.
                 // We MUST re-fetch the stream URL entirely, not just retry the same expired URL.
                 if (retryCount.intValue < 5) {
@@ -400,33 +502,23 @@ fun TvPlayerScreen(
                     // Small backoff so a flapping CDN doesn't get hammered. Driven via the
                     // streamRefreshTrigger LaunchedEffect which re-fetches the stream URL.
                     val backoffMs = 800L * retryCount.intValue
+                    // Only for the stream that failed: a zap in the meantime already loads afresh (a
+                    // stale bump here re-ran the new channel's load ~0.6 s after the zap).
+                    val failed = playingRef.value
                     scope.launch {
                         delay(backoffMs)
-                        streamRefreshTrigger++
+                        if (playingRef.value == failed) streamRefreshTrigger++
                     }
                 } else {
                     // Auto-recovery exhausted: stop the spinner and show an actionable message
                     // instead of an indefinite black screen.
                     isBuffering = false
-                    playbackError = "Playback stopped. Press OK to retry."
+                    playbackError = PlayerError(R.string.player_err_picture_stopped, ErrorAction.Retry, ErrorAction.NextChannel)
                 }
             }
         }
         exoPlayer.addListener(listener)
         onDispose { exoPlayer.removeListener(listener) }
-    }
-
-    // Recorded schedule: when the guide says this programme is over, fetch the next one's file even if
-    // the file itself runs longer than its slot (keeps the "channel" in step with Jio's schedule).
-    LaunchedEffect(vodProgramEndMs, playingChannel) {
-        val end = vodProgramEndMs
-        if (end <= 0 || end == Long.MAX_VALUE) return@LaunchedEffect
-        val wait = end + 2_000 - System.currentTimeMillis()
-        if (wait > 0) delay(wait)
-        if (vodProgramEndMs == end) {
-            android.util.Log.d("TvPlayer", "Recorded schedule: slot over, loading next programme")
-            streamRefreshTrigger++
-        }
     }
 
     LaunchedEffect(playingChannel, quality) {
@@ -438,59 +530,71 @@ fun TvPlayerScreen(
     // a moment after open, or the hardware-decoder toggle changes), the NEW instance must be given the
     // media source — otherwise it buffers forever until some other change re-triggers this. That was the
     // "loads until I change a setting" bug.
-    LaunchedEffect(exoPlayer, playingChannel, prefsLoaded, streamRefreshTrigger) {
+    LaunchedEffect(exoPlayer, playingChannel, prefsLoaded, streamRefreshTrigger, activeReplay) {
         val ch = playingChannel
+        // Catch-up: replay this programme (from Jio's catch-up CDN) instead of the live stream.
+        val cu = activeReplay
+        // Re-loading the same replay (token expiry, error): carry on from where it was.
+        val resumeMs = if (cu != null && cu == replayResume.req) exoPlayer.currentPosition.coerceAtLeast(0L) else 0L
+        replayResume.req = cu
+        ts.replay = cu != null
         // Wait for the saved prefs before the first prepare(), so the correct quality constraints are
         // already in place and playback never has to switch rendition (and re-init the secure decoder)
         // right after it starts. NOTE: `quality` is deliberately NOT a key here — it does not change
         // the stream URL, only track selection, which the separate effect below applies live.
         if (ch != null && prefsLoaded) {
-            // Persist the representative (logical) channel for autoplay, not the language sibling.
-            currentChannel?.let { settingsManager.setLastChannelId(it.id) }
-            settingsManager.setLastChannelGroup(currentGroup)
-            isBuffering = true
+            // Persist the representative (logical) channel for autoplay, not the language sibling, and
+            // move it to the front of "Recent". These are DataStore disk writes, so they run in their
+            // own child coroutine AFTER prepare() (or once the load has failed) instead of being
+            // awaited before the stream request: they used to sit in front of every zap. A child of
+            // this effect, so a newer zap cancels a stale write and the last channel/group always
+            // come from the same tune.
+            val lastId = currentChannel?.id
+            val lastGroup = currentGroup
+            fun persistLastChannel() = launch {
+                lastId?.let { settingsManager.setLastChannelId(it) }
+                settingsManager.setLastChannelGroup(lastGroup)
+            }
+            // Held zap: only the banner follows each step; the stream loads once the keys stop.
+            if (zapHold.repeat) {
+                delay(ZapHoldSettleMs)
+                zapHold.repeat = false
+            }
             exoPlayer.stop()
-            
+            exoPlayer.clearMediaItems()
+            // After stop/clear: their (synchronous) IDLE callback would clear it again.
+            isBuffering = true
+
             val authData = settingsManager.authDataFlow.first()
             
             if (authData == null) {
                 android.util.Log.e("TvPlayer", "Missing auth data")
+                persistLastChannel()
                 isBuffering = false
-                playbackError = "Not logged in. Please sign in again."
+                playbackError = PlayerError(R.string.player_err_not_signed_in, ErrorAction.Settings)
                 return@LaunchedEffect
             }
             
             val chNumber = ch.channelNumber.toString()
             android.util.Log.d("TvPlayer", "Fetching stream URL for channel $chNumber")
             
-            val result = com.fenyx.jtv.data.JioApiClient.getStreamUrl(context, chNumber, authData)
-            
+            val result = if (cu != null) {
+                // The channel the guide entry belongs to (not a language sibling): its srno is for it.
+                com.fenyx.jtv.data.JioApiClient.getStreamUrl(context, cu.channelNumber.toString(), authData, catchup = cu.toParams())
+            } else com.fenyx.jtv.data.JioApiClient.getStreamUrl(context, chNumber, authData)
+
             if (result.isSuccess) {
                 val streamData = result.getOrNull()!!
                 val finalUrl = streamData.streamUrl
 
                 // Seed the token holder so the ResolvingDataSource and refresh loop have the current token.
                 tokenHolder.set(com.fenyx.jtv.data.JioApiClient.extractHdneaToken(finalUrl))
+                streamBase.set(finalUrl.substringBefore('?'))
+                vodItem = cu == null && isScheduleFileUrl(finalUrl)
+                replayEnded = false
                 keyHeadersHolder.set(if (streamData.isMpd) emptyMap() else streamData.licenseHeaders)
 
-                android.util.Log.d("TvPlayer", "Loading stream: $finalUrl (isMpd: ${streamData.isMpd})")
-
-                val isRecordedSchedule = !streamData.isMpd &&
-                    (finalUrl.contains("slivcdn.com") || finalUrl.contains("partner=jiotvvod"))
-                vodProgramEndMs = 0L
-                vodPendingSeekMs.set(-1L)
-                if (isRecordedSchedule) {
-                    val now = System.currentTimeMillis()
-                    val prog = runCatching {
-                        com.fenyx.jtv.data.EpgRepository(context).getNativeEpgForChannel(ch.id)
-                    }.getOrNull()?.firstOrNull { it.startMs <= now && now < it.stopMs }
-                    if (prog != null) {
-                        vodPendingSeekMs.set(now - prog.startMs)
-                        vodProgramEndMs = prog.stopMs
-                    } else {
-                        vodProgramEndMs = Long.MAX_VALUE // unknown schedule: still advance on STATE_ENDED
-                    }
-                }
+                android.util.Log.d("TvPlayer", "Loading stream: ${finalUrl.substringBefore('?')} (isMpd: ${streamData.isMpd})")
 
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(finalUrl)
@@ -503,7 +607,8 @@ fun TvPlayerScreen(
                             .build()
                     )
 
-                if (streamData.isMpd && streamData.licenseUrl.isNotEmpty()) {
+                val isJwk = streamData.licenseUrl.startsWith("jwk:")
+                if (streamData.isMpd && streamData.licenseUrl.isNotEmpty() && !isJwk) {
                     val drmConfig = MediaItem.DrmConfiguration.Builder(androidx.media3.common.C.WIDEVINE_UUID)
                         .setLicenseUri(streamData.licenseUrl)
                         .setLicenseRequestHeaders(streamData.licenseHeaders)
@@ -520,28 +625,68 @@ fun TvPlayerScreen(
                 }
 
                 httpDataSourceFactory.setDefaultRequestProperties(streamData.headers)
+                ts.reset()
+                ts.replay = cu != null
 
-                val mediaSource = mediaSourceFactory.createMediaSource(mediaItemBuilder.build())
+                val mediaSource = if (isJwk) {
+                    val jwkJson = streamData.licenseUrl.removePrefix("jwk:")
+                    val drmCallback = androidx.media3.exoplayer.drm.LocalMediaDrmCallback(jwkJson.toByteArray(Charsets.UTF_8))
+                    val drmSessionManager = androidx.media3.exoplayer.drm.DefaultDrmSessionManager.Builder()
+                        .setUuidAndExoMediaDrmProvider(androidx.media3.common.C.CLEARKEY_UUID, androidx.media3.exoplayer.drm.FrameworkMediaDrm.DEFAULT_PROVIDER)
+                        .build(drmCallback)
+                    DefaultMediaSourceFactory(context)
+                        .setDataSourceFactory(resolvingDataSourceFactory)
+                        .setDrmSessionManagerProvider { drmSessionManager }
+                        .setLoadErrorHandlingPolicy(com.fenyx.jtv.player.JioLoadErrorHandlingPolicy())
+                        .createMediaSource(mediaItemBuilder.build())
+                } else {
+                    mediaSourceFactory.createMediaSource(mediaItemBuilder.build())
+                }
 
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    // A track override belongs to one stream; a new stream picks by preferred language.
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                        .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO).build()
                     exoPlayer.setMediaSource(mediaSource)
+                    if (resumeMs > 0) exoPlayer.seekTo(resumeMs) // catch-up: same replay, same place
                     exoPlayer.prepare()
-                    exoPlayer.playWhenReady = true
-                    userPaused = false // a new channel always starts playing
+                    // Never un-pause the user, nor start sound behind Settings/Guide or in the background.
+                    exoPlayer.playWhenReady = !userPaused && isActiveState.value &&
+                        lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                    ts.paused = userPaused
                 }
+                persistLastChannel()
             } else {
+                persistLastChannel()
                 val fetchEx = result.exceptionOrNull()
                 val fetchErr = fetchEx?.message ?: ""
                 android.util.Log.e("TvPlayer", "Failed to fetch stream: $fetchErr")
+                // No stream for this channel: drop the old one so its last frame doesn't sit under the
+                // new channel's name and error (issue #4).
+                withContext(kotlinx.coroutines.Dispatchers.Main) { exoPlayer.clearMediaItems() }
                 // Jio refusing the channel, or its stream being gone from the CDN, won't fix itself in
                 // the next few seconds — say so at once instead of retrying 5x and then blaming the login.
-                if (fetchEx is com.fenyx.jtv.data.JioApiClient.SessionExpiredException) {
+                if (cu != null && fetchEx !is com.fenyx.jtv.data.JioApiClient.SessionExpiredException &&
+                    (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException || retryCount.intValue >= 2)) {
+                    // Catch-up: Jio won't hand out this show (any more). Say so; live is one press away.
                     isBuffering = false
-                    playbackError = fetchErr
-                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException ||
-                    fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
+                    playbackError = PlayerError(R.string.player_err_no_replay, ErrorAction.GoLive, ErrorAction.Retry)
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.SessionExpiredException) {
                     isBuffering = false
-                    playbackError = "$fetchErr\n\nPress OK to retry, or CH+/CH− for another channel."
+                    playbackError = if (playerSetupMode == "server" || playerSetupMode == "jtv")
+                        PlayerError(R.string.player_err_server_sign_in_expired, ErrorAction.Retry)
+                    else PlayerError(R.string.player_err_sign_in_expired, ErrorAction.Settings, ErrorAction.Retry)
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.AllChannelsRefusedException) {
+                    isBuffering = false
+                    playbackError = if (playerSetupMode == "server" || playerSetupMode == "jtv")
+                        PlayerError(R.string.player_err_all_refused_server, ErrorAction.Retry)
+                    else PlayerError(R.string.player_err_all_refused, ErrorAction.Retry, ErrorAction.Settings)
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException) {
+                    isBuffering = false
+                    playbackError = PlayerError(R.string.player_err_not_provided, ErrorAction.NextChannel, ErrorAction.Retry)
+                } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
+                    isBuffering = false
+                    playbackError = PlayerError(R.string.player_err_offline, ErrorAction.Retry, ErrorAction.NextChannel)
                 // Let the auto-recovery budget retry transient fetch failures; only show the error
                 // once it's exhausted, so a one-off hiccup doesn't flash a message.
                 } else if (retryCount.intValue >= 5) {
@@ -552,9 +697,9 @@ fun TvPlayerScreen(
                     val authExpired = fetchErr.contains("401") || fetchErr.contains("403")
                     playbackError = when {
                         authExpired && (playerSetupMode == "server" || playerSetupMode == "jtv") ->
-                            "Server login expired. Re-login the Jio account on your JTV server, then press OK."
-                        authExpired -> "Login expired. Please sign in again."
-                        else -> "Couldn't load this channel. Press OK to retry."
+                            PlayerError(R.string.player_err_server_sign_in_expired, ErrorAction.Retry)
+                        authExpired -> PlayerError(R.string.player_err_sign_in_expired, ErrorAction.Settings, ErrorAction.Retry)
+                        else -> PlayerError(R.string.player_err_did_not_load, ErrorAction.Retry, ErrorAction.NextChannel)
                     }
                 } else {
                     retryCount.intValue++
@@ -592,70 +737,9 @@ fun TvPlayerScreen(
                     }
                     else -> {
                         isBuffering = false
-                        playbackError = "Playback stopped. Press OK to retry."
+                        playbackError = PlayerError(R.string.player_err_picture_stopped, ErrorAction.Retry, ErrorAction.NextChannel)
                     }
                 }
-            }
-        }
-    }
-
-    // READY-state stall watchdog (issue #3). The buffering watchdog above only acts in STATE_BUFFERING,
-    // but a stream can also just stop in STATE_READY: no error, no spinner, the clock simply stops
-    // (e.g. the AudioTrack stops consuming, so the audio clock that drives video stops too). One cheap
-    // coroutine samples progress every 2 s while playback should be running; after 8 s with no
-    // progress it re-attaches the audio effect (audioKick), and if that hasn't helped 6 s later it
-    // soft re-prepares the same channel (streamRefreshTrigger). It reuses the per-channel kickCount and
-    // the retryCount budget, so it can't loop faster than the existing recovery.
-    LaunchedEffect(exoPlayer, playingChannel) {
-        if (playingChannel == null) return@LaunchedEffect
-        val detector = com.fenyx.jtv.player.PlaybackStallDetector()
-        val window = androidx.media3.common.Timeline.Window()
-        while (true) {
-            delay(2_000)
-            val shouldBePlaying = exoPlayer.playWhenReady &&
-                exoPlayer.playbackState == Player.STATE_READY &&
-                !userPaused && playbackError == null
-            // For live HLS/DASH the position inside the sliding window can stay roughly constant
-            // (the window moves with us), so measure the position in the period instead.
-            val timeline = exoPlayer.currentTimeline
-            val windowOffsetMs = if (!timeline.isEmpty) {
-                timeline.getWindow(exoPlayer.currentMediaItemIndex, window).positionInFirstPeriodMs
-            } else 0L
-            val positionMs = exoPlayer.currentPosition + windowOffsetMs
-            val frames = exoPlayer.videoDecoderCounters?.let {
-                it.ensureUpdated(); it.renderedOutputBufferCount.toLong()
-            } ?: -1L
-            when (detector.onSample(android.os.SystemClock.elapsedRealtime(), shouldBePlaying, positionMs, frames)) {
-                com.fenyx.jtv.player.PlaybackStallDetector.Action.KICK_AUDIO -> {
-                    if (kickCount.intValue < 3) {
-                        kickCount.intValue++
-                        android.util.Log.w("TvPlayer", "Stall watchdog: no progress in READY at ${positionMs}ms, audio kick ${kickCount.intValue}")
-                        audioKick++
-                    } else {
-                        // Kick budget for this channel is used up: go straight to the re-prepare step.
-                        android.util.Log.w("TvPlayer", "Stall watchdog: no progress in READY at ${positionMs}ms, kicks exhausted")
-                        if (retryCount.intValue < 5) {
-                            retryCount.intValue++
-                            android.util.Log.w("TvPlayer", "Stall watchdog: re-prepare ${retryCount.intValue}")
-                            streamRefreshTrigger++
-                        } else {
-                            playbackError = "Playback stopped. Press OK to retry."
-                        }
-                        detector.reset()
-                    }
-                }
-                com.fenyx.jtv.player.PlaybackStallDetector.Action.REPREPARE -> {
-                    if (retryCount.intValue < 5) {
-                        retryCount.intValue++
-                        android.util.Log.w("TvPlayer", "Stall watchdog: still stuck after audio kick, re-prepare ${retryCount.intValue}")
-                        streamRefreshTrigger++
-                    } else {
-                        android.util.Log.w("TvPlayer", "Stall watchdog: recovery exhausted")
-                        playbackError = "Playback stopped. Press OK to retry."
-                    }
-                    detector.reset()
-                }
-                com.fenyx.jtv.player.PlaybackStallDetector.Action.NONE -> Unit
             }
         }
     }
@@ -664,12 +748,15 @@ fun TvPlayerScreen(
     // The Jio `__hdnea__` token expires ~120s after issue. This loop fetches a fresh stream URL a few
     // seconds BEFORE expiry and publishes the new token to tokenHolder, so the ResolvingDataSource
     // keeps rewriting requests with a valid token. Playback never sees a 403 -> no reload, no buffering.
-    LaunchedEffect(playingChannel) {
+    // Catch-up: keyed on the replay too, and it asks geturl for the SAME catch-up programme, so a
+    // replay's token is only ever refreshed from a replay URL (never swapped for the live stream's).
+    LaunchedEffect(playingChannel, activeReplay) {
         val ch = playingChannel ?: return@LaunchedEffect
+        val cu = activeReplay
         while (true) {
             val token = tokenHolder.get()
             val expSec = com.fenyx.jtv.data.JioApiClient.extractTokenExpiryEpochSec(token)
-            val nowSec = System.currentTimeMillis() / 1000
+            val nowSec = com.fenyx.jtv.data.JioClock.nowMs() / 1000
             // Refresh 15s before expiry; if we can't read an expiry, re-check in 60s.
             val waitMs = if (expSec > 0) ((expSec - nowSec - 15) * 1000).coerceIn(5_000, 110_000)
                          else 60_000L
@@ -679,11 +766,18 @@ fun TvPlayerScreen(
             // only re-runs failing refreshes every minute. The user's OK press reloads the stream.
             if (playbackError != null) continue
             val authData = settingsManager.authDataFlow.first() ?: continue
-            val res = com.fenyx.jtv.data.JioApiClient.getStreamUrl(
-                context, ch.channelNumber.toString(), authData
+            val res = if (cu != null) com.fenyx.jtv.data.JioApiClient.getStreamUrl(
+                context, cu.channelNumber.toString(), authData, catchup = cu.toParams(), useCache = false
+            ) else com.fenyx.jtv.data.JioApiClient.getStreamUrl(
+                context, ch.channelNumber.toString(), authData, useCache = false
             )
             if (res.isSuccess) {
-                val newToken = com.fenyx.jtv.data.JioApiClient.extractHdneaToken(res.getOrNull()!!.streamUrl)
+                val newUrl = res.getOrNull()!!.streamUrl
+                val newToken = com.fenyx.jtv.data.JioApiClient.extractHdneaToken(newUrl)
+                // Schedule file: geturl may already point at the NEXT programme's file; its token is for
+                // that file, so only take it when it is the same file (never reload mid-programme).
+                // Catch-up: likewise only for the same replay file.
+                if ((vodItem || cu != null) && newUrl.substringBefore('?') != streamBase.get()) continue
                 if (newToken.isNotEmpty()) {
                     tokenHolder.set(newToken)
                     android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
@@ -692,10 +786,72 @@ fun TvPlayerScreen(
         }
     }
 
+    // ─── Zap prefetch ───
+    // Once the channel has been playing for ~1.5 s, resolve the stream URL of the channel a zap up and
+    // a zap down would land on (same wrap-around as doZap, same language feed the zap would pick), so
+    // that zap skips the geturl round trip. Network only: no second player, no decoder. Sequential on
+    // IO and cancelled as soon as the channel changes. JioApiClient keeps at most 6 entries, each until
+    // its token is ~20 s from expiry, and never caches recorded-schedule (SonyLIV) files.
+    LaunchedEffect(exoPlayer, playingChannel, currentChannels, currentIndex, prefsLoaded, streamRefreshTrigger) {
+        val playing = playingChannel ?: return@LaunchedEffect
+        if (!prefsLoaded) return@LaunchedEffect
+        while (exoPlayer.playbackState != Player.STATE_READY) delay(250)
+        delay(1_500)
+        if (exoPlayer.playbackState != Player.STATE_READY || playbackError != null) return@LaunchedEffect
+        val list = currentChannels
+        val targets = com.fenyx.jtv.data.zapNeighbourIndices(currentIndex, list.size)
+            .mapNotNull { list.getOrNull(it) }
+            .map { ch -> variantsFor(ch.id).firstOrNull { it.langCode == language }?.channel ?: ch }
+            .map { it.channelNumber.toString() }
+            .filter { it != playing.channelNumber.toString() }
+            .distinct()
+        for (id in targets) {
+            val auth = settingsManager.authDataFlow.first() ?: return@LaunchedEffect
+            val ok = com.fenyx.jtv.data.JioApiClient.prefetchStreamUrl(context, id, auth)
+            android.util.Log.d("TvPlayer", "Prefetch $id: ${if (ok) "cached" else "skipped"}")
+        }
+    }
+
+    // Recorded-schedule channels: start at the scheduled position, move on at the programme end.
+    // Keyed on each load (streamRefreshTrigger) so every new file gets its own start seek + end timer.
+    LaunchedEffect(vodItem, playingChannel, streamRefreshTrigger) {
+        if (!vodItem) return@LaunchedEffect
+        val ids = listOfNotNull(playingChannel?.id, currentChannel?.id).distinct()
+        if (ids.isEmpty() || vm == null) return@LaunchedEffect
+        ids.forEach { vm.fetchNativeEpgIfMissing(it) }
+        fun programme(m: Map<String, List<com.fenyx.jtv.data.EpgProgram>>): com.fenyx.jtv.data.EpgProgram? {
+            val now = com.fenyx.jtv.data.JioClock.nowMs()
+            return ids.firstNotNullOfOrNull { id -> m[id]?.firstOrNull { it.startMs <= now && now < it.stopMs } }
+        }
+        val p = kotlinx.coroutines.withTimeoutOrNull(15_000) { vm.epgData.first { programme(it) != null } }
+            ?.let { programme(it) } ?: return@LaunchedEffect
+        // (a) Once the file is ready, jump to where the broadcast is now (only if that's inside the file).
+        val ready = kotlinx.coroutines.withTimeoutOrNull(30_000) {
+            while (exoPlayer.playbackState != Player.STATE_READY) delay(200)
+            true
+        } ?: false
+        ts.scheduleStartMs = p.startMs
+        if (ready) {
+            val target = com.fenyx.jtv.data.JioClock.nowMs() - p.startMs
+            val dur = exoPlayer.duration
+            if (dur != androidx.media3.common.C.TIME_UNSET && target in 5_000 until dur - 5_000 &&
+                kotlin.math.abs(exoPlayer.currentPosition - target) > 5_000) {
+                android.util.Log.d("TvPlayer", "Schedule file: start at ${target / 1000}s of ${dur / 1000}s")
+                exoPlayer.seekTo(target)
+            }
+            ts.update(exoPlayer)
+        }
+        // (b) The programme's end (+2 s): fetch the next programme's file.
+        val wait = p.stopMs + 2_000 - com.fenyx.jtv.data.JioClock.nowMs()
+        if (wait > 0) delay(wait)
+        android.util.Log.d("TvPlayer", "Schedule: programme over, loading the next one")
+        streamRefreshTrigger++
+    }
+
     // Apply audio enhancements whenever the session id or any audio setting changes.
     // - dialogueProcessor: center-channel voice isolation (live, no rebuild needed), level 0..4
     // - audioEnhancer: LoudnessEnhancer makeup/normalize bound to the session id
-    LaunchedEffect(voiceBoost) {
+    LaunchedEffect(dialogueProcessor, voiceBoost) {
         dialogueProcessor.setLevel(voiceBoost)
     }
     LaunchedEffect(audioSessionId, voiceBoost, audioNormalize, audioKick) {
@@ -708,19 +864,34 @@ fun TvPlayerScreen(
     // Release the player when it is replaced (hardware-decoder toggle) or the screen leaves.
     DisposableEffect(exoPlayer) {
         onDispose {
+            exoPlayer.volume = 0f
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
             exoPlayer.release()
+        }
+    }
+
+    // When the TV player is obscured by another screen (e.g. Settings or Guide), pause playback
+    // so no ghost audio plays and hardware decoders are relieved. Resume when returning to top.
+    LaunchedEffect(isActive) {
+        if (!isActive) {
+            exoPlayer.pause()
+        } else if (!userPaused && prefsLoaded) {
+            exoPlayer.play()
         }
     }
 
     // Stop playback when the app is backgrounded (Home / app switch) so audio doesn't keep playing in
     // the background, and resume when it returns to the foreground (unless the user had paused).
-    val lifecycleOwner = LocalLifecycleOwner.current
     val userPausedState = rememberUpdatedState(userPaused)
     DisposableEffect(lifecycleOwner, exoPlayer) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> exoPlayer.pause()
-                Lifecycle.Event.ON_START -> if (!userPausedState.value) exoPlayer.play()
+                Lifecycle.Event.ON_START -> if (!userPausedState.value) {
+                    exoPlayer.play()
+                    if (!mini) ui.showBanner()
+                }
                 else -> {}
             }
         }
@@ -728,955 +899,1191 @@ fun TvPlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Current time. Formatter is hoisted (was reallocated on every 30s tick).
-    val clockFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-    var currentTime by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentTime = clockFormat.format(Date())
-            delay(30000)
+    // ─────────────────────────── v2 overlay + key model ───────────────────────────
+
+    val isTv = Jtv.isTv
+    val portrait = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+    // Phone portrait has no banner state (its info is always on screen), so Back skips that step.
+    val isPhone = Jtv.form == FormFactor.Phone
+    val phonePortrait = isPhone && portrait
+    // Tablet: the expanded player is a page (two columns when wide, else the phone page) until the
+    // user asks for full screen. Saved, so turning the tablet while full screen stays full screen.
+    val isTablet = Jtv.form == FormFactor.Tablet
+    var tabletFull by rememberSaveable { mutableStateOf(false) }
+    val tabletPage = isTablet && !tabletFull
+    val tabletTwoColumn = tabletPage && LocalConfiguration.current.screenWidthDp >= TabletTwoColumnMinWidthDp
+    // A page with the info always on screen (no banner step for Back).
+    val pagePlayer = phonePortrait || tabletPage
+    val errorFocus = remember { FocusRequester() }
+    // Plain (non-state) bookkeeping for the hold-OK gesture and Back de-duplication.
+    val press = remember {
+        object {
+            var job: kotlinx.coroutines.Job? = null
+            var longFired = false
+            var swallow = false
+            /** OK went down here in clean/banner state (a key-up alone, e.g. after tuning from the rail, is ignored). */
+            var downSeen = false
+            var lastKeyBack = 0L
         }
     }
+    var numberJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
-    // ─── Key handler ───
-    var numericBuffer by remember { mutableStateOf("") }
-    var showNumericOverlay by remember { mutableStateOf(false) }
-    var numericJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-    // Long-press OK to pause/resume. A short OK still toggles the info overlay (or resumes if paused).
-    var centerLongFired by remember { mutableStateOf(false) }
-    var centerLongJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-    var listSelectedIndex by remember { mutableIntStateOf(0) }
-    var categorySelectedIndex by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(showChannelList, currentChannels) {
-        if (showChannelList) listSelectedIndex = currentIndex
-    }
-    LaunchedEffect(showCategoryList, groups) {
-        if (showCategoryList) categorySelectedIndex = groups.indexOf(currentGroup).coerceAtLeast(0)
-    }
-
-    fun commitNumericEntry() {
-        val num = numericBuffer.toIntOrNull()
-        if (num != null && currentChannels.isNotEmpty()) {
-            val idx = (num - 1).coerceIn(0, currentChannels.size - 1)
-            currentIndex = idx
+    // Phone "Full screen": lock landscape until the phone is actually turned, then hand rotation back
+    // to the sensor (so turning it upright again returns to the portrait page). "Exit full screen" does
+    // the same towards portrait. With auto-rotate off the lock simply stays until the other button.
+    val activity = remember(context) { context.findActivity() }
+    var orientationLock by remember { mutableStateOf<Int?>(null) } // null = not locked by us
+    fun setFullScreen(on: Boolean) {
+        // Tablet: no rotation games, just the full-screen video and back to the page.
+        if (isTablet) {
+            tabletFull = on
+            ui.showBanner()
+            return
         }
-        numericBuffer = ""
-        showNumericOverlay = false
+        val a = activity ?: return
+        val lock = if (on) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                   else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        a.requestedOrientation = lock
+        orientationLock = lock
     }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .focusRequester(focusRequester)
-            .focusable()
-            .onPreviewKeyEvent { keyEvent ->
-                // ── Long-press OK = pause/resume (only in the normal watching view) ──
-                val isCenter = keyEvent.key == Key.Enter ||
-                    keyEvent.key == Key.DirectionCenter ||
-                    keyEvent.key == Key.NumPadEnter
-                val normalWatching = !showCategoryList && !showChannelList &&
-                    !showAudioSelector && !showQualitySelector && !showSettingsOverlay &&
-                    !showLangSelector && !showNumericOverlay && playbackError == null
-                if (isCenter && normalWatching) {
-                    when (keyEvent.type) {
-                        KeyEventType.KeyDown -> {
-                            if (keyEvent.nativeKeyEvent.repeatCount == 0) {
-                                centerLongFired = false
-                                centerLongJob?.cancel()
-                                centerLongJob = scope.launch {
-                                    delay(450) // long-press threshold
-                                    centerLongFired = true
-                                    if (userPaused) { exoPlayer.play(); userPaused = false }
-                                    else { exoPlayer.pause(); userPaused = true; showOverlay = true }
-                                }
-                            }
-                            return@onPreviewKeyEvent true
-                        }
-                        KeyEventType.KeyUp -> {
-                            centerLongJob?.cancel()
-                            if (!centerLongFired) {
-                                // Short press: resume if paused, else toggle the info overlay.
-                                if (userPaused) { exoPlayer.play(); userPaused = false }
-                                else showOverlay = !showOverlay
-                            }
-                            centerLongFired = false
-                            return@onPreviewKeyEvent true
-                        }
-                        else -> return@onPreviewKeyEvent true
+    DisposableEffect(activity, orientationLock) {
+        val a = activity
+        val lock = orientationLock
+        val autoRotate = a != null && runCatching {
+            android.provider.Settings.System.getInt(a.contentResolver, android.provider.Settings.System.ACCELEROMETER_ROTATION) == 1
+        }.getOrDefault(false)
+        val listener = if (a != null && lock != null && autoRotate) {
+            object : android.view.OrientationEventListener(a) {
+                override fun onOrientationChanged(deg: Int) {
+                    if (deg == ORIENTATION_UNKNOWN) return
+                    val landscape = deg in 60..120 || deg in 240..300
+                    val upright = deg <= 25 || deg >= 335
+                    val wantLand = lock == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    if ((wantLand && landscape) || (!wantLand && upright)) {
+                        a.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        disable()
                     }
                 }
+            }.also { if (it.canDetectOrientation()) it.enable() }
+        } else null
+        onDispose { listener?.disable() }
+    }
+    // Leaving the player always gives rotation back.
+    DisposableEffect(activity) {
+        onDispose {
+            if (orientationLock != null) activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
-                if (keyEvent.type == KeyEventType.KeyDown) {
-                    val digit = when (keyEvent.key) {
-                        Key.Zero -> 0; Key.One -> 1; Key.Two -> 2; Key.Three -> 3
-                        Key.Four -> 4; Key.Five -> 5; Key.Six -> 6; Key.Seven -> 7
-                        Key.Eight -> 8; Key.Nine -> 9
-                        else -> null
+    // System bars (phone/tablet): hidden only in true full screen (phone landscape, tablet full
+    // screen). The portrait phone page and the tablet page keep the status bar, laid out below it.
+    // TV has no system bars at all (MainActivity). Mini: the app's own state, so nothing to do.
+    val trueFullScreen = !isTv && !mini && !pagePlayer
+    val appLight = appColors.bg.luminance() > 0.5f
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(activity, trueFullScreen, mini, phonePortrait, appLight) {
+        val window = activity?.window
+        val ctl = if (!isTv && window != null) androidx.core.view.WindowInsetsControllerCompat(window, hostView) else null
+        val bars = androidx.core.view.WindowInsetsCompat.Type.systemBars()
+        if (ctl != null && !mini) {
+            if (trueFullScreen) {
+                ctl.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                ctl.hide(bars)
+            } else {
+                ctl.show(bars)
+                // The phone page is always dark: light icons on it, whatever the app theme.
+                if (phonePortrait) {
+                    ctl.isAppearanceLightStatusBars = false
+                    ctl.isAppearanceLightNavigationBars = false
+                }
+            }
+        }
+        onDispose {
+            ctl?.show(bars)
+            ctl?.isAppearanceLightStatusBars = appLight
+            ctl?.isAppearanceLightNavigationBars = appLight
+        }
+    }
+
+    val browseGroups = remember(groups, currentGroup) {
+        buildList {
+            if (MainViewModel.GROUP_FAVORITES in groups) add(MainViewModel.GROUP_FAVORITES)
+            add(MainViewModel.GROUP_ALL)
+            groups.forEach { if (it != MainViewModel.GROUP_FAVORITES && it != MainViewModel.GROUP_ALL) add(it) }
+            currentGroup?.let { if (it !in this) add(0, it) }
+        }
+    }
+
+    // Banner on every tune.
+    LaunchedEffect(currentChannel?.id) { if (currentChannel != null) ui.showBanner() }
+    // Catch-up: the strap ("Replay · …") on every replay start too; the end panel only while expanded.
+    LaunchedEffect(activeReplay) { if (activeReplay != null && !mini) ui.showBanner() }
+    // A start-over (the show on now, from its start) has no end panel: it goes back to live instead.
+    val replayEndShown = replayEnded && activeReplay != null && !activeReplay.isStartOver && !mini && playbackError == null
+
+    fun setPaused(p: Boolean) {
+        if (p) { exoPlayer.pause(); userPaused = true } else { exoPlayer.play(); userPaused = false }
+        ts.paused = userPaused
+        ts.update(exoPlayer)
+    }
+
+    // Timeshift polling: at most every 500 ms, and only while the controls / strap are up or the user
+    // has paused (nothing reads the values otherwise; while playing behind live the offset is constant).
+    LaunchedEffect(exoPlayer, mini) {
+        if (mini) return@LaunchedEffect
+        snapshotFlow {
+            val ov = ui.overlay
+            ov == PlayerOverlay.Banner || ov == PlayerOverlay.Controls || userPaused
+        }.collectLatest { active ->
+            if (active) while (true) {
+                ts.update(exoPlayer)
+                delay(500)
+            }
+        }
+    }
+
+    /** Seek inside the live window; at (or past) the right end it means live. Keeps play/pause as is. */
+    fun commitSeek(ms: Long) {
+        if (!ts.seekable) return
+        if (ts.vod) {
+            val t = ms.coerceIn(0L, (ts.spanMs - 1_000).coerceAtLeast(0L))
+            exoPlayer.seekTo(t)
+            ts.positionMs = t
+        } else if (ms >= ts.spanMs - LiveToleranceMs) {
+            exoPlayer.seekToDefaultPosition()
+            ts.positionMs = ts.spanMs
+        } else {
+            val t = ms.coerceAtLeast(0L)
+            exoPlayer.seekTo(t)
+            ts.positionMs = t
+        }
+        ui.bannerToken++
+    }
+
+    // ── Catch-up actions ──
+    /** Leave the replay: the same channel, live (the load effect re-tunes on the change). */
+    fun exitReplay() {
+        replay = null
+        replayEnded = false
+        playbackError = null
+        retryCount.intValue = 0
+        ui.showBanner()
+    }
+
+    /** "Watch next programme": replay the show after the one that ended, else go live. */
+    fun replayNext(next: com.fenyx.jtv.data.EpgProgram?) {
+        val ch = currentChannel
+        val req = if (ch != null && next != null) com.fenyx.jtv.data.Catchup.request(ch, next) else null
+        if (req == null) { exitReplay(); return }
+        replay = req
+        replayEnded = false
+        ui.showBanner()
+    }
+
+    /** "Watch from the start": the show on now, replayed from its start up to a minute ago. */
+    fun doWatchFromStart(p: com.fenyx.jtv.data.EpgProgram) {
+        val req = currentChannel?.let { com.fenyx.jtv.data.Catchup.startOver(it, p) } ?: return
+        replay = req
+        replayEnded = false
+        playbackError = null
+        retryCount.intValue = 0
+        ui.showBanner()
+    }
+
+    // The start-over recording caught up with the broadcast: carry on live (the show is still on).
+    LaunchedEffect(replayEnded) { if (replayEnded && activeReplay?.isStartOver == true) exitReplay() }
+    // ── end catch-up actions ──
+
+    fun doGoLive() {
+        if (replay != null) { exitReplay(); return } // catch-up: "Go live"
+        if (ts.vod) {
+            // Back to schedule: where the broadcast is now.
+            val t = ts.scheduleMs
+            android.util.Log.d("TvPlayer", "Back to schedule: ${t / 1000}s")
+            if (t >= 0) { exoPlayer.seekTo(t); ts.positionMs = t }
+            setPaused(false)
+            ui.bannerToken++
+            return
+        }
+        exoPlayer.seekToDefaultPosition()
+        ts.positionMs = ts.spanMs
+        setPaused(false)
+        ts.positionMs = ts.spanMs
+        ui.bannerToken++
+    }
+
+    /** [held]: from a key repeat; the stream then loads only once the hold ends. */
+    fun doZap(delta: Int, held: Boolean = false) {
+        val n = currentChannels.size
+        if (n == 0) return
+        zapHold.repeat = held
+        replay = null; replayEnded = false // catch-up: a zap goes to the live neighbour
+        userPaused = false // a channel the user picked always starts playing
+        currentIndex = ((currentIndex + delta) % n + n) % n
+        ui.showBanner()
+    }
+
+    fun doTune(group: String?, index: Int) {
+        val list = if (group == currentGroup) currentChannels else resolveGroup(group)
+        if (list.isEmpty()) return
+        replay = null; replayEnded = false // catch-up: tuning anywhere is live
+        userPaused = false
+        zapHold.repeat = false
+        currentGroup = group
+        currentIndex = index.coerceIn(0, list.size - 1)
+        // Set now, not in SideEffect, so the remap on the group's list change keeps this target.
+        playingId = list[currentIndex].id
+        ui.overlay = PlayerOverlay.Banner
+        ui.bannerToken++
+    }
+
+    fun doRetry() {
+        playbackError = null
+        retryCount.intValue = 0
+        isBuffering = true
+        streamRefreshTrigger++
+    }
+
+    fun openBrowse() {
+        val gs = browseGroups
+        var g: String = currentGroup ?: MainViewModel.GROUP_ALL
+        var list = resolveGroup(g)
+        if (list.isEmpty()) {
+            g = gs.firstOrNull { resolveGroup(it).isNotEmpty() } ?: return
+            list = resolveGroup(g)
+        }
+        ui.browseGroup = g
+        ui.browseIndex = list.indexOfFirst { it.id == currentChannel?.id }.coerceAtLeast(0)
+        ui.browseFocusToken++
+        ui.overlay = PlayerOverlay.Browse
+    }
+
+    fun browseCategory(delta: Int) {
+        val gs = browseGroups
+        if (gs.isEmpty()) return
+        var i = gs.indexOf(ui.browseGroup ?: MainViewModel.GROUP_ALL).coerceAtLeast(0)
+        // Skip empty categories so focus always has a tile to land on.
+        repeat(gs.size) {
+            i = ((i + delta) % gs.size + gs.size) % gs.size
+            val list = resolveGroup(gs[i])
+            if (list.isNotEmpty()) {
+                ui.browseGroup = gs[i]
+                ui.browseIndex = list.indexOfFirst { it.id == currentChannel?.id }.takeIf { it >= 0 } ?: 0
+                ui.browseFocusToken++
+                return
+            }
+        }
+    }
+
+    /** Real Jio channel number → (group, index): the current category first, then all channels. */
+    fun findByNumber(num: Int): Pair<String?, Int>? {
+        // Favourites are numbered by position (1, 2, 3…), as the lists show them (#7).
+        if (currentGroup == MainViewModel.GROUP_FAVORITES && num in 1..currentChannels.size) return currentGroup to num - 1
+        val i = currentChannels.indexOfFirst { it.channelNumber == num }
+        if (i >= 0) return currentGroup to i
+        val j = resolveGroup(MainViewModel.GROUP_ALL).indexOfFirst { it.channelNumber == num }
+        return if (j >= 0) MainViewModel.GROUP_ALL to j else null
+    }
+
+    fun commitNumber() {
+        numberJob?.cancel()
+        val num = ui.number.toIntOrNull()
+        ui.number = ""
+        if (num == null) return
+        val hit = findByNumber(num)
+        if (hit != null) {
+            doTune(hit.first, hit.second)
+        } else {
+            ui.numberMiss = context.getString(R.string.player_no_channel, num.toString())
+            scope.launch { delay(2_000); if (ui.number.isEmpty()) ui.numberMiss = null }
+        }
+    }
+    val commitLatest by rememberUpdatedState({ commitNumber() })
+
+    fun restartNumberTimer() {
+        numberJob?.cancel()
+        numberJob = scope.launch { delay(1_500); commitLatest() }
+    }
+
+    /** Into the mini player where the host offers one (rotation is handed back); else leave. */
+    fun doMinimize() {
+        val m = onMinimize ?: return onBack()
+        tabletFull = false // expanding again opens the page
+        if (orientationLock != null) {
+            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            orientationLock = null
+        }
+        m()
+    }
+
+    // Entering the mini player drops every overlay and any half-typed number, so nothing is left
+    // waiting for keys the player no longer receives.
+    LaunchedEffect(mini) {
+        if (mini) {
+            numberJob?.cancel()
+            press.job?.cancel()
+            ui.number = ""
+            ui.numberMiss = null
+            ui.pointerChrome = false
+            ui.overlay = PlayerOverlay.None
+        } else {
+            ui.showBanner() // expanded: controls show briefly, as after a tune
+        }
+    }
+
+    /** Back ladder: entry/menu/panel/browse → close; banner → hide; clean video → leave the player. */
+    fun backLadder() {
+        when {
+            ui.number.isNotEmpty() -> { numberJob?.cancel(); ui.number = "" }
+            ui.overlay == PlayerOverlay.Menu || ui.overlay == PlayerOverlay.Browse -> ui.overlay = PlayerOverlay.None
+            ui.overlay == PlayerOverlay.Options ->
+                if (ui.optionsPage != OptionsPage.Main && ui.optionsEntry == OptionsPage.Main) ui.optionsPage = OptionsPage.Main
+                else ui.overlay = PlayerOverlay.None
+            ui.overlay == PlayerOverlay.Controls -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
+            ui.overlay == PlayerOverlay.Banner && !pagePlayer -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
+            // Tablet full screen: Back returns to the page first.
+            isTablet && tabletFull -> setFullScreen(false)
+            // Phone full screen: Back returns to the portrait page first.
+            isPhone && !portrait && orientationLock == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ->
+                setFullScreen(false)
+            // Phone/tablet: Back shrinks into the mini player (YouTube); TV: Back leaves.
+            else -> doMinimize()
+        }
+    }
+
+    val actions = object : PlayerActions {
+        override fun toggleFavourite() {
+            val id = currentChannel?.id ?: return
+            scope.launch { settingsManager.toggleFavoriteChannel(id) }
+        }
+        override fun pickLanguage(value: String) {
+            when {
+                value.startsWith(LANG_AUDIO) -> {
+                    // In-stream language: a preference, not an override, so ExoPlayer picks the matching
+                    // rendition for whichever video variant is playing (HD masters carry one per group).
+                    val code = value.removePrefix(LANG_AUDIO)
+                    // Stay on this feed: the language preference must not also hop to a sibling channel.
+                    if (currentVariants.isNotEmpty()) langOverride = playingChannel
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                        .clearOverridesOfType(androidx.media3.common.C.TRACK_TYPE_AUDIO)
+                        .setPreferredAudioLanguage(code)
+                        .build()
+                    language = code
+                    scope.launch { settingsManager.setDefaultLanguage(code) }
+                }
+                value.startsWith(LANG_TRACK) -> {
+                    // Unnamed track: only an override can tell them apart.
+                    val opt = value.removePrefix(LANG_TRACK).toIntOrNull()?.let { audioTracks.getOrNull(it) } ?: return
+                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                        .setOverrideForType(androidx.media3.common.TrackSelectionOverride(opt.group, listOf(opt.trackIndex)))
+                        .build()
+                }
+                value.startsWith(LANG_CHANNEL) -> {
+                    val id = value.removePrefix(LANG_CHANNEL)
+                    val v = currentVariants.firstOrNull { it.channel.id == id } ?: return
+                    langOverride = v.channel
+                    // Remember the chosen language so other channels + this one default to it.
+                    v.langCode?.let { lc ->
+                        language = lc
+                        scope.launch { settingsManager.setDefaultLanguage(lc) }
                     }
-                    if (digit != null) {
-                        if (!(numericBuffer.isEmpty() && digit == 0) && numericBuffer.length < 4) {
-                            numericBuffer += digit.toString()
-                            showNumericOverlay = true
-                            numericJob?.cancel()
-                            numericJob = scope.launch {
-                                delay(1200)
-                                commitNumericEntry()
+                }
+            }
+        }
+        override fun pickQuality(value: String) {
+            quality = value
+            scope.launch { settingsManager.setDefaultQuality(value) }
+        }
+        override fun pickAspect(mode: Int) {
+            resizeMode = mode
+            scope.launch { settingsManager.setPlayerResizeMode(mode) }
+        }
+        override fun pickVoice(level: Int) { scope.launch { settingsManager.setVoiceBoost(level) } }
+        override fun toggleAutoVolume() { scope.launch { settingsManager.setAudioNormalize(!audioNormalize) } }
+        override fun pickSleep(minutes: Int) { sleepTimerMin = minutes }
+        override fun togglePause() { setPaused(!userPaused) }
+        override fun openChannelList() {
+            if (isTv) openBrowse() else { ui.overlay = PlayerOverlay.None; ui.showBanner() }
+        }
+        override fun openSettings() {
+            ui.overlay = PlayerOverlay.None
+            onSettings()
+        }
+        override fun refreshLogin() {
+            // Server mode: force a credential re-pull from the proxy and reload the stream, so a
+            // rotated/expired shared token can be fixed without leaving the player.
+            if (!refreshingCreds) scope.launch {
+                refreshingCreds = true
+                com.fenyx.jtv.data.JioApiClient.refreshCredentials(context)
+                refreshingCreds = false
+                doRetry()
+                ui.overlay = PlayerOverlay.None
+            }
+        }
+        override fun zap(delta: Int) = doZap(delta)
+        override fun tune(group: String?, index: Int) = doTune(group, index)
+        override fun back() = backLadder()
+        override fun leave() = onBack()
+        override val canMinimize: Boolean get() = onMinimize != null
+        override fun minimize() = doMinimize()
+        override fun retry() = doRetry()
+        override fun fullScreen(on: Boolean) = setFullScreen(on)
+        override fun seekTo(ms: Long) = commitSeek(ms)
+        override fun goLive() = doGoLive()
+        override fun watchFromStart(p: com.fenyx.jtv.data.EpgProgram) = doWatchFromStart(p)
+    }
+    val actionsState = rememberUpdatedState<PlayerActions>(actions)
+
+    // ─────────── Remote buttons (INTERACTION.md §6): custom keys → player actions ───────────
+    val remoteMap by settingsManager.remoteKeyMapFlow.collectAsState(initial = com.fenyx.jtv.data.RemoteKeys.Default)
+    val remoteView = androidx.compose.ui.platform.LocalView.current
+    val remoteHook = remember(remoteView) { RemoteKeyHook(scope, remoteView) }
+    remoteHook.map = remoteMap
+    var muted by remember { mutableStateOf(false) }
+    LaunchedEffect(exoPlayer, muted) { exoPlayer.volume = if (muted) 0f else 1f }
+    // Previous channel: the (group, index) tuned before the current one.
+    var tunedNow by remember { mutableStateOf<Pair<String?, Int>?>(null) }
+    var tunedBefore by remember { mutableStateOf<Pair<String?, Int>?>(null) }
+    LaunchedEffect(currentGroup, currentIndex) {
+        val pos = currentGroup to currentIndex
+        if (tunedNow != null && tunedNow != pos) tunedBefore = tunedNow
+        tunedNow = pos
+    }
+    // Number entry without number keys: ▲/▼ change the last digit, ▶ adds one, ◀ deletes, OK goes.
+    var numberPicker by remember { mutableStateOf(false) }
+    fun flash(msg: String) {
+        if (ui.number.isNotEmpty()) return
+        ui.numberMiss = msg
+        scope.launch { delay(2_000); if (ui.numberMiss == msg) ui.numberMiss = null }
+    }
+    fun restartPickerTimer() {
+        numberJob?.cancel()
+        numberJob = scope.launch { delay(6_000); commitLatest() }
+    }
+    fun doRemote(a: com.fenyx.jtv.data.RemoteAction) {
+        val ov = ui.overlay
+        when (a) {
+            com.fenyx.jtv.data.RemoteAction.QuickMenu ->
+                ui.overlay = if (ov == PlayerOverlay.Menu) PlayerOverlay.None else PlayerOverlay.Menu
+            com.fenyx.jtv.data.RemoteAction.Options -> ui.openOptions()
+            com.fenyx.jtv.data.RemoteAction.Favourite -> {
+                val id = currentChannel?.id ?: return
+                flash(context.getString(if (id in favoriteChannels) R.string.player_fav_removed else R.string.player_fav_added))
+                actions.toggleFavourite()
+            }
+            // The full guide when it is on; otherwise the channel list (what the Guide key did before).
+            com.fenyx.jtv.data.RemoteAction.Guide ->
+                if (epgModeState.value) onRemoteScreen(a) else if (ov != PlayerOverlay.Browse) openBrowse()
+            com.fenyx.jtv.data.RemoteAction.ChannelList -> if (ov != PlayerOverlay.Browse) openBrowse()
+            com.fenyx.jtv.data.RemoteAction.ChannelUp -> doZap(1)
+            com.fenyx.jtv.data.RemoteAction.ChannelDown -> doZap(-1)
+            com.fenyx.jtv.data.RemoteAction.PreviousChannel -> {
+                val p = tunedBefore
+                if (p == null) flash(context.getString(R.string.player_no_previous)) else doTune(p.first, p.second)
+            }
+            com.fenyx.jtv.data.RemoteAction.PlayPause -> {
+                setPaused(!userPaused)
+                if (isTv) ui.openControls() else if (userPaused) ui.showBanner()
+            }
+            com.fenyx.jtv.data.RemoteAction.Language -> ui.openOptions(OptionsPage.Language)
+            com.fenyx.jtv.data.RemoteAction.Quality -> ui.openOptions(OptionsPage.Quality)
+            com.fenyx.jtv.data.RemoteAction.Aspect -> ui.openOptions(OptionsPage.Aspect)
+            com.fenyx.jtv.data.RemoteAction.Sleep -> ui.openOptions(OptionsPage.Sleep)
+            com.fenyx.jtv.data.RemoteAction.VoiceBoost -> {
+                val next = (voiceBoost + 1) % VOICE_OPTIONS.size
+                actions.pickVoice(next)
+                flash(context.getString(R.string.player_voice_boost_is, context.getString(voiceLabelRes(next))))
+            }
+            com.fenyx.jtv.data.RemoteAction.Mute -> { muted = !muted; flash(context.getString(if (muted) R.string.player_sound_off else R.string.player_sound_on)) }
+            // The system volume, with its usual on-screen slider (for controllers without volume keys).
+            com.fenyx.jtv.data.RemoteAction.VolumeUp, com.fenyx.jtv.data.RemoteAction.VolumeDown ->
+                (context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager).adjustStreamVolume(
+                    android.media.AudioManager.STREAM_MUSIC,
+                    if (a == com.fenyx.jtv.data.RemoteAction.VolumeUp) android.media.AudioManager.ADJUST_RAISE else android.media.AudioManager.ADJUST_LOWER,
+                    android.media.AudioManager.FLAG_SHOW_UI,
+                )
+            com.fenyx.jtv.data.RemoteAction.Search -> onRemoteScreen(a)
+            com.fenyx.jtv.data.RemoteAction.GoLive -> if (ts.seekable) { doGoLive(); flash(context.getString(R.string.common_live)) }
+            com.fenyx.jtv.data.RemoteAction.NumberEntry -> {
+                if (ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu || ov == PlayerOverlay.Browse) ui.overlay = PlayerOverlay.None
+                ui.numberMiss = null
+                ui.number = (currentChannel?.channelNumber?.takeIf { it > 0 } ?: 1).toString().take(4)
+                numberPicker = true
+                restartPickerTimer()
+            }
+        }
+    }
+    // ─────────── end remote buttons ───────────
+
+    // ─────────── Picture-in-picture (phone/tablet, ui/player/Pip.kt) ───────────
+    // In PiP only the video is drawn: no overlays, controls, mini-bar chrome or navigation.
+    val inPip = !isTv && Pip.inPip.value
+    PipBridge(
+        activity = activity,
+        enabled = !isTv,
+        playing = !userPaused && playbackError == null,
+        onPrevious = { doZap(-1) },
+        onToggle = { setPaused(!userPaused) },
+        onNext = { doZap(1) },
+        onClosed = onBack,
+    )
+    // ─────────── end picture-in-picture ───────────
+
+    val originalSound = stringResource(R.string.player_original_sound)
+    val soundNFormat = stringResource(R.string.player_sound_n)
+    val appLanguage = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val langChoices = remember(audioTracks, currentVariants, playingChannel, appLanguage) {
+        val pid = playingChannel?.id
+        buildLanguageChoices(
+            tracks = audioTracks.mapIndexed { i, t -> StreamAudio(i, t.language, t.name, t.selected) },
+            variants = currentVariants,
+            playingId = pid,
+            playingLang = currentVariants.firstOrNull { it.channel.id == pid }?.langCode,
+            fallbackLabel = playingChannel?.language?.takeIf { it.isNotBlank() } ?: originalSound,
+            originalSound = originalSound,
+            soundN = { n -> String.format(appLanguage, soundNFormat, n) },
+            nameOf = { code -> languageName(code, appLanguage) },
+        )
+    }
+    val model = OptionsModel(
+        favourite = currentChannel?.id?.let { it in favoriteChannels } ?: false,
+        langChoices = langChoices.options,
+        langCurrent = langChoices.current,
+        langLabel = langChoices.label,
+        quality = quality,
+        aspect = resizeMode,
+        voice = voiceBoost,
+        autoVolume = audioNormalize,
+        sleep = sleepTimerMin,
+        paused = userPaused,
+        showRefresh = playerSetupMode == "server" || playerSetupMode == "jtv",
+        refreshing = refreshingCreds,
+    )
+
+    val overlayData = OverlayData(
+        playing = currentChannel,
+        currentGroup = currentGroup,
+        browseGroups = browseGroups,
+        resolveGroup = ::resolveGroup,
+        findByNumber = { n ->
+            findByNumber(n)?.let { (g, i) -> if (g == currentGroup) currentChannels.getOrNull(i) else resolveGroup(g).getOrNull(i) }
+        },
+        epg = epg,
+        model = model,
+        actions = actions,
+        timeshift = ts,
+        buffering = isBuffering && playbackError == null,
+        browserPanel = browserPanel,
+    )
+
+    // Keep focus somewhere sensible: on the error's first button (TV), else on the player itself, so
+    // keys keep arriving after a panel, rail or pointer bar goes away.
+    // Not while mini: the screen behind owns focus then (restarted on expand, which re-takes focus).
+    LaunchedEffect(mini) {
+        if (mini) return@LaunchedEffect
+        // (The catch-up end panel takes focus like the error panel: it uses the same first-button focus.)
+        snapshotFlow { Triple(ui.overlay, ui.pointerChrome, (playbackError != null && !isBuffering) || (replayEnded && replay != null)) }
+            .collect { (ov, _, err) ->
+                if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) {
+                    withFrameNanos { }
+                    runCatching { if (err && isTv) errorFocus.requestFocus() else focusRequester.requestFocus() }
+                }
+            }
+    }
+
+    // System back (gesture / predictive back). Key-event Back is handled in the key handler below; skip
+    // the duplicate if both arrive for one press.
+    // Mini: no handler, so Back works normally for the screen behind. Composed conditionally (not
+    // `enabled = !mini`) so expanding re-registers it ON TOP of any handler a screen added meanwhile.
+    if (!mini) {
+        androidx.activity.compose.BackHandler {
+            if (android.os.SystemClock.uptimeMillis() - press.lastKeyBack > 1_000) backLadder()
+        }
+    }
+
+    // Mini drag offset (swipe to close) and the video's box in each mode.
+    val miniDrag = remember { MiniDrag() }
+    LaunchedEffect(mini) { miniDrag.reset() }
+    val card = Jtv.form == FormFactor.Tablet || Jtv.isPhoneLandscape
+    val videoMode = when {
+        inPip -> VideoBox.Fill
+        mini && !card -> VideoBox.MiniBar
+        mini -> VideoBox.TopWide
+        tabletTwoColumn -> VideoBox.TwoColumn
+        pagePlayer -> VideoBox.TopWide
+        else -> VideoBox.Fill
+    }
+    val rootFrame = when {
+        inPip -> Modifier.fillMaxSize().background(Color.Black)
+        !mini -> Modifier.fillMaxSize().background(
+            when {
+                tabletPage -> appColors.bg // the tablet page follows the app theme
+                phonePortrait -> JtvDark.bg
+                else -> Color.Black
+            },
+        )
+        card -> Modifier.width(MiniCardWidth)
+            .offset { androidx.compose.ui.unit.IntOffset(miniDrag.x.toInt(), miniDrag.y.toInt()) }
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .background(appColors.s1)
+            .border(1.dp, appColors.line, androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+        else -> Modifier.fillMaxWidth().height(MiniBarHeight)
+            .offset { androidx.compose.ui.unit.IntOffset(miniDrag.x.toInt(), miniDrag.y.toInt()) }
+            .background(appColors.s1)
+    }
+
+
+    JtvDarkOnly {
+      // Catch-up: overlays show "Replay · …" for the replayed show (see PlayerReplay.kt).
+      val favNumbers = remember(currentGroup, currentChannels) {
+          if (currentGroup == MainViewModel.GROUP_FAVORITES) positions(currentChannels) else emptyMap()
+      }
+      CompositionLocalProvider(LocalReplay provides activeReplay, LocalFavNumbers provides favNumbers) {
+        Box(
+            modifier = (if (inPip) Modifier else modifier)
+                .then(rootFrame)
+                // The phone / tablet page sits below the status bar (and above the navigation bar).
+                .then(if (!mini && pagePlayer && !inPip) Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing) else Modifier)
+                .focusRequester(focusRequester)
+                .focusable(enabled = !mini)
+                .then(if (mini) Modifier else Modifier.pointerInput(ui) {
+                    // Mouse / air-mouse: move shows the banner + top bar, wheel zaps, right-click opens the
+                    // quick menu. Touch: any touch while controls show restarts their hide timer.
+                    awaitPointerEventScope {
+                        var lastWheel = 0L
+                        while (true) {
+                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                            val ch = e.changes.firstOrNull() ?: continue
+                            val mouse = ch.type == PointerType.Mouse
+                            when (e.type) {
+                                PointerEventType.Move -> if (mouse) {
+                                    if (!ui.pointerChrome) ui.pointerChrome = true
+                                    val ov = ui.overlay
+                                    if (isTv && (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner)) ui.openControls()
+                                    else if (ov == PlayerOverlay.None) ui.showBanner() else ui.bumpThrottled()
+                                } else if (ui.overlay == PlayerOverlay.Banner) ui.bumpThrottled()
+                                PointerEventType.Scroll -> {
+                                    val ov = ui.overlay
+                                    if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) {
+                                        val t = android.os.SystemClock.uptimeMillis()
+                                        val dy = ch.scrollDelta.y
+                                        if (dy != 0f && t - lastWheel > 250) {
+                                            lastWheel = t
+                                            actionsState.value.zap(if (dy > 0) 1 else -1)
+                                        }
+                                        e.changes.forEach { it.consume() }
+                                    }
+                                }
+                                PointerEventType.Press -> if (mouse && e.buttons.isSecondaryPressed) {
+                                    ui.overlay = PlayerOverlay.Menu
+                                    e.changes.forEach { it.consume() }
+                                } else if (!mouse && ui.overlay == PlayerOverlay.Banner) ui.bumpThrottled()
+                                else -> {}
                             }
+                        }
+                    }
+                })
+                .onPreviewKeyEvent { ev ->
+                    // Mini: the bar's own buttons may hold focus; never zap / open menus from there.
+                    if (mini) return@onPreviewKeyEvent false
+                    // Remote buttons: mapped keys and hold slots first (null = not mapped, carry on).
+                    if (ui.number.isEmpty()) numberPicker = false
+                    remoteHook.handle(
+                        ev.nativeKeyEvent,
+                        lockedHoldAllowed = (ui.overlay == PlayerOverlay.None || ui.overlay == PlayerOverlay.Banner) &&
+                            ui.number.isEmpty() && !userPaused && ts.scrubMs == null,
+                        perform = ::doRemote,
+                    )?.let { return@onPreviewKeyEvent it }
+                    val k = ev.key
+                    val down = ev.type == KeyEventType.KeyDown
+                    val isCenter = k == Key.Enter || k == Key.DirectionCenter || k == Key.NumPadEnter
+                    val ov = ui.overlay
+                    val clean = ov == PlayerOverlay.None || ov == PlayerOverlay.Banner
+                    val errShown = (playbackError != null && !isBuffering) || replayEndShown // catch-up end panel keeps OK / Left / Right
+                    val entering = ui.number.isNotEmpty()
+                    val controlsUp = ov == PlayerOverlay.Controls
+                    // Any key inside the TV controls layer keeps it up.
+                    if (controlsUp && down) ui.bannerToken++
+
+                    // TV timeshift: Left/Right seek (10 s, held: 30 s then 60 s; the seek happens on release)
+                    // on the seek bar, or anywhere while paused (except Prev/Next and the top bar).
+                    if (isTv && !entering && !errShown && (k == Key.DirectionLeft || k == Key.DirectionRight)) {
+                        val onBar = controlsUp && ui.focusedControl == ControlFocus.Bar
+                        val scrubHere = ts.scrubMs != null || onBar || when {
+                            controlsUp -> userPaused && ui.focusedControl == ControlFocus.Play
+                            clean -> userPaused
+                            else -> false
+                        }
+                        if (scrubHere && ts.seekable) {
+                            if (clean && down) ui.openControls(ControlFocus.Bar)
+                            if (ts.scrubKey(ev, yieldAtLive = onBar, commit = ::commitSeek)) return@onPreviewKeyEvent true
+                        }
+                    }
+
+                    // The rest of a hold-OK that already opened the menu (repeats + key-up) is swallowed so
+                    // it doesn't also press the menu's first item.
+                    if (isCenter && press.swallow) {
+                        if (!down) press.swallow = false
+                        return@onPreviewKeyEvent true
+                    }
+                    // Number entry: OK goes now.
+                    if (isCenter && entering) {
+                        if (down) commitNumber()
+                        return@onPreviewKeyEvent true
+                    }
+                    // Clean / banner: short OK toggles the banner (or resumes), hold OK opens the quick menu.
+                    if (isCenter && clean && !errShown) {
+                        if (down) {
+                            if (ev.nativeKeyEvent.repeatCount == 0) {
+                                press.downSeen = true
+                                press.longFired = false
+                                press.job?.cancel()
+                                // Hold OK: the remote-buttons hold slot (Standard: the quick menu).
+                                val holdOk = remoteHook.holdOkAction()
+                                press.job = if (holdOk == null) null else scope.launch {
+                                    delay(450) // long-press threshold
+                                    press.longFired = true
+                                    press.swallow = true
+                                    doRemote(holdOk)
+                                }
+                            }
+                        } else {
+                            press.job?.cancel()
+                            if (press.downSeen && !press.longFired) {
+                                when {
+                                    isTv -> {
+                                        if (userPaused) setPaused(false)
+                                        ui.openControls(ControlFocus.Play)
+                                    }
+                                    userPaused -> setPaused(false)
+                                    ui.overlay == PlayerOverlay.Banner -> { ui.overlay = PlayerOverlay.None; ui.pointerChrome = false }
+                                    else -> ui.showBanner()
+                                }
+                            }
+                            press.longFired = false
+                            press.downSeen = false
                         }
                         return@onPreviewKeyEvent true
                     }
 
-                    if (keyEvent.key == Key.Back || keyEvent.key == Key.Escape) {
-                        if (showAudioSelector) { showAudioSelector = false; return@onPreviewKeyEvent true }
-                        if (showLangSelector) { showLangSelector = false; return@onPreviewKeyEvent true }
-                        if (showQualitySelector) { showQualitySelector = false; return@onPreviewKeyEvent true }
-                        if (showSettingsOverlay) { showSettingsOverlay = false; return@onPreviewKeyEvent true }
-                        if (showCategoryList) { showCategoryList = false; return@onPreviewKeyEvent true }
-                        if (showChannelList) { showChannelList = false; return@onPreviewKeyEvent true }
-                        if (showNumericOverlay) { showNumericOverlay = false; numericBuffer = ""; return@onPreviewKeyEvent true }
-                        return@onPreviewKeyEvent false
+                    if (!down) return@onPreviewKeyEvent false
+
+                    val digit = when (k) {
+                        Key.Zero, Key.NumPad0 -> 0; Key.One, Key.NumPad1 -> 1; Key.Two, Key.NumPad2 -> 2
+                        Key.Three, Key.NumPad3 -> 3; Key.Four, Key.NumPad4 -> 4; Key.Five, Key.NumPad5 -> 5
+                        Key.Six, Key.NumPad6 -> 6; Key.Seven, Key.NumPad7 -> 7; Key.Eight, Key.NumPad8 -> 8
+                        Key.Nine, Key.NumPad9 -> 9
+                        else -> null
+                    }
+                    if (digit != null) {
+                        if (ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu) return@onPreviewKeyEvent false
+                        if (!(ui.number.isEmpty() && digit == 0) && ui.number.length < 4) {
+                            ui.number += digit.toString()
+                            ui.numberMiss = null
+                            restartNumberTimer()
+                        }
+                        return@onPreviewKeyEvent true
                     }
 
-                    when (keyEvent.key) {
-                        Key.ChannelUp -> {
-                            if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                val step = if (reverseChPlusMinus) -1 else 1
-                                currentIndex = (currentIndex + step + currentChannels.size) % currentChannels.size
-                                showOverlay = true
+                    if (k == Key.Back || k == Key.Escape) {
+                        press.lastKeyBack = android.os.SystemClock.uptimeMillis()
+                        // Held Back: one step only (repeats would run the whole ladder and leave).
+                        if (ev.nativeKeyEvent.repeatCount == 0) backLadder()
+                        return@onPreviewKeyEvent true
+                    }
+
+                    // Number entry started from a remote button (no number keys): arrows pick the digits.
+                    if (entering && numberPicker) {
+                        val last = ui.number.last().digitToInt()
+                        when (k) {
+                            Key.DirectionUp, Key.DirectionDown -> {
+                                val d = (last + if (k == Key.DirectionUp) 1 else 9) % 10
+                                ui.number = ui.number.dropLast(1) + d
+                                restartPickerTimer()
+                                return@onPreviewKeyEvent true
                             }
-                            true
-                        }
-                        Key.ChannelDown -> {
-                            if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                val step = if (reverseChPlusMinus) 1 else -1
-                                currentIndex = (currentIndex + step + currentChannels.size) % currentChannels.size
-                                showOverlay = true
+                            Key.DirectionRight -> {
+                                if (ui.number.length < 4) ui.number += "0"
+                                restartPickerTimer()
+                                return@onPreviewKeyEvent true
                             }
-                            true
-                        }
-                        Key.DirectionUp -> {
-                            if (showSettingsOverlay) {
-                                false
-                            } else if (showCategoryList) {
-                                if (groups.isNotEmpty()) {
-                                    categorySelectedIndex = (categorySelectedIndex - 1 + groups.size) % groups.size
-                                }
-                                true
-                            } else if (showChannelList) {
-                                if (currentChannels.isNotEmpty()) {
-                                    listSelectedIndex = (listSelectedIndex - 1 + currentChannels.size) % currentChannels.size
-                                }
-                                true
-                            } else {
-                                if (currentChannels.isNotEmpty()) {
-                                    val step = if (upIsNextChannel) 1 else -1
-                                    currentIndex = (currentIndex + step + currentChannels.size) % currentChannels.size
-                                    showOverlay = true
-                                }
-                                true
+                            Key.DirectionLeft -> {
+                                ui.number = ui.number.dropLast(1)
+                                if (ui.number.isEmpty()) numberJob?.cancel() else restartPickerTimer()
+                                return@onPreviewKeyEvent true
                             }
+                            else -> {}
                         }
-                        Key.DirectionDown -> {
-                            if (showSettingsOverlay) {
-                                false
-                            } else if (showCategoryList) {
-                                if (groups.isNotEmpty()) {
-                                    categorySelectedIndex = (categorySelectedIndex + 1) % groups.size
-                                }
-                                true
-                            } else if (showChannelList) {
-                                if (currentChannels.isNotEmpty()) {
-                                    listSelectedIndex = (listSelectedIndex + 1) % currentChannels.size
-                                }
-                                true
-                            } else {
-                                if (currentChannels.isNotEmpty()) {
-                                    val step = if (upIsNextChannel) -1 else 1
-                                    currentIndex = (currentIndex + step + currentChannels.size) % currentChannels.size
-                                    showOverlay = true
-                                }
-                                true
+                    }
+                    if (entering) {
+                        when (k) {
+                            Key.DirectionLeft, Key.Backspace -> {
+                                ui.number = ui.number.dropLast(1)
+                                if (ui.number.isEmpty()) numberJob?.cancel() else restartNumberTimer()
+                                return@onPreviewKeyEvent true
                             }
+                            Key.DirectionUp, Key.DirectionDown, Key.DirectionRight -> return@onPreviewKeyEvent true
+                            else -> {}
                         }
-                        Key.DirectionLeft -> {
-                            if (showSettingsOverlay) {
-                                showSettingsOverlay = false
-                                true
-                            } else if (showCategoryList) {
-                                false
-                            } else if (showChannelList) {
-                                showCategoryList = true
-                                true
-                            } else {
-                                showChannelList = true
-                                showOverlay = true
-                                true
-                            }
-                        }
-                        Key.DirectionRight -> {
-                            if (showCategoryList) { showCategoryList = false; true }
-                            else if (showChannelList) { showChannelList = false; true }
-                            else if (!showSettingsOverlay) { showSettingsOverlay = true; true }
-                            else false
-                        }
-                        Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
-                            if (showCategoryList) {
-                                val group = groups.getOrNull(categorySelectedIndex)
-                                if (group != null) {
-                                    currentGroup = group // currentChannels derives from this
-                                    currentIndex = 0
-                                    showCategoryList = false
-                                }
-                                true
-                            } else if (showChannelList) {
-                                currentIndex = listSelectedIndex
-                                showChannelList = false
-                                showCategoryList = false
-                                true
-                            } else if (playbackError != null) {
-                                // Manual retry after auto-recovery was exhausted.
-                                playbackError = null
-                                retryCount.intValue = 0
-                                isBuffering = true
-                                streamRefreshTrigger++
-                                true
-                            } else {
-                                showOverlay = !showOverlay
-                                true
-                            }
-                        }
-                        Key.Back, Key.Escape -> {
-                            if (showCategoryList) { showCategoryList = false; true }
-                            else if (showChannelList) { showChannelList = false; true }
-                            else if (showOverlay) { showOverlay = false; true }
-                            else { onBack(); true }
-                        }
-                        // ── Standard TV media remote keys ──
-                        // Play/Pause toggle from the dedicated remote key.
+                    }
+
+                    if (!controlsUp && (k == Key.DirectionUp || k == Key.DirectionDown || k == Key.DirectionLeft || k == Key.DirectionRight)) {
+                        ui.pointerChrome = false
+                    }
+                    val panel = ov == PlayerOverlay.Options || ov == PlayerOverlay.Menu
+                    val held = ev.nativeKeyEvent.repeatCount > 0
+
+                    when (k) {
+                        Key.ChannelUp, Key.MediaNext, Key.PageUp -> { if (!panel) doZap(1, held); true }
+                        Key.ChannelDown, Key.MediaPrevious, Key.PageDown -> { if (!panel) doZap(-1, held); true }
                         Key.MediaPlayPause -> {
-                            if (userPaused) { exoPlayer.play(); userPaused = false }
-                            else { exoPlayer.pause(); userPaused = true; showOverlay = true }
+                            setPaused(!userPaused)
+                            if (isTv) ui.openControls() else if (userPaused) ui.showBanner()
                             true
                         }
-                        Key.MediaPlay -> {
-                            if (userPaused) { exoPlayer.play(); userPaused = false }
-                            true
-                        }
-                        Key.MediaPause -> {
-                            exoPlayer.pause(); userPaused = true; showOverlay = true
-                            true
-                        }
-                        // MEDIA_NEXT/PREVIOUS zap channels like CH+/-.
-                        Key.MediaNext -> {
-                            if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                currentIndex = (currentIndex + 1) % currentChannels.size
-                                showOverlay = true
+                        Key.MediaPlay -> { setPaused(false); true }
+                        Key.MediaPause -> { setPaused(true); if (isTv) ui.openControls() else ui.showBanner(); true }
+                        Key.MediaFastForward, Key.MediaRewind -> {
+                            if (ts.seekable && !panel) {
+                                val base = if (ts.atLive && !ts.vod) ts.spanMs else ts.positionMs
+                                commitSeek(base + if (k == Key.MediaFastForward) 10_000 else -10_000)
+                                if (isTv) ui.openControls(ControlFocus.Bar) else ui.showBanner()
                             }
                             true
                         }
-                        Key.MediaPrevious -> {
-                            if (currentChannels.isNotEmpty() && !showSettingsOverlay) {
-                                currentIndex = (currentIndex - 1 + currentChannels.size) % currentChannels.size
-                                showOverlay = true
-                            }
-                            true
-                        }
-                        // GUIDE opens the channel list; INFO toggles the now-playing banner.
-                        Key.Guide -> {
-                            if (!showSettingsOverlay) { showChannelList = true; showOverlay = true }
-                            true
-                        }
+                        Key.Menu -> { ui.overlay = if (ov == PlayerOverlay.Menu) PlayerOverlay.None else PlayerOverlay.Menu; true }
+                        Key.Guide -> { if (ov != PlayerOverlay.Browse) openBrowse(); true }
                         Key.Info -> {
-                            if (!showChannelList && !showCategoryList && !showSettingsOverlay) {
-                                showOverlay = !showOverlay
-                            }
+                            if (ov == PlayerOverlay.Banner) ui.overlay = PlayerOverlay.None
+                            else if (ov == PlayerOverlay.None) ui.showBanner()
                             true
+                        }
+                        Key.DirectionUp -> when (ov) {
+                            // Strip: Up/Down switch category. Panel: its own columns take the arrows.
+                            PlayerOverlay.Browse -> if (browserPanel) false else { browseCategory(-1); true }
+                            PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
+                            else -> { doZap(if (upIsNext) 1 else -1, held); true }
+                        }
+                        Key.DirectionDown -> when (ov) {
+                            PlayerOverlay.Browse -> if (browserPanel) false else { browseCategory(1); true }
+                            PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
+                            else -> { doZap(if (upIsNext) -1 else 1, held); true }
+                        }
+                        Key.DirectionLeft -> when (ov) {
+                            PlayerOverlay.Browse, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
+                            PlayerOverlay.Options -> { backLadder(); true }
+                            else -> if (errShown) false else { openBrowse(); true }
+                        }
+                        Key.DirectionRight -> when (ov) {
+                            PlayerOverlay.Browse, PlayerOverlay.Options, PlayerOverlay.Menu, PlayerOverlay.Controls -> false
+                            else -> if (errShown) false else { ui.openOptions(); true }
                         }
                         else -> false
                     }
-                } else false
+                }
+        ) {
+            // The ONE video surface: always the first child, in every mode (full, portrait page, mini),
+            // so it is never recreated; only its box changes (layout phase). Everything else draws over it.
+            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode).pipSourceRect(activity, enabled = !isTv && !inPip), currentChannel)
+
+            val name = currentChannel?.name
+            val buffering = isBuffering && playbackError == null
+            val paused = userPaused && !isBuffering
+            val status: @Composable BoxScope.() -> Unit = {
+                // One loading sign: with the controls up, the ring around Play/Pause already shows it.
+                // TV shows them as the Controls overlay; touch as the Banner (or while paused).
+                val controlsUp = if (isTv) ui.overlay == PlayerOverlay.Controls
+                    else ui.overlay == PlayerOverlay.Banner || overlayData.model.paused
+                if (buffering && !controlsUp) BufferingIndicator(name, Modifier.align(Alignment.Center))
+                if (paused && isTv) TvPausedBadge(ui, Modifier.align(Alignment.Center))
             }
+
+            if (inPip) {
+                // Picture-in-picture: the video only.
+            } else if (mini) {
+                MiniPlayerContent(
+                    appColors = appColors,
+                    card = card,
+                    channel = currentChannel,
+                    epg = epg,
+                    paused = userPaused,
+                    buffering = buffering,
+                    error = playbackError?.takeIf { !isBuffering }?.let { stringResource(it.message) },
+                    drag = miniDrag,
+                    onExpand = onExpand,
+                    onTogglePause = { setPaused(!userPaused) },
+                    onClose = onBack,
+                )
+            } else if (phonePortrait) {
+                // Draws its own buffering ring and keeps its Play control up while paused.
+                PhonePortraitPlayer(ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering)
+            } else if (tabletPage) {
+                // The app theme (light or dark); the controls on the picture stay dark.
+                CompositionLocalProvider(LocalJtvColors provides appColors) {
+                    if (tabletTwoColumn) {
+                        TabletLandscapePlayer(ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering)
+                    } else {
+                        PhonePortraitPlayer(
+                            ui = ui, d = overlayData, actionsState = actionsState, buffering = buffering,
+                            maxContentWidth = TabletPortraitContentWidth,
+                        )
+                    }
+                }
+            } else {
+                if (!isTv) Box(Modifier.fillMaxSize().touchVideoGestures(ui, actionsState, tapToggles = true))
+                Box(Modifier.fillMaxSize()) { status() }
+                if (isTv) TvOverlays(ui, overlayData)
+                else TouchOverlays(ui, overlayData, compact = isPhone, exitFullScreen = isPhone || isTablet)
+            }
+
+            val err = playbackError
+            if (err != null && !isBuffering && !mini && !inPip) {
+                // Page players: over the picture, not the middle of the page (it used to cover the
+                // channel list on phones). Full screen: small, in the middle, clear of the channel card.
+                val errBox = if (pagePlayer) Modifier.videoBox(videoMode) else Modifier.matchParentSize()
+                Box(errBox, contentAlignment = Alignment.Center) { ErrorPanel(
+                    error = err,
+                    channel = currentChannel,
+                    firstFocus = errorFocus,
+                    touch = !isTv,
+                    onAction = { a ->
+                        when (a) {
+                            ErrorAction.Retry -> doRetry()
+                            ErrorAction.NextChannel -> doZap(1)
+                            ErrorAction.Settings -> onSettings()
+                            ErrorAction.GoLive -> exitReplay()
+                        }
+                    },
+                    modifier = Modifier.padding(8.dp),
+                ) }
+            }
+
+            // ── Catch-up: the replayed programme ended ──
+            val endedReplay = activeReplay
+            if (replayEndShown && endedReplay != null) {
+                val errBox = if (tabletPage) Modifier.videoBox(videoMode) else Modifier.matchParentSize()
+                val next = remember(endedReplay) {
+                    val ch = currentChannel
+                    val progs = vm?.epgData?.value?.get(endedReplay.channelId).orEmpty()
+                    com.fenyx.jtv.data.Catchup.nextProgramme(progs, endedReplay)
+                        ?.takeIf { ch != null && com.fenyx.jtv.data.Catchup.isReplayable(ch, it, System.currentTimeMillis()) }
+                }
+                Box(errBox, contentAlignment = Alignment.Center) {
+                    ReplayEndPanel(
+                        finished = endedReplay.title,
+                        next = next,
+                        firstFocus = errorFocus,
+                        touch = !isTv,
+                        onNext = { replayNext(next) },
+                        onLive = { exitReplay() },
+                        modifier = Modifier.padding(24.dp),
+                    )
+                }
+            }
+        }
+      }
+    }
+
+    LaunchedEffect(mini) {
+        if (!mini) runCatching { focusRequester.requestFocus() }
+    }
+}
+
+/** The video. Its own composable so overlay changes never recompose (or re-layout) the PlayerView. */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier, channel: Channel? = null) {
+    // Debuggable builds only: a "novideo" file in the app's external files dir replaces the picture with
+    // a neutral placeholder, so UI screenshots for the README never contain channel video.
+    val ctx0 = LocalContext.current
+    val noVideo = remember {
+        (ctx0.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 &&
+            java.io.File(ctx0.getExternalFilesDir(null), "novideo").exists()
+    }
+
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+
+    DisposableEffect(player, resizeMode, channel) {
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                playerViewRef?.let { view ->
+                    view.post { applyAspectRatio(view, player, resizeMode, channel) }
+                }
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+        }
+    }
+
+    androidx.compose.foundation.layout.Box(
+        modifier = modifier.clipToBounds(),
+        contentAlignment = Alignment.Center
     ) {
         AndroidView(
             factory = { ctx ->
-                androidx.media3.ui.PlayerView(ctx).apply {
-                    player = exoPlayer
+                PlayerView(ctx).apply {
+                    this.player = if (noVideo) null else player
                     useController = false
                     keepScreenOn = true
+                    clipChildren = false
+                    clipToPadding = false
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                    playerViewRef = this
+                    post { applyAspectRatio(this, player, resizeMode, channel) }
                 }
             },
             update = { view ->
-                view.resizeMode = resizeMode
-                // Reattach if the player instance was rebuilt (e.g. hardware-decoder toggle).
-                if (view.player !== exoPlayer) view.player = exoPlayer
+                playerViewRef = view
+                if (!noVideo && view.player !== player) {
+                    view.player = player
+                }
+                applyAspectRatio(view, player, resizeMode, channel)
+            },
+            onRelease = { view ->
+                if (playerViewRef === view) playerViewRef = null
+                view.player = null
             },
             modifier = Modifier.fillMaxSize()
         )
-
-        // ─── Buffering Indicator ───
-        if (isBuffering) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = TvPrimary, strokeWidth = 3.dp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    val ch = currentChannel
-                    Text(
-                        ch?.name ?: "Loading...",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+        if (noVideo) {
+            // Screenshot stand-in for channel video: a frame from "Big Buck Bunny" (CC BY 3.0, Blender
+            // Foundation) placed in the app's files dir as novideo.jpg; plain dark if it's missing.
+            val frame: androidx.compose.ui.graphics.ImageBitmap? = remember {
+                runCatching {
+                    android.graphics.BitmapFactory.decodeFile(java.io.File(ctx0.getExternalFilesDir(null), "novideo.jpg").path)
+                        ?.asImageBitmap()
+                }.getOrNull()
             }
+            if (frame != null) androidx.compose.foundation.Image(
+                frame, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clipToBounds(),
+            ) else androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().drawBehind { drawRect(androidx.compose.ui.graphics.Color(0xFF17171A)) })
         }
+    }
+}
 
-        // ─── Pause Indicator ───
-        if (userPaused) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.55f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 12.dp, height = 40.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(Color.White)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(width = 12.dp, height = 40.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(Color.White)
-                        )
-                    }
-                }
-            }
+@androidx.annotation.OptIn(UnstableApi::class)
+private fun applyAspectRatio(view: PlayerView, player: ExoPlayer, resizeMode: Int, channel: Channel? = null) {
+    val contentFrame = view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame) ?: return
+    val parentWidth = view.width.takeIf { it > 0 } ?: view.resources.displayMetrics.widthPixels
+    val parentHeight = view.height.takeIf { it > 0 } ?: view.resources.displayMetrics.heightPixels
+
+    val videoSize = player.videoSize
+    val rawW = videoSize.width
+    val rawH = videoSize.height
+    val streamAspect = correctedStreamAspect(rawW, rawH, videoSize.pixelWidthHeightRatio, channel?.aspectRatio)
+
+    val is43Stream = streamAspect < 1.5f
+    val isSdStream = (rawH in 1..576) || (rawW in 1..1024 && rawH in 1..600)
+    // FILL already stretches the decoded frame to the view. The extra 4:3 -> 16:9 widening is only for a
+    // wide frame carrying 4:3 picture with burned-in side bars (e.g. Zee Talkies 1024x576); on a frame
+    // that is itself 4:3 it pushed ~12.5% of the picture off each side.
+    val wideFrame = isWideFrame(rawW, rawH, videoSize.pixelWidthHeightRatio)
+    val fillWiden = (16.0f / 9.0f) / (4.0f / 3.0f) // ~1.3333334f
+
+    val pX = if (contentFrame.width > 0) contentFrame.width / 2f else parentWidth / 2f
+    val pY = if (contentFrame.height > 0) contentFrame.height / 2f else parentHeight / 2f
+    contentFrame.pivotX = pX
+    contentFrame.pivotY = pY
+    contentFrame.translationX = 0f
+    contentFrame.translationY = 0f
+
+    contentFrame.layoutParams = FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        Gravity.CENTER
+    )
+
+    when (resizeMode) {
+        0 -> { // Fit (Original view / Natural presentation)
+            contentFrame.setAspectRatio(streamAspect)
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            contentFrame.scaleX = 1.0f
+            contentFrame.scaleY = 1.0f
         }
-
-        // ─── Playback Error Overlay ───
-        if (playbackError != null && !isBuffering) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.widthIn(max = 720.dp).padding(horizontal = 48.dp)
-                ) {
-                    Text("⚠", fontSize = 40.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        playbackError ?: "",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        currentChannel?.name ?: "",
-                        color = Color.White.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        // ─── Numeric Channel Entry Overlay ───
-        if (showNumericOverlay && numericBuffer.isNotEmpty()) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = numericBuffer,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 28.sp
-                )
-            }
-        }
-
-        // ─── Channel Info Overlay (Top) ───
-        AnimatedVisibility(
-            visible = showOverlay,
-            enter = fadeIn() + slideInVertically { -it },
-            exit = fadeOut() + slideOutVertically { -it },
-            modifier = Modifier.align(Alignment.TopCenter)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
-                        )
-                    )
-                    // Overscan-safe: keep the channel info off the panel edge (gradient still bleeds).
-                    .padding(horizontal = TvDimens.OverscanHorizontal, vertical = TvDimens.OverscanVertical)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val ch = currentChannel
-                    if (ch?.logoUrl?.isNotEmpty() == true) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(ch.logoUrl)
-                                .size(96)
-                                .build(),
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp).clip(CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Channel number
-                            Text(
-                                String.format("%02d", currentIndex + 1),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                ch?.name ?: "",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val isFav = favoriteChannels.contains(ch?.id)
-                            Box(
-                                modifier = Modifier
-                                    .background(if (isFav) Color(0xFFFFD700).copy(alpha = 0.2f) else TvPrimary.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    if (isFav) "⭐ FAVORITE" else "LIVE",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isFav) Color(0xFFFFD700) else TvPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                ch?.group ?: "",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        currentTime,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontWeight = FontWeight.Light
-                    )
-                }
-            }
-        }
-        
-        // ─── Player Settings Overlay (Right) ───
-        val settingsFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-        LaunchedEffect(showSettingsOverlay) {
-            if (showSettingsOverlay) {
-                try {
-                    settingsFocusRequester.requestFocus()
-                } catch (e: Exception) { }
+        1, 3 -> { // Stretch / Fill (Full screen)
+            contentFrame.setAspectRatio(streamAspect)
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            if ((is43Stream || isSdStream) && wideFrame) {
+                // Stretch 4:3 broadcast content (pillarboxed in a 16:9 frame) horizontally to fill the screen
+                contentFrame.scaleX = fillWiden
+                contentFrame.scaleY = 1.0f
             } else {
-                try {
-                    focusRequester.requestFocus()
-                } catch (e: Exception) { }
+                contentFrame.scaleX = 1.0f
+                contentFrame.scaleY = 1.0f
             }
         }
-
-        AnimatedVisibility(
-            visible = showSettingsOverlay,
-            enter = fadeIn() + slideInHorizontally { it },
-            exit = fadeOut() + slideOutHorizontally { it },
-            modifier = Modifier.align(Alignment.CenterEnd)
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(320.dp)
-                    .fillMaxHeight()
-                    .background(TvDarkSurface.copy(alpha = 0.95f))
-                    .padding(24.dp)
-            ) {
-                Column(
-                    // Scrollable so all items (incl. Open Settings at the bottom) are reachable; the
-                    // focused item auto-scrolls into view as you press Down on the remote.
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    Text(
-                        "Player Settings",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    val chId = currentChannel?.id ?: ""
-                    val isFav = favoriteChannels.contains(chId)
-                    
-                    val qualities = listOf("auto", "high", "medium", "low")
-                    val languages = listOf("hi", "en", "ta", "te", "ml", "bn", "mr", "gu", "pa", "or", "as")
-
-                    
-                    Box(modifier = Modifier.focusRequester(settingsFocusRequester)) {
-                        SettingsItem(
-                            title = "Favorite Channel",
-                            subtitle = if (isFav) "Remove from favorites" else "Add to favorites",
-                            value = if (isFav) "★" else "☆",
-                            valueColor = if (isFav) Color(0xFFFFD700) else TvOnSurfaceVariant,
-                            onClick = {
-                                scope.launch { settingsManager.toggleFavoriteChannel(chId) }
-                            }
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    SettingsItem(
-                        title = "Video Quality",
-                        subtitle = "Current: $quality",
-                        value = "Change",
-                        valueColor = TvPrimary,
-                        onClick = {
-                            showQualitySelector = true
-                        }
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    // Language-feed switch for collapsed channel families (e.g. Star Sports Hindi/Tamil).
-                    // Selecting a language reloads that sibling feed. Distinct from in-stream audio tracks.
-                    if (currentVariants.size > 1) {
-                        val curLang = currentVariants.firstOrNull { it.channel.id == playingChannel?.id }?.langCode
-                        SettingsItem(
-                            title = "Language",
-                            subtitle = "Switch language feed for this channel",
-                            value = com.fenyx.jtv.data.ChannelLanguage.displayName(curLang),
-                            valueColor = TvPrimary,
-                            onClick = { showLangSelector = true }
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    SettingsItem(
-                        title = "Audio Track / Language",
-                        subtitle = audioTracks.firstOrNull { it.selected }?.label?.let { "Current: $it" } ?: "Default",
-                        value = if (audioTracks.size > 1) "${audioTracks.size} tracks" else "Change",
-                        valueColor = TvPrimary,
-                        onClick = {
-                            showAudioSelector = true
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    SettingsItem(
-                        title = "Voice Boost",
-                        subtitle = "Suppress background & clear dialogue",
-                        value = when (voiceBoost) { 0 -> "Off"; 1 -> "Low"; 2 -> "Medium"; 3 -> "High"; else -> "Max" },
-                        valueColor = if (voiceBoost == 0) TvOnSurfaceVariant else TvPrimary,
-                        onClick = {
-                            val next = (voiceBoost + 1) % 5 // Off -> Low -> Medium -> High -> Max -> Off
-                            scope.launch { settingsManager.setVoiceBoost(next) }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    SettingsItem(
-                        title = "Auto Volume",
-                        subtitle = "Normalize loudness across channels",
-                        value = if (audioNormalize) "On" else "Off",
-                        valueColor = if (audioNormalize) TvPrimary else TvOnSurfaceVariant,
-                        onClick = {
-                            scope.launch { settingsManager.setAudioNormalize(!audioNormalize) }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    SettingsItem(
-                        title = "Sleep Timer",
-                        subtitle = if (sleepTimerMin == 0) "Off" else "Turns off in $sleepTimerMin min",
-                        value = if (sleepTimerMin == 0) "Off" else "$sleepTimerMin min",
-                        valueColor = if (sleepTimerMin == 0) TvOnSurfaceVariant else TvPrimary,
-                        onClick = {
-                            // Cycle Off -> 15 -> 30 -> 60 -> Off
-                            sleepTimerMin = when (sleepTimerMin) {
-                                0 -> 15
-                                15 -> 30
-                                30 -> 60
-                                else -> 0
-                            }
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Server mode: force a credential re-pull from the proxy and reload the stream, so a
-                    // rotated/expired shared token can be fixed without leaving the player.
-                    if (playerSetupMode == "server" || playerSetupMode == "jtv") {
-                        SettingsItem(
-                            title = "Refresh Login",
-                            subtitle = "Fetch fresh credentials from your server",
-                            value = if (refreshingCreds) "Refreshing…" else "Refresh",
-                            valueColor = TvPrimary,
-                            onClick = {
-                                if (!refreshingCreds) scope.launch {
-                                    refreshingCreds = true
-                                    com.fenyx.jtv.data.JioApiClient.refreshCredentials(context)
-                                    refreshingCreds = false
-                                    // Reload the current stream with the fresh credentials.
-                                    retryCount.intValue = 0
-                                    playbackError = null
-                                    isBuffering = true
-                                    streamRefreshTrigger++
-                                    showSettingsOverlay = false
-                                }
-                            }
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    SettingsItem(
-                        title = "Open Settings",
-                        subtitle = "Go to full app settings",
-                        icon = Icons.Default.Settings,
-                        valueColor = TvPrimary,
-                        onClick = {
-                            showSettingsOverlay = false
-                            onSettings()
-                        }
-                    )
-                }
+        2, 4 -> { // Zoom (Crop black bars)
+            contentFrame.setAspectRatio(streamAspect)
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            if (is43Stream || isSdStream) {
+                // SD channels broadcasting in 16:9 windowbox/letterbox (like Zee Talkies 1024x576)
+                // Scaling both X and Y by 1.34x crops both pillarbox and letterbox black bars,
+                // displaying the widescreen movie full-screen with 100% natural proportions.
+                val zoomFactor = 1.34f
+                contentFrame.scaleX = zoomFactor
+                contentFrame.scaleY = zoomFactor
+            } else {
+                // HD stream zoom to crop cinema letterboxes (2.35:1)
+                contentFrame.scaleX = 1.15f
+                contentFrame.scaleY = 1.15f
             }
         }
-
-        val qualityOptions = listOf(
-            "auto" to "Auto", "high" to "High (1080p)", "medium" to "Medium (720p)", "low" to "Low (480p)"
-        )
-        val languageOptions = listOf(
-            "hi" to "Hindi", "en" to "English", "ta" to "Tamil", "te" to "Telugu", 
-            "ml" to "Malayalam", "bn" to "Bengali", "mr" to "Marathi", "gu" to "Gujarati", 
-            "pa" to "Punjabi", "or" to "Oriya", "as" to "Assamese"
-        )
-
-        if (showQualitySelector) {
-            Dialog(onDismissRequest = { showQualitySelector = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                TvPickerDialog(
-                    title = "Select Quality",
-                    options = qualityOptions,
-                    currentValue = quality,
-                    onSelect = { value ->
-                        quality = value
-                        scope.launch { settingsManager.setDefaultQuality(value) }
-                        showQualitySelector = false
-                    },
-                    onDismiss = { showQualitySelector = false }
-                )
+        5 -> { // 4:3 Forced (Classic television box format)
+            contentFrame.setAspectRatio(4.0f / 3.0f)
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            if (is43Stream) {
+                contentFrame.scaleX = 1.0f
+                contentFrame.scaleY = 1.0f
+            } else {
+                // Squeeze 16:9 wide frame to 4:3 (75% width centered)
+                contentFrame.scaleX = (4.0f / 3.0f) / (16.0f / 9.0f) // 0.75f
+                contentFrame.scaleY = 1.0f
             }
         }
-
-        if (showAudioSelector) {
-            Dialog(onDismissRequest = { showAudioSelector = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                if (audioTracks.isNotEmpty()) {
-                    // Real tracks from the stream — reliable even when channels label languages oddly.
-                    val opts = audioTracks.mapIndexed { i, t -> i.toString() to t.label }
-                    val current = audioTracks.indexOfFirst { it.selected }.let { if (it >= 0) it.toString() else "" }
-                    TvPickerDialog(
-                        title = "Audio Track / Language",
-                        options = opts,
-                        currentValue = current,
-                        onSelect = { value ->
-                            val opt = value.toIntOrNull()?.let { audioTracks.getOrNull(it) }
-                            if (opt != null) {
-                                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                                    .setOverrideForType(
-                                        androidx.media3.common.TrackSelectionOverride(opt.group, listOf(opt.trackIndex))
-                                    )
-                                    .build()
-                                // Remember the chosen language as the default for other channels too.
-                                opt.group.getFormat(opt.trackIndex).language?.let { lang ->
-                                    language = lang
-                                    scope.launch { settingsManager.setDefaultLanguage(lang) }
-                                }
-                            }
-                            showAudioSelector = false
-                        },
-                        onDismiss = { showAudioSelector = false }
-                    )
-                } else {
-                    // Fallback before tracks are known: pick a preferred language by code.
-                    TvPickerDialog(
-                        title = "Preferred Audio Language",
-                        options = languageOptions,
-                        currentValue = language,
-                        onSelect = { value ->
-                            language = value
-                            scope.launch { settingsManager.setDefaultLanguage(value) }
-                            showAudioSelector = false
-                        },
-                        onDismiss = { showAudioSelector = false }
-                    )
-                }
+        6 -> { // 16:9 Forced (Widescreen format)
+            contentFrame.setAspectRatio(16.0f / 9.0f)
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            if (is43Stream && wideFrame) {
+                contentFrame.scaleX = fillWiden
+                contentFrame.scaleY = 1.0f
+            } else {
+                contentFrame.scaleX = 1.0f
+                contentFrame.scaleY = 1.0f
             }
         }
-
-        if (showLangSelector) {
-            Dialog(onDismissRequest = { showLangSelector = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-                val opts = currentVariants.map { it.channel.id to com.fenyx.jtv.data.ChannelLanguage.displayName(it.langCode) }
-                TvPickerDialog(
-                    title = "Channel Language",
-                    options = opts,
-                    currentValue = playingChannel?.id ?: "",
-                    onSelect = { value ->
-                        val v = currentVariants.firstOrNull { it.channel.id == value }
-                        if (v != null) {
-                            langOverride = v.channel
-                            // Remember the chosen language so other channels + this one default to it.
-                            v.langCode?.let { lc ->
-                                language = lc
-                                scope.launch { settingsManager.setDefaultLanguage(lc) }
-                            }
-                        }
-                        showLangSelector = false
-                    },
-                    onDismiss = { showLangSelector = false }
-                )
-            }
-        }
-
-        // ─── Bottom Hint Bar ───
-        AnimatedVisibility(
-            visible = showOverlay && !showChannelList && !showCategoryList,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                        )
-                    )
-                    // Overscan-safe hint bar.
-                    .padding(horizontal = TvDimens.OverscanHorizontal, vertical = TvDimens.SpaceMd)
-            ) {
-                Text(
-                    "↑↓ / CH+- Change Channel  •  ← Channel List  •  0-9 Go To  •  OK Info  •  Back Exit",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-        }
-
-        // ─── Category List Sidebar (Far Left side) ───
-        AnimatedVisibility(
-            visible = showCategoryList,
-            enter = fadeIn() + slideInHorizontally { -it },
-            exit = fadeOut() + slideOutHorizontally { -it },
-            modifier = Modifier.align(Alignment.CenterStart)
-        ) {
-            val catState = rememberLazyListState()
-            LaunchedEffect(categorySelectedIndex) {
-                catState.animateScrollToItem(categorySelectedIndex.coerceAtLeast(0))
-            }
-            Box(
-                modifier = Modifier
-                    .width(220.dp)
-                    .fillMaxHeight()
-                    .background(Color.Black.copy(alpha = 0.95f))
-                    .padding(8.dp)
-            ) {
-                Column {
-                    Text(
-                        "Categories",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-
-                    LazyColumn(state = catState) {
-                        itemsIndexed(items = groups, key = { _, group -> group }) { index: Int, group: String ->
-                            val isSelected = index == categorySelectedIndex
-                            val isCurrentGroup = group == currentGroup
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                onClick = {
-                                    categorySelectedIndex = index
-                                    currentGroup = group // currentChannels derives from this
-                                    currentIndex = 0
-                                    showCategoryList = false
-                                },
-                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = if (isSelected) TvPrimaryContainer.copy(alpha = 0.4f) else Color.Transparent,
-                                    focusedContainerColor = TvDarkSurfaceVariant
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (isCurrentGroup) {
-                                        Box(
-                                            modifier = Modifier
-                                                .width(3.dp)
-                                                .height(18.dp)
-                                                .clip(RoundedCornerShape(2.dp))
-                                                .background(TvPrimary)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                    }
-                                    Text(
-                                        groupLabel(group),
-                                        color = if (isSelected || isCurrentGroup) TvPrimary else Color.White,
-                                        fontWeight = if (isSelected || isCurrentGroup) FontWeight.Bold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ─── Channel List Sidebar (Left side, pushed by Category list if open) ───
-        val channelListOffset by animateDpAsState(if (showCategoryList) 220.dp else 0.dp)
-        AnimatedVisibility(
-            visible = showChannelList,
-            enter = fadeIn() + slideInHorizontally { -it },
-            exit = fadeOut() + slideOutHorizontally { -it },
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = channelListOffset)
-        ) {
-            val listState = rememberLazyListState()
-            LaunchedEffect(listSelectedIndex) {
-                listState.animateScrollToItem(listSelectedIndex.coerceAtLeast(0))
-            }
-
-            Box(
-                modifier = Modifier
-                    .width(300.dp)
-                    .fillMaxHeight()
-                    .background(Color.Black.copy(alpha = 0.9f))
-                    .padding(8.dp)
-            ) {
-                Column {
-                    Text(
-                        currentGroup?.let { groupLabel(it) } ?: "Channels",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-                    Text(
-                        "← Categories  •  ${currentChannels.size} channels",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TvOnSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    LazyColumn(state = listState) {
-                        itemsIndexed(items = currentChannels, key = { _, channel -> channel.id }) { index: Int, channel: Channel ->
-                            val isSelected = index == listSelectedIndex
-                            val isPlaying = index == currentIndex
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                onClick = {
-                                    listSelectedIndex = index
-                                    currentIndex = index
-                                    showChannelList = false
-                                    showCategoryList = false
-                                    showOverlay = true
-                                },
-                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = if (isSelected) TvPrimaryContainer.copy(alpha = 0.4f) else Color.Transparent,
-                                    focusedContainerColor = TvDarkSurfaceVariant
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // Channel number
-                                    Text(
-                                        String.format("%02d", index + 1),
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.width(32.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    if (channel.logoUrl.isNotEmpty()) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(context)
-                                                .data(channel.logoUrl)
-                                                .size(64)
-                                                .build(),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(32.dp).clip(CircleShape)
-                                        )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier.size(32.dp).clip(CircleShape).background(TvDarkSurfaceVariant),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Default.PlayArrow, null, tint = TvOnSurfaceVariant, modifier = Modifier.size(16.dp))
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        channel.name,
-                                        color = if (isPlaying) TvPrimary else Color.White,
-                                        fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        else -> {
+            contentFrame.setAspectRatio(streamAspect)
+            contentFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT)
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            contentFrame.scaleX = 1.0f
+            contentFrame.scaleY = 1.0f
         }
     }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    contentFrame.requestLayout()
+}
+
+private fun android.content.Context.findActivity(): ComponentActivity? {
+    var c: android.content.Context? = this
+    while (c is android.content.ContextWrapper) {
+        if (c is ComponentActivity) return c
+        c = c.baseContext
     }
+    return null
 }
 
 /** AES-128 key URIs of Jio's non-DRM "Fallback" HLS (same rule the companion server uses). */
@@ -1686,80 +2093,23 @@ private fun isHlsKeyUri(uri: String): Boolean =
     uri.contains(".pkey", ignoreCase = true) || uri.contains("aes128.key", ignoreCase = true) ||
         JIO_KEY_HOST.containsMatchIn(uri)
 
-/** Display name for a category, including the Home screen's "All" / "Favorites" pseudo-categories. */
-private fun groupLabel(group: String): String = when (group) {
-    com.fenyx.jtv.ui.main.MainViewModel.GROUP_ALL -> "All Channels"
-    com.fenyx.jtv.ui.main.MainViewModel.GROUP_FAVORITES -> "★ Favorites"
-    else -> group
+/** TV: "Paused / Press OK to continue" once the controls layer has been closed while paused. */
+@Composable
+private fun TvPausedBadge(ui: PlayerUi, modifier: Modifier) {
+    val ov = ui.overlay
+    if (ov == PlayerOverlay.None || ov == PlayerOverlay.Banner) PausedBadge(touch = false, onPlay = {}, modifier = modifier)
 }
 
-@Composable
-fun TvPickerDialog(
-    title: String,
-    options: List<Pair<String, String>>,
-    currentValue: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .width(400.dp)
-                .background(com.fenyx.jtv.theme.TvDarkSurface, RoundedCornerShape(16.dp))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = com.fenyx.jtv.theme.TvOnBackground
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+/** Jio's recorded-schedule channels hand out a SonyLIV programme file instead of a live stream. */
+private fun isScheduleFileUrl(url: String): Boolean =
+    url.contains("slivcdn.com", ignoreCase = true) || url.contains("partner=jiotvvod", ignoreCase = true)
 
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.heightIn(max = 400.dp)
-            ) {
-                items(options.size) { index ->
-                    val (value, label) = options[index]
-                    val isSelected = value == currentValue
+/** A held zap loads the stream once no further zap came for this long. */
+private const val ZapHoldSettleMs = 300L
 
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { onSelect(value) },
-                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
-                        colors = ClickableSurfaceDefaults.colors(
-                            containerColor = if (isSelected) com.fenyx.jtv.theme.TvPrimaryContainer.copy(alpha = 0.3f) else Color.Transparent,
-                            focusedContainerColor = com.fenyx.jtv.theme.TvDarkSurfaceVariant
-                        ),
-                        border = ClickableSurfaceDefaults.border(
-                            focusedBorder = androidx.tv.material3.Border(
-                                border = androidx.compose.foundation.BorderStroke(2.dp, com.fenyx.jtv.theme.TvPrimary),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                label,
-                                color = if (isSelected) com.fenyx.jtv.theme.TvPrimary else com.fenyx.jtv.theme.TvOnSurfaceVariant,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
+/** The decoded frame is 16:9-shaped (unknown size counts as wide). Decides the FILL modes' 4:3 widening. */
+internal fun isWideFrame(rawW: Int, rawH: Int, pixelAspect: Float): Boolean {
+    if (rawW <= 0 || rawH <= 0) return true
+    val par = if (pixelAspect > 0f) pixelAspect else 1f
+    return rawW * par / rawH >= 1.5f
 }

@@ -6,12 +6,18 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+// A corrupt settings file (power cut mid-write on a TV box) resets to defaults instead of crashing every launch.
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "settings",
+    corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() }
+)
 
 class SettingsManager(private val context: Context) {
     companion object {
@@ -30,8 +36,14 @@ class SettingsManager(private val context: Context) {
         private val GROUP_LANGUAGE_VARIANTS = booleanPreferencesKey("group_language_variants")
 
         private val EPG_MODE = booleanPreferencesKey("epg_mode")
+        // Live TV page: false = list (default), true = grid.
+        private val CHANNEL_GRID = booleanPreferencesKey("channel_grid_view")
+        // TV player channel browser: "panel" (two-pane, default) or "strip" (the old tile strip).
+        private val PLAYER_BROWSER_STYLE = stringPreferencesKey("player_browser_style")
         private val EPG_URL = stringPreferencesKey("epg_url")
         private val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
+        // When the favourites list last changed (wall clock ms). LAN sync: the newer list wins.
+        private val FAVORITES_UPDATED_AT = longPreferencesKey("favorites_updated_at")
         
         private val AUTH_SSO_TOKEN = stringPreferencesKey("auth_sso_token")
         private val AUTH_AUTH_TOKEN = stringPreferencesKey("auth_auth_token")
@@ -44,10 +56,12 @@ class SettingsManager(private val context: Context) {
         private val AUTH_USER_ID = stringPreferencesKey("auth_user_id")
 
         private val AUTOPLAY_LAST_CHANNEL = booleanPreferencesKey("autoplay_last_channel")
-        private val IGNORED_UPDATE = stringPreferencesKey("ignored_update_version")
         private val UP_IS_NEXT_CHANNEL = booleanPreferencesKey("up_is_next_channel")
         private val OPEN_ON_START = stringPreferencesKey("open_on_start")
-        private val REVERSE_CH_PLUS_MINUS = booleanPreferencesKey("reverse_ch_plus_minus")
+        private val IGNORED_UPDATE = stringPreferencesKey("ignored_update_version")
+        private val CATEGORY_ORDER = stringPreferencesKey("category_order")
+        private val CATEGORY_HIDDEN = stringPreferencesKey("category_hidden")
+        private val HIDDEN_CHANNEL_LANGUAGES = stringPreferencesKey("hidden_channel_languages")
         private val LAST_CHANNEL_ID = stringPreferencesKey("last_channel_id")
         private val LAST_CHANNEL_GROUP = stringPreferencesKey("last_channel_group")
 
@@ -56,11 +70,35 @@ class SettingsManager(private val context: Context) {
         private val SETUP_MODE = stringPreferencesKey("setup_mode")
         private val SERVER_URL = stringPreferencesKey("server_url")
         private val SERVER_TOKEN = stringPreferencesKey("server_token")
+
+        // v2 appearance: "system" | "dark" | "light". Absent = system on phone/tablet, dark on TV.
+        private val THEME_MODE = stringPreferencesKey("theme_mode")
+        // v2 accent colour key (see theme/Jtv.kt ACCENTS); absent = amber.
+        private val ACCENT = stringPreferencesKey("accent")
+        // Recently watched channel ids, newest first (comma-joined, capped).
+        private val RECENT_CHANNELS = stringPreferencesKey("recent_channels")
+        private const val RECENT_MAX = 12
     }
 
-    val setupModeFlow: Flow<String?> = context.dataStore.data.map { it[SETUP_MODE] }
-    val serverUrlFlow: Flow<String> = context.dataStore.data.map { it[SERVER_URL] ?: "" }
-    val serverTokenFlow: Flow<String> = context.dataStore.data.map { it[SERVER_TOKEN] ?: "" }
+    val recentChannelsFlow: Flow<List<String>> = context.dataStore.data.map { p ->
+        p[RECENT_CHANNELS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
+    }.distinctUntilChanged()
+
+    val accentFlow: Flow<String?> = context.dataStore.data.map { it[ACCENT] }.distinctUntilChanged()
+
+    suspend fun setAccent(key: String) {
+        context.dataStore.edit { it[ACCENT] = key }
+    }
+
+    val themeModeFlow: Flow<String?> = context.dataStore.data.map { it[THEME_MODE] }.distinctUntilChanged()
+
+    suspend fun setThemeMode(mode: String) {
+        context.dataStore.edit { it[THEME_MODE] = mode }
+    }
+
+    val setupModeFlow: Flow<String?> = context.dataStore.data.map { it[SETUP_MODE] }.distinctUntilChanged()
+    val serverUrlFlow: Flow<String> = context.dataStore.data.map { it[SERVER_URL] ?: "" }.distinctUntilChanged()
+    val serverTokenFlow: Flow<String> = context.dataStore.data.map { it[SERVER_TOKEN] ?: "" }.distinctUntilChanged()
 
     suspend fun setSetupMode(mode: String?) {
         context.dataStore.edit { prefs ->
@@ -77,76 +115,134 @@ class SettingsManager(private val context: Context) {
 
     val defaultLanguageFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[DEFAULT_LANGUAGE] ?: "hi"
-    }
+    }.distinctUntilChanged()
 
     val defaultQualityFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[DEFAULT_QUALITY] ?: "auto"
-    }
+    }.distinctUntilChanged()
 
     val hardwareDecoderFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[HARDWARE_DECODER] ?: true
-    }
+    }.distinctUntilChanged()
 
     // Off by default: tunneling causes random black screens on many Amlogic/MediaTek TVs.
     val tunnelingFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[TUNNELING] ?: false
-    }
+    }.distinctUntilChanged()
 
     // Max playback buffer in seconds. Higher = smoother (rides out network/CDN jitter) at the cost of
     // more RAM and slightly higher channel-zap time. Default 60s.
     val playbackBufferSecFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[PLAYBACK_BUFFER_SEC] ?: 60
-    }
+    }.distinctUntilChanged()
 
     // Audio enhancement (applied via AudioEffects on the player session). Defaults to 2 (Medium) so
     // dialogue is clearer out of the box; users who explicitly set a level (incl. 0/Off) keep theirs.
     val voiceBoostFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[VOICE_BOOST] ?: 2
-    }
+    }.distinctUntilChanged()
     val audioNormalizeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[AUDIO_NORMALIZE] ?: false
-    }
+    }.distinctUntilChanged()
 
     val lastSelectedCategoryFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[LAST_SELECTED_CATEGORY]
-    }
+    }.distinctUntilChanged()
 
     val lastUpdateCheckFlow: Flow<Long> = context.dataStore.data.map { preferences ->
         preferences[LAST_UPDATE_CHECK]?.toLongOrNull() ?: 0L
-    }
+    }.distinctUntilChanged()
 
     val playerResizeModeFlow: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[PLAYER_RESIZE_MODE] ?: 0 // Default: RESIZE_MODE_FIT
-    }
+    }.distinctUntilChanged()
 
     // On by default: most users want one tile per channel and pick language in the player.
     val groupLanguageVariantsFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[GROUP_LANGUAGE_VARIANTS] ?: true
-    }
+    }.distinctUntilChanged()
 
     val epgModeFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[EPG_MODE] ?: false
+    }.distinctUntilChanged()
+
+    val channelGridFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[CHANNEL_GRID] ?: false
+    }.distinctUntilChanged()
+
+    val playerBrowserPanelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PLAYER_BROWSER_STYLE] != "strip"
+    }.distinctUntilChanged()
+
+    suspend fun setPlayerBrowserPanel(panel: Boolean) {
+        context.dataStore.edit { preferences -> preferences[PLAYER_BROWSER_STYLE] = if (panel) "panel" else "strip" }
     }
 
     val epgUrlFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[EPG_URL] ?: "https://avkb.short.gy/epg.xml.gz"
-    }
+    }.distinctUntilChanged()
 
     val autoplayLastChannelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[AUTOPLAY_LAST_CHANNEL] ?: false
-    }
+    }.distinctUntilChanged()
 
-    /** In the player, Up goes to the next channel number (1 → 2 → 3), like CH+. Off = Up goes to the previous one. */
+    /** In the player, Up goes to the next channel number (1 → 2 → 3), like CH+ (issue #5). */
     val upIsNextChannelFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[UP_IS_NEXT_CHANNEL] ?: true
+    }.distinctUntilChanged()
+
+    /** Settings → Categories: order and hidden ones, stored as newline-separated keys. */
+    val categoryPrefsFlow: Flow<CategoryPrefs> = context.dataStore.data.map { p ->
+        CategoryPrefs(
+            order = p[CATEGORY_ORDER]?.split('\n')?.filter { it.isNotEmpty() }.orEmpty(),
+            hidden = p[CATEGORY_HIDDEN]?.split('\n')?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
+        )
+    }.distinctUntilChanged()
+
+    suspend fun setCategoryPrefs(prefs: CategoryPrefs) {
+        context.dataStore.edit {
+            it[CATEGORY_ORDER] = prefs.order.joinToString("\n")
+            it[CATEGORY_HIDDEN] = prefs.hidden.joinToString("\n")
+        }
+    }
+
+    /** The update version the user chose to ignore: no automatic popup for it (Settings still offers it). */
+    val ignoredUpdateFlow: Flow<String?> = context.dataStore.data.map { it[IGNORED_UPDATE] }
+
+    suspend fun setIgnoredUpdate(version: String) {
+        context.dataStore.edit { it[IGNORED_UPDATE] = version }
+    }
+
+    /** Open JTV when the TV turns on: AutoStart.OFF / BOOT / WAKE. */
+    val openOnStartFlow: Flow<String> = context.dataStore.data.map { it[OPEN_ON_START] ?: com.fenyx.jtv.AutoStart.OFF }
+
+    suspend fun setOpenOnStart(mode: String) {
+        context.dataStore.edit { it[OPEN_ON_START] = mode }
+    }
+
+    suspend fun setUpIsNextChannel(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[UP_IS_NEXT_CHANNEL] = enabled
+        }
     }
 
     val lastChannelIdFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[LAST_CHANNEL_ID]
-    }
+    }.distinctUntilChanged()
 
     val lastChannelGroupFlow: Flow<String?> = context.dataStore.data.map { preferences ->
         preferences[LAST_CHANNEL_GROUP]
+    }.distinctUntilChanged()
+
+    /** Languages hidden by the user in Settings → Channels → Channel Languages. */
+    val hiddenLanguagesFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[HIDDEN_CHANNEL_LANGUAGES]?.split('\n')?.filter { it.isNotBlank() }?.toSet().orEmpty()
+    }.distinctUntilChanged()
+
+    suspend fun setHiddenLanguages(languages: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[HIDDEN_CHANNEL_LANGUAGES] = languages.joinToString("\n")
+        }
     }
 
     /**
@@ -158,6 +254,31 @@ class SettingsManager(private val context: Context) {
     }
 
     val favoriteChannelsFlow: Flow<Set<String>> = favoriteOrderFlow.map { it.toSet() }
+
+    /** Favourites plus when they last changed, for LAN sync. */
+    val favoritesSnapshotFlow: Flow<com.fenyx.jtv.sync.FavoritesSnapshot> = context.dataStore.data.map { p ->
+        com.fenyx.jtv.sync.FavoritesSnapshot(parseFavorites(p[FAVORITE_CHANNELS]), p[FAVORITES_UPDATED_AT] ?: 0L)
+    }
+
+    /**
+     * Applies favourites that came from another device, keeping their timestamp, but only when they are
+     * newer than ours (checked inside the same transaction). Returns true when they were applied.
+     */
+    suspend fun applySyncedFavorites(ids: List<String>, updatedAt: Long): Boolean {
+        var applied = false
+        context.dataStore.edit { p ->
+            if (updatedAt > (p[FAVORITES_UPDATED_AT] ?: 0L)) {
+                p[FAVORITE_CHANNELS] = ids.filter { it.isNotBlank() }.distinct().joinToString(",")
+                p[FAVORITES_UPDATED_AT] = updatedAt
+                applied = true
+            }
+        }
+        return applied
+    }
+
+    private fun stampFavorites(p: androidx.datastore.preferences.core.MutablePreferences) {
+        p[FAVORITES_UPDATED_AT] = com.fenyx.jtv.sync.FavoritesSync.nextStamp(p[FAVORITES_UPDATED_AT] ?: 0L, System.currentTimeMillis())
+    }
 
     val authDataFlow: Flow<JioApiClient.AuthData?> = context.dataStore.data.map { preferences ->
         val ssoToken = preferences[AUTH_SSO_TOKEN]
@@ -242,24 +363,14 @@ class SettingsManager(private val context: Context) {
         }
     }
 
+    suspend fun setChannelGrid(grid: Boolean) {
+        context.dataStore.edit { preferences -> preferences[CHANNEL_GRID] = grid }
+    }
+
     suspend fun setEpgUrl(url: String) {
         context.dataStore.edit { preferences ->
             preferences[EPG_URL] = url
         }
-    }
-
-    /** The update version the user chose to ignore: no automatic popup for it (Settings still offers it). */
-    val ignoredUpdateFlow: Flow<String?> = context.dataStore.data.map { it[IGNORED_UPDATE] }
-
-    suspend fun setIgnoredUpdate(version: String) {
-        context.dataStore.edit { it[IGNORED_UPDATE] = version }
-    }
-
-    /** Open JTV when the TV turns on: AutoStart.OFF / BOOT / WAKE. */
-    val openOnStartFlow: Flow<String> = context.dataStore.data.map { it[OPEN_ON_START] ?: com.fenyx.jtv.AutoStart.OFF }
-
-    suspend fun setOpenOnStart(mode: String) {
-        context.dataStore.edit { it[OPEN_ON_START] = mode }
     }
 
     suspend fun setAutoplayLastChannel(enabled: Boolean) {
@@ -268,26 +379,12 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    /** In the player, CH+ goes to the previous channel number and CH- to the next. Off by default. */
-    val reverseChPlusMinusFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[REVERSE_CH_PLUS_MINUS] ?: false
-    }
-
-    suspend fun setReverseChPlusMinus(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[REVERSE_CH_PLUS_MINUS] = enabled
-        }
-    }
-
-    suspend fun setUpIsNextChannel(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[UP_IS_NEXT_CHANNEL] = enabled
-        }
-    }
-
     suspend fun setLastChannelId(id: String) {
         context.dataStore.edit { preferences ->
             preferences[LAST_CHANNEL_ID] = id
+            // Same write also maintains "Recently watched" (move to front, de-duplicated, capped).
+            val old = preferences[RECENT_CHANNELS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
+            preferences[RECENT_CHANNELS] = (listOf(id) + old.filter { it != id }).take(RECENT_MAX).joinToString(",")
         }
     }
 
@@ -307,13 +404,18 @@ class SettingsManager(private val context: Context) {
             val list = parseFavorites(preferences[FAVORITE_CHANNELS]).toMutableList()
             if (!list.remove(channelId)) list.add(channelId)
             preferences[FAVORITE_CHANNELS] = list.joinToString(",")
+            stampFavorites(preferences)
         }
     }
 
     /** Replaces the whole favorites order (used by the reorder / sort-by-category actions). */
     suspend fun setFavoriteOrder(ids: List<String>) {
         context.dataStore.edit { preferences ->
-            preferences[FAVORITE_CHANNELS] = ids.filter { it.isNotBlank() }.distinct().joinToString(",")
+            val joined = ids.filter { it.isNotBlank() }.distinct().joinToString(",")
+            if (joined != preferences[FAVORITE_CHANNELS].orEmpty()) {
+                preferences[FAVORITE_CHANNELS] = joined
+                stampFavorites(preferences)
+            }
         }
     }
 
@@ -350,5 +452,30 @@ class SettingsManager(private val context: Context) {
             preferences.remove(AUTH_DEVICE_ID)
             preferences.remove(AUTH_USER_ID)
         }
+    }
+
+    // ── Remote buttons (INTERACTION.md §6) and picture-in-picture ──
+    private val remoteKeysKey = stringPreferencesKey("remote_keys")
+    private val pipKey = booleanPreferencesKey("pip_on_leave")
+
+    /** The custom remote-button map; absent (or unreadable) = the Standard profile = today's keys. */
+    val remoteKeyMapFlow: Flow<RemoteKeyMap> = context.dataStore.data.map { p ->
+        RemoteKeyMap.fromJson(p[remoteKeysKey]) ?: RemoteKeys.Default
+    }.distinctUntilChanged()
+
+    suspend fun setRemoteKeyMap(map: RemoteKeyMap) {
+        context.dataStore.edit { it[remoteKeysKey] = map.toJson() }
+    }
+
+    /** Reset to default: the stored map is removed, so the built-in Standard profile applies. */
+    suspend fun resetRemoteKeyMap() {
+        context.dataStore.edit { it.remove(remoteKeysKey) }
+    }
+
+    /** Phone/tablet: go into picture-in-picture when leaving the app while a channel plays. On by default. */
+    val pipOnLeaveFlow: Flow<Boolean> = context.dataStore.data.map { it[pipKey] ?: true }.distinctUntilChanged()
+
+    suspend fun setPipOnLeave(enabled: Boolean) {
+        context.dataStore.edit { it[pipKey] = enabled }
     }
 }
