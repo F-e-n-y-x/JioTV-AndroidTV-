@@ -97,6 +97,19 @@ class EpgRepository(private val context: Context) {
             if (value.isNullOrBlank()) return 0
             return try { fmt.parse(value)?.time ?: 0 } catch (e: Exception) { 0 }
         }
+
+        private const val DAY_MS = 24 * 60 * 60 * 1000L
+        private const val IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000L
+
+        /** Days since the epoch on the India calendar (Jio's guide days are IST days). */
+        internal fun istDay(ms: Long): Long = Math.floorDiv(ms + IST_OFFSET_MS, DAY_MS)
+
+        /**
+         * The IST day a one-day guide covers, by its middle programme (the first show often starts
+         * before midnight), or null when empty.
+         */
+        internal fun guideDay(programs: List<EpgProgram>): Long? =
+            programs.sortedBy { it.startMs }.getOrNull(programs.size / 2)?.let { istDay(it.startMs) }
     }
 
     private val TAG = "EpgRepository"
@@ -267,10 +280,30 @@ class EpgRepository(private val context: Context) {
         return@withContext epgMap
     }
 
-    suspend fun getNativeEpgForChannel(channelId: String, offset: Int = 0): List<EpgProgram> = withContext(Dispatchers.IO) {
+    /**
+     * Jio's guide for the IST day [offset] days from today, or empty. Jio's CDN sometimes answers with
+     * another day: then refetch once past the CDN cache, and after midnight (Jio's own day lags) try its
+     * next offset. A guide that still covers the wrong day is dropped, never returned as this one.
+     */
+    suspend fun getNativeEpgForChannel(channelId: String, offset: Int = 0): List<EpgProgram> {
+        val day = istDay(JioClock.nowMs()) + offset
+        val first = fetchNativeEpg(channelId, offset, bust = false)
+        if (first.isEmpty() || guideDay(first) == day) return first
+        val busted = fetchNativeEpg(channelId, offset, bust = true)
+        if (guideDay(busted) == day) return busted
+        if (guideDay(busted) == day - 1) {
+            val next = fetchNativeEpg(channelId, offset + 1, bust = false)
+            if (guideDay(next) == day) return next
+        }
+        Log.w(TAG, "Guide for $channelId offset $offset covers day ${guideDay(busted)}, not $day; dropped")
+        return emptyList()
+    }
+
+    private suspend fun fetchNativeEpg(channelId: String, offset: Int, bust: Boolean): List<EpgProgram> = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
         try {
-            val url = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/getepg/get?offset=$offset&channel_id=$channelId&langId=6")
+            val buster = if (bust) "&_=${System.currentTimeMillis()}" else ""
+            val url = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/getepg/get?offset=$offset&channel_id=$channelId&langId=6$buster")
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.connectTimeout = 10000
