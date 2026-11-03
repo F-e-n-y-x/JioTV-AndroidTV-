@@ -700,7 +700,10 @@ fun TvPlayerScreen(
                     else PlayerError(R.string.player_err_all_refused, ErrorAction.Retry, ErrorAction.Settings)
                 } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException) {
                     isBuffering = false
-                    playbackError = PlayerError(R.string.player_err_not_provided, ErrorAction.NextChannel, ErrorAction.Retry)
+                    playbackError = PlayerError(
+                        if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelNotInPlanException) R.string.error_not_in_plan
+                        else R.string.player_err_not_provided,
+                        ErrorAction.NextChannel, ErrorAction.Retry)
                 } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
                     isBuffering = false
                     playbackError = PlayerError(R.string.player_err_offline, ErrorAction.Retry, ErrorAction.NextChannel)
