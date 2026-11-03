@@ -530,7 +530,11 @@ fun TvPlayerScreen(
     // a moment after open, or the hardware-decoder toggle changes), the NEW instance must be given the
     // media source — otherwise it buffers forever until some other change re-triggers this. That was the
     // "loads until I change a setting" bug.
+    // Set while the app is stopped in the background, so error / retry / timer paths don't re-prepare the
+    // stopped player there; the return to the foreground loads a fresh stream.
+    val background = remember { object { var stopped = false } }
     LaunchedEffect(exoPlayer, playingChannel, prefsLoaded, streamRefreshTrigger, activeReplay) {
+        if (background.stopped) return@LaunchedEffect
         val ch = playingChannel
         // Catch-up: replay this programme (from Jio's catch-up CDN) instead of the live stream.
         val cu = activeReplay
@@ -750,7 +754,8 @@ fun TvPlayerScreen(
     // keeps rewriting requests with a valid token. Playback never sees a 403 -> no reload, no buffering.
     // Catch-up: keyed on the replay too, and it asks geturl for the SAME catch-up programme, so a
     // replay's token is only ever refreshed from a replay URL (never swapped for the live stream's).
-    LaunchedEffect(playingChannel, activeReplay) {
+    // Also keyed on the reload trigger, so a loop that stopped on a tokenless URL restarts after a reload.
+    LaunchedEffect(exoPlayer, playingChannel, activeReplay, streamRefreshTrigger) {
         val ch = playingChannel ?: return@LaunchedEffect
         val cu = activeReplay
         while (true) {
@@ -764,7 +769,8 @@ fun TvPlayerScreen(
 
             // Nothing is playing while an error is on screen (e.g. "sign-in expired"); polling then
             // only re-runs failing refreshes every minute. The user's OK press reloads the stream.
-            if (playbackError != null) continue
+            // Same when the player is stopped (background / standby): the return loads a fresh stream.
+            if (playbackError != null || exoPlayer.playbackState == Player.STATE_IDLE) continue
             val authData = settingsManager.authDataFlow.first() ?: continue
             val res = if (cu != null) com.fenyx.jtv.data.JioApiClient.getStreamUrl(
                 context, cu.channelNumber.toString(), authData, catchup = cu.toParams(), useCache = false
@@ -778,10 +784,13 @@ fun TvPlayerScreen(
                 // that file, so only take it when it is the same file (never reload mid-programme).
                 // Catch-up: likewise only for the same replay file.
                 if ((vodItem || cu != null) && newUrl.substringBefore('?') != streamBase.get()) continue
-                if (newToken.isNotEmpty()) {
-                    tokenHolder.set(newToken)
-                    android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
+                if (newToken.isEmpty()) {
+                    // This channel's URLs carry no expiring token, so there is nothing to keep fresh.
+                    android.util.Log.d("TvPlayer", "No token on channel ${ch.channelNumber}; stopping refresh loop")
+                    return@LaunchedEffect
                 }
+                tokenHolder.set(newToken)
+                android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
             }
         }
     }
@@ -885,12 +894,22 @@ fun TvPlayerScreen(
     // the background, and resume when it returns to the foreground (unless the user had paused).
     val userPausedState = rememberUpdatedState(userPaused)
     DisposableEffect(lifecycleOwner, exoPlayer) {
+        // A paused live stream keeps its old buffer and token, so after standby it would replay stale video
+        // and then fail. Stop it instead and load a fresh stream (new URL, token, live edge) on return.
+        // A user pause or PiP (the video stays on screen) keeps the old pause-only behaviour.
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> exoPlayer.pause()
-                Lifecycle.Event.ON_START -> if (!userPausedState.value) {
-                    exoPlayer.play()
-                    if (!mini) ui.showBanner()
+                Lifecycle.Event.ON_STOP ->
+                    if (userPausedState.value || Pip.inPip.value || Pip.entering.value) exoPlayer.pause()
+                    else {
+                        exoPlayer.stop()
+                        background.stopped = true
+                    }
+                Lifecycle.Event.ON_START -> {
+                    // The load effect re-runs on the trigger (fresh URL) and keeps Settings-on-top silent.
+                    if (background.stopped) { background.stopped = false; streamRefreshTrigger++ }
+                    else if (!userPausedState.value) exoPlayer.play()
+                    if (!userPausedState.value && !mini) ui.showBanner()
                 }
                 else -> {}
             }
