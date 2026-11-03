@@ -646,8 +646,11 @@ object JioApiClient {
         return cacheFile.exists() && System.currentTimeMillis() - cacheFile.lastModified() < CHANNEL_CACHE_TTL_MS
     }
 
-    /** Jio's v3.1 list came back empty: an outage, never something to cache as the channel list. */
-    internal fun useStaleCache(v31Count: Int): Boolean = v31Count == 0
+    /**
+     * Jio's v3.1 list came back empty, or it or the category dictionary failed part-way: an outage,
+     * never something to cache as the channel list.
+     */
+    internal fun useStaleCache(v31Count: Int, complete: Boolean = true): Boolean = v31Count == 0 || !complete
 
     /**
      * @param forceNetwork when true, skip the fresh-cache shortcut and always fetch from the network
@@ -665,6 +668,7 @@ object JioApiClient {
 
             // Fetch dictionary
             var categoryMap = mapOf<String, String>()
+            var dictOk = false
             try {
                 val dictUrl = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/dictionary/dictionary?langId=6")
                 val dictConn = dictUrl.openConnection() as HttpURLConnection
@@ -690,6 +694,7 @@ object JioApiClient {
                     reader.endObject()
                     reader.close()
                     categoryMap = map
+                    dictOk = true
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch dictionary", e)
@@ -697,7 +702,8 @@ object JioApiClient {
 
             val finalChannelsMap = mutableMapOf<Int, Channel>()
 
-            fun parseChannels(urlStr: String, into: MutableMap<Int, Channel>) {
+            /** False when the download or parse failed, possibly after [into] got part of the list. */
+            fun parseChannels(urlStr: String, into: MutableMap<Int, Channel>): Boolean {
                 try {
                     val conn = URL(urlStr).openConnection() as HttpURLConnection
                     conn.connectTimeout = 10000; conn.readTimeout = 15000
@@ -767,10 +773,12 @@ object JioApiClient {
                         }
                         reader.endObject()
                         reader.close()
+                        return true
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to fetch channels from $urlStr", e)
                 }
+                return false
             }
 
             // Jio's current list is v3.1; v1.4 only contributes the few allow-listed ids that still play
@@ -778,9 +786,11 @@ object JioApiClient {
             val v14 = mutableMapOf<Int, Channel>()
             val v31 = mutableMapOf<Int, Channel>()
             val zee = mutableListOf<Channel>()
+            var v31Ok = false
+            var v14Ok = false
             kotlinx.coroutines.coroutineScope {
-                launch(Dispatchers.IO) { parseChannels(ChannelSources.V31_URL, v31) }
-                launch(Dispatchers.IO) { parseChannels(ChannelSources.V14_URL, v14) }
+                launch(Dispatchers.IO) { v31Ok = parseChannels(ChannelSources.V31_URL, v31) }
+                launch(Dispatchers.IO) { v14Ok = parseChannels(ChannelSources.V14_URL, v14) }
                 launch(Dispatchers.IO) {
                     // A third-party failure must never cancel the Jio list loading next to it.
                     try {
@@ -795,12 +805,12 @@ object JioApiClient {
             // A third-party stream replaces Jio's entry for live, but the channel still has Jio catch-up.
             zee.forEach { zc -> finalChannelsMap[zc.channelNumber] = zc.copy(isCatchup = finalChannelsMap[zc.channelNumber]?.isCatchup ?: zc.isCatchup) }
 
-            if (useStaleCache(v31.size)) {
+            if (useStaleCache(v31.size, complete = dictOk && v31Ok)) {
                 // Jio's list failed (the third-party channels alone would still fill the map, and were
                 // once cached as a fresh 24 h list). Serve whatever is on disk, even if stale, and leave
                 // the cache file untouched so the next start tries Jio again.
                 readChannelCache(context)?.let {
-                    Log.w(TAG, "Channel fetch empty; serving stale cache (${it.size} channels)")
+                    Log.w(TAG, "Channel fetch incomplete (v3.1=${v31.size} ok=$v31Ok dict=$dictOk); serving stale cache (${it.size} channels)")
                     return@withContext Result.success(it)
                 }
                 // No cache either: show what did load (third-party / v1.4), but don't save it.
@@ -809,6 +819,12 @@ object JioApiClient {
             }
 
             val finalChannels = finalChannelsMap.values.sortedBy { it.channelNumber }
+            if (!v14Ok) {
+                // v1.4 only adds a few allow-listed ids: serve the fresh list, but uncached, so a dead
+                // v1.4 feed neither freezes the list on an old cache nor drops those ids for 24 h.
+                Log.w(TAG, "v1.4 channel feed failed; serving the list uncached")
+                return@withContext Result.success(finalChannels)
+            }
 
             // Save to cache
             try {
