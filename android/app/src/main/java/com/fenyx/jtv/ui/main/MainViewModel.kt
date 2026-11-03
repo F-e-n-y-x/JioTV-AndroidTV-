@@ -158,12 +158,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             combine(
                 _allChannels,
                 settingsManager.groupLanguageVariantsFlow.distinctUntilChanged(),
-                settingsManager.hiddenLanguagesFlow.distinctUntilChanged()
-            ) { all, groupOn, hiddenLangs ->
-                val filtered = if (hiddenLangs.isEmpty()) all else all.filter { ch ->
+                settingsManager.hiddenLanguagesFlow.distinctUntilChanged(),
+                combine(settingsManager.hideNotInPlanFlow, settingsManager.notInPlanIdsFlow) { on, ids -> if (on) ids else null }
+            ) { all, groupOn, hiddenLangs, notInPlan ->
+                val langFiltered = if (hiddenLangs.isEmpty()) all else all.filter { ch ->
                     val supported = com.fenyx.jtv.data.ChannelLanguage.channelSupportedLanguages(ch)
                     supported.any { it !in hiddenLangs }
                 }
+                // null = switch off. Hides Jio's paid add-ons and the channels Jio said aren't in the plan.
+                val filtered = if (notInPlan == null) langFiltered
+                    else langFiltered.filterNot { it.businessType == "premium" || it.id in notInPlan }
                 val effective = if (filtered.isEmpty()) all else filtered
                 val pair = if (groupOn && effective.isNotEmpty()) com.fenyx.jtv.data.ChannelLanguage.collapse(effective)
                 else effective to emptyMap<String, List<com.fenyx.jtv.data.ChannelLanguage.Variant>>()

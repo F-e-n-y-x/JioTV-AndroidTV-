@@ -92,7 +92,15 @@ object JioApiClient {
     }
 
     /** Jio refused this one channel (geturl 403 even with fresh credentials). Not a login problem. */
-    class ChannelBlockedException(message: String) : Exception(message)
+    open class ChannelBlockedException(message: String) : Exception(message)
+
+    /** geturl 403 with Jio code 3012 "No eligible plans found": the account's plan doesn't include this channel. */
+    class ChannelNotInPlanException(val ui: com.fenyx.jtv.i18n.UiText) :
+        ChannelBlockedException("This channel isn't in your Jio plan.")
+
+    /** A geturl 403 body saying the channel isn't in the user's plan (code 3012). */
+    internal fun isNotInPlanBody(body: String): Boolean =
+        body.contains("No eligible plans", ignoreCase = true) || Regex("\"code\"\\s*:\\s*\"?3012\\b").containsMatchIn(body)
 
     /**
      * Jio refused several different channels in a row, even after a credential refresh: the account or
@@ -597,6 +605,7 @@ object JioApiClient {
                     stbNumber = obj.optInt("stbNumber", 0),
                     isPremium = obj.optBoolean("isPremium", false),
                     planType = obj.optString("planType", ""),
+                    businessType = obj.optString("businessType", ""),
                     aspectRatio = obj.optString("aspectRatio", "")
                 ))
             }
@@ -712,6 +721,7 @@ object JioApiClient {
                                     var stb = 0
                                     var isPremium = false
                                     var planType = ""
+                                    var businessType = ""
                                     var aspectRatio = ""
                                     while (reader.hasNext()) {
                                         when (reader.nextName()) {
@@ -725,6 +735,7 @@ object JioApiClient {
                                             "stbChannelNumber" -> stb = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
                                             "is_premium" -> isPremium = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
                                             "plan_type" -> planType = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
+                                            "business_type" -> businessType = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
                                             "aspectRatio" -> aspectRatio = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
                                             else -> reader.skipValue()
                                         }
@@ -744,6 +755,7 @@ object JioApiClient {
                                             stbNumber = stb.coerceAtLeast(0),
                                             isPremium = isPremium,
                                             planType = planType,
+                                            businessType = businessType,
                                             aspectRatio = aspectRatio
                                         )
                                     }
@@ -815,6 +827,7 @@ object JioApiClient {
                     if (ch.stbNumber > 0) obj.put("stbNumber", ch.stbNumber)
                     if (ch.isPremium) obj.put("isPremium", true)
                     if (ch.planType.isNotEmpty()) obj.put("planType", ch.planType)
+                    if (ch.businessType.isNotEmpty()) obj.put("businessType", ch.businessType)
                     if (ch.aspectRatio.isNotEmpty()) obj.put("aspectRatio", ch.aspectRatio)
                     ch.licenseUrl?.let { obj.put("licenseUrl", it) }
                     jsonArray.put(obj)
@@ -983,12 +996,19 @@ object JioApiClient {
             // 403 from geturl is per channel: Jio refuses this one (e.g. most Zee Entertainment
             // channels since Jio dropped them). No refresh or retry can fix it.
             if (responseCode == 403) {
+                val body403 = runCatching { readResponseBody(connection, isError = true) }.getOrDefault("")
                 // Sony-backed channels (Sony Yay, Vizha...) key a replay by its srno: Jio answers the
                 // showId with "Sony Srno data is not mapped". Retry once with programId = srno.
                 if (catchup != null && catchup.programId != catchup.srno &&
-                    readResponseBody(connection, isError = true).contains("Srno data is not mapped", ignoreCase = true)) {
+                    body403.contains("Srno data is not mapped", ignoreCase = true)) {
                     return@withContext getStreamUrl(context, channelId, authData, allowRefreshRetry = false,
                         catchup = catchup.copy(programId = catchup.srno), useCache = false)
+                }
+                // Not in the user's plan: a plan answer, not a refusal, so it never counts toward "all refused".
+                if (isNotInPlanBody(body403)) {
+                    if (catchup == null) SettingsManager(context).addNotInPlanChannel(channelId)
+                    return@withContext Result.failure(ChannelNotInPlanException(
+                        com.fenyx.jtv.i18n.UiText.of(com.fenyx.jtv.R.string.error_not_in_plan)))
                 }
                 if (catchup == null) refusedInARow.add(channelId)
                 if (catchup == null && refusedInARow.size >= REFUSED_CHANNELS_LIMIT) {

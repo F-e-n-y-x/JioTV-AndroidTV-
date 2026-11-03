@@ -21,7 +21,11 @@ import java.net.URL
 class UserFacingException(val ui: UiText, englishMessage: String) : Exception(englishMessage)
 
 /** The translated text for [e] when it has one, else [fallback]. */
-fun Throwable?.userText(fallback: UiText): UiText = (this as? UserFacingException)?.ui ?: fallback
+fun Throwable?.userText(fallback: UiText): UiText = when (this) {
+    is UserFacingException -> ui
+    is JioApiClient.ChannelNotInPlanException -> ui
+    else -> fallback
+}
 
 object ServerClient {
     private const val TAG = "ServerClient"

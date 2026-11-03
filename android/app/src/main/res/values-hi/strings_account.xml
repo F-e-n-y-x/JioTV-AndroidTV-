@@ -36,6 +36,7 @@
     <string name="error_server_http">सर्वर से गड़बड़ी आई (%d)।</string>
     <string name="error_server_no_login">सर्वर पर अभी लॉग इन नहीं हुआ है। पहले सर्वर पर लॉग इन करें।</string>
     <string name="error_server_unreachable">सर्वर तक नहीं पहुँच पाए। पता और इंटरनेट देखें।</string>
+    <string name="error_not_in_plan">यह चैनल आपके Jio प्लान में नहीं है।</string>
 
     <string name="login_title_number">अपने Jio नंबर से लॉग इन करें</string>
     <string name="login_title_code">कोड लिखें</string>
