@@ -110,6 +110,7 @@ fun ServerSetupScreen(
 
     fun connect() {
         if (!jtvMode && serverUrl.isBlank()) { error = UiText.of(R.string.setup_error_enter_url); return }
+        if (!jtvMode && !ServerClient.hasHost(serverUrl)) { error = UiText.of(R.string.setup_error_invalid_url); return }
         if (token.isBlank()) { error = UiText.of(R.string.setup_error_enter_code); return }
         isConnecting = true
         error = null

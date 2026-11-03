@@ -21,6 +21,7 @@
     <string name="setup_connect">Connect</string>
     <string name="setup_connecting">Connecting…</string>
     <string name="setup_error_enter_url">Enter the server address.</string>
+    <string name="setup_error_invalid_url">That address is not valid. Example: 192.168.1.10:29180</string>
     <string name="setup_error_enter_code">Enter your access code.</string>
     <string name="setup_error_connection_failed">Could not connect. Try again.</string>
     <string name="setup_servers_nearby">Servers on your network</string>
