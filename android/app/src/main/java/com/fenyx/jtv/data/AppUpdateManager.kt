@@ -151,9 +151,12 @@ object AppUpdateManager {
         downloadUrl: String,
         onProgress: (bytesDownloaded: Long, totalBytes: Long, progress: Float) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
-        val targetDir = context.getExternalFilesDir(null) ?: context.cacheDir
-        val targetFile = File(targetDir, "JTV_update.apk")
+        // Private cache (file_paths.xml cache-path): on Android 9 and older, any app with storage
+        // permission could swap an APK in external app storage before the installer reads it.
+        val targetFile = File(context.cacheDir, "JTV_update.apk")
         if (targetFile.exists()) targetFile.delete()
+        // Older versions saved it in external app storage; don't leave that copy behind.
+        context.getExternalFilesDir(null)?.let { File(it, "JTV_update.apk").delete() }
 
         var connection: HttpURLConnection? = null
         var inputStream: InputStream? = null
@@ -188,7 +191,7 @@ object AppUpdateManager {
                 }
             }
 
-            val totalBytes = connection.contentLength.toLong()
+            val totalBytes = connection.contentLengthLong
             inputStream = connection.inputStream
             outputStream = FileOutputStream(targetFile)
 
@@ -203,6 +206,11 @@ object AppUpdateManager {
                 onProgress(bytesDownloaded, totalBytes, progress)
             }
             outputStream.flush()
+            // A connection closed early still ends the read loop normally: never hand a cut-off APK to the installer.
+            if (totalBytes > 0 && bytesDownloaded != totalBytes) {
+                targetFile.delete()
+                return@withContext Result.failure(Exception("Download incomplete ($bytesDownloaded of $totalBytes bytes). Try again."))
+            }
             Result.success(targetFile)
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading APK", e)

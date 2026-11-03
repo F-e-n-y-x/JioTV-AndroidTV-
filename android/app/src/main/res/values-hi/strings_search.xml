@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_speak">बोलें</string>
+    <string name="search_speak_prompt">चैनल या शो का नाम बोलें</string>
+    <string name="search_shows">शो</string>
+    <string name="search_show_now">%1$s, अभी %2$s तक</string>
+    <string name="search_show_next">%1$s, %2$s से शुरू</string>
+    <string name="search_key_search">सर्च बटन</string>
+    <string name="search_hint_speak">बोलें</string>
+</resources>

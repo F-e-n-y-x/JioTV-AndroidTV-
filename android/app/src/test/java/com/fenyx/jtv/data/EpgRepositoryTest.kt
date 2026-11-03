@@ -38,4 +38,26 @@ class EpgRepositoryTest {
         assertEquals(0L, EpgRepository.parseXmltvMillis(null, fmt()))
         assertEquals(0L, EpgRepository.parseXmltvMillis("   ", fmt()))
     }
+
+    private fun at(xmltv: String) = EpgRepository.parseXmltvMillis(xmltv, fmt())
+    private fun show(start: String, stop: String) = EpgProgram("t", "", at(start), at(stop))
+
+    @Test
+    fun istDay_rollsOverAtIndianMidnight() {
+        val day = EpgRepository.istDay(at("20261104000000 +0530"))
+        assertEquals(day - 1, EpgRepository.istDay(at("20261103235959 +0530")))
+        // 20:00 UTC is already the next day in India.
+        assertEquals(day, EpgRepository.istDay(at("20261103200000 +0000")))
+    }
+
+    @Test
+    fun guideDay_isTheDayOfTheMiddleShow_evenWhenTheFirstStartsTheEveningBefore() {
+        val guide = listOf(
+            show("20261103233000 +0530", "20261104010000 +0530"),
+            show("20261104010000 +0530", "20261104120000 +0530"),
+            show("20261104120000 +0530", "20261104233000 +0530"),
+        )
+        assertEquals(EpgRepository.istDay(at("20261104120000 +0530")), EpgRepository.guideDay(guide))
+        assertEquals(null, EpgRepository.guideDay(emptyList()))
+    }
 }

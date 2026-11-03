@@ -33,7 +33,11 @@ class SettingsManager(private val context: Context) {
         private val PLAYER_RESIZE_MODE = intPreferencesKey("player_resize_mode")
         
         // Collapse per-language duplicate channels (e.g. "Star Sports 1 Hindi/Tamil/Telugu") into one.
-        private val GROUP_LANGUAGE_VARIANTS = booleanPreferencesKey("group_language_variants")
+        // _v2: switch grouping back on once for everyone (it was easy to turn off by a stray tap).
+        private val GROUP_LANGUAGE_VARIANTS = booleanPreferencesKey("group_language_variants_v2")
+        // Settings → "Hide channels not in my plan", and the ids Jio answered "not in your plan" (3012) for.
+        private val HIDE_NOT_IN_PLAN = booleanPreferencesKey("hide_not_in_plan")
+        private val NOT_IN_PLAN_IDS = stringPreferencesKey("not_in_plan_ids")
 
         private val EPG_MODE = booleanPreferencesKey("epg_mode")
         // Live TV page: false = list (default), true = grid.
@@ -355,6 +359,27 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setGroupLanguageVariants(enabled: Boolean) {
         context.dataStore.edit { preferences -> preferences[GROUP_LANGUAGE_VARIANTS] = enabled }
+    }
+
+    val hideNotInPlanFlow: Flow<Boolean> = context.dataStore.data.map { it[HIDE_NOT_IN_PLAN] ?: false }.distinctUntilChanged()
+
+    /** Turning it off also forgets the learned ids, so channels a plan upgrade added come back. */
+    suspend fun setHideNotInPlan(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[HIDE_NOT_IN_PLAN] = enabled
+            if (!enabled) preferences.remove(NOT_IN_PLAN_IDS)
+        }
+    }
+
+    val notInPlanIdsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[NOT_IN_PLAN_IDS]?.split('\n')?.filter { it.isNotBlank() }?.toSet().orEmpty()
+    }.distinctUntilChanged()
+
+    suspend fun addNotInPlanChannel(id: String) {
+        context.dataStore.edit { preferences ->
+            val ids = preferences[NOT_IN_PLAN_IDS]?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
+            if (id !in ids) preferences[NOT_IN_PLAN_IDS] = (ids + id).joinToString("\n")
+        }
     }
 
     suspend fun setEpgMode(enabled: Boolean) {

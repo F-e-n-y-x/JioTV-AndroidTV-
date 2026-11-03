@@ -271,9 +271,10 @@ fun TvPlayerScreen(
 
     // Stream auto-recovery: Jio live URLs carry a short-lived Akamai cookie (__hdnea__) that expires
     // after a while, which surfaces as a sudden black screen. On error we re-fetch the stream URL
-    // (which regenerates the cookie). The counter resets every time playback recovers (STATE_READY),
+    // (which regenerates the cookie). The counter resets after a minute of steady playback (STATE_READY),
     // so a long session can recover indefinitely instead of dying after a fixed number of errors.
     val retryCount = remember { mutableIntStateOf(0) }
+    val retryReset = remember { object { var job: kotlinx.coroutines.Job? = null } }
     var streamRefreshTrigger by remember { mutableIntStateOf(0) }
     // Bumping this re-attaches the audio effect (see the buffering watchdog + AudioEnhancer) to kick a
     // stalled AudioTrack alive without touching the stream.
@@ -478,10 +479,16 @@ fun TvPlayerScreen(
                     streamRefreshTrigger++
                 }
                 isBuffering = state == Player.STATE_BUFFERING
+                // Any non-READY state (incl. a stall) means this READY spell wasn't steady.
+                retryReset.job?.cancel()
                 if (state == Player.STATE_READY) {
-                    // Playback recovered -> clear any error and reset the recovery budget so the
-                    // next expiry (minutes/hours later) gets a fresh set of retries.
-                    retryCount.intValue = 0
+                    // Playback recovered -> clear any error. Reset the recovery budget only after a minute
+                    // of steady playback: resetting on every READY let a play-freeze-reload loop run forever
+                    // without ever showing the error.
+                    retryReset.job = scope.launch {
+                        delay(60_000)
+                        retryCount.intValue = 0
+                    }
                     playbackError = null
                 }
             }
@@ -530,7 +537,11 @@ fun TvPlayerScreen(
     // a moment after open, or the hardware-decoder toggle changes), the NEW instance must be given the
     // media source — otherwise it buffers forever until some other change re-triggers this. That was the
     // "loads until I change a setting" bug.
+    // Set while the app is stopped in the background, so error / retry / timer paths don't re-prepare the
+    // stopped player there; the return to the foreground loads a fresh stream.
+    val background = remember { object { var stopped = false } }
     LaunchedEffect(exoPlayer, playingChannel, prefsLoaded, streamRefreshTrigger, activeReplay) {
+        if (background.stopped) return@LaunchedEffect
         val ch = playingChannel
         // Catch-up: replay this programme (from Jio's catch-up CDN) instead of the live stream.
         val cu = activeReplay
@@ -599,6 +610,12 @@ fun TvPlayerScreen(
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(finalUrl)
                     .setMimeType(if (streamData.isMpd) MimeTypes.APPLICATION_MPD else MimeTypes.APPLICATION_M3U8)
+                    // What the MediaSession shows ("now playing"). Live: the channel only, since a show title
+                    // set here would go stale at the next programme (no reload). Catch-up: the replayed show.
+                    .setMediaMetadata(androidx.media3.common.MediaMetadata.Builder().apply {
+                        val name = currentChannel?.name ?: ch.name
+                        if (cu != null) setTitle(cu.title).setArtist(name) else setTitle(name)
+                    }.build())
                     // Play ~20s behind the live edge so brief network/CDN jitter is absorbed by the
                     // buffer instead of starving the player and causing a rebuffer (the "loading").
                     .setLiveConfiguration(
@@ -683,7 +700,10 @@ fun TvPlayerScreen(
                     else PlayerError(R.string.player_err_all_refused, ErrorAction.Retry, ErrorAction.Settings)
                 } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelBlockedException) {
                     isBuffering = false
-                    playbackError = PlayerError(R.string.player_err_not_provided, ErrorAction.NextChannel, ErrorAction.Retry)
+                    playbackError = PlayerError(
+                        if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelNotInPlanException) R.string.error_not_in_plan
+                        else R.string.player_err_not_provided,
+                        ErrorAction.NextChannel, ErrorAction.Retry)
                 } else if (fetchEx is com.fenyx.jtv.data.JioApiClient.ChannelUnavailableException) {
                     isBuffering = false
                     playbackError = PlayerError(R.string.player_err_offline, ErrorAction.Retry, ErrorAction.NextChannel)
@@ -750,7 +770,8 @@ fun TvPlayerScreen(
     // keeps rewriting requests with a valid token. Playback never sees a 403 -> no reload, no buffering.
     // Catch-up: keyed on the replay too, and it asks geturl for the SAME catch-up programme, so a
     // replay's token is only ever refreshed from a replay URL (never swapped for the live stream's).
-    LaunchedEffect(playingChannel, activeReplay) {
+    // Also keyed on the reload trigger, so a loop that stopped on a tokenless URL restarts after a reload.
+    LaunchedEffect(exoPlayer, playingChannel, activeReplay, streamRefreshTrigger) {
         val ch = playingChannel ?: return@LaunchedEffect
         val cu = activeReplay
         while (true) {
@@ -764,7 +785,8 @@ fun TvPlayerScreen(
 
             // Nothing is playing while an error is on screen (e.g. "sign-in expired"); polling then
             // only re-runs failing refreshes every minute. The user's OK press reloads the stream.
-            if (playbackError != null) continue
+            // Same when the player is stopped (background / standby): the return loads a fresh stream.
+            if (playbackError != null || exoPlayer.playbackState == Player.STATE_IDLE) continue
             val authData = settingsManager.authDataFlow.first() ?: continue
             val res = if (cu != null) com.fenyx.jtv.data.JioApiClient.getStreamUrl(
                 context, cu.channelNumber.toString(), authData, catchup = cu.toParams(), useCache = false
@@ -778,10 +800,13 @@ fun TvPlayerScreen(
                 // that file, so only take it when it is the same file (never reload mid-programme).
                 // Catch-up: likewise only for the same replay file.
                 if ((vodItem || cu != null) && newUrl.substringBefore('?') != streamBase.get()) continue
-                if (newToken.isNotEmpty()) {
-                    tokenHolder.set(newToken)
-                    android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
+                if (newToken.isEmpty()) {
+                    // This channel's URLs carry no expiring token, so there is nothing to keep fresh.
+                    android.util.Log.d("TvPlayer", "No token on channel ${ch.channelNumber}; stopping refresh loop")
+                    return@LaunchedEffect
                 }
+                tokenHolder.set(newToken)
+                android.util.Log.d("TvPlayer", "Token refreshed for channel ${ch.channelNumber}")
             }
         }
     }
@@ -885,12 +910,22 @@ fun TvPlayerScreen(
     // the background, and resume when it returns to the foreground (unless the user had paused).
     val userPausedState = rememberUpdatedState(userPaused)
     DisposableEffect(lifecycleOwner, exoPlayer) {
+        // A paused live stream keeps its old buffer and token, so after standby it would replay stale video
+        // and then fail. Stop it instead and load a fresh stream (new URL, token, live edge) on return.
+        // A user pause or PiP (the video stays on screen) keeps the old pause-only behaviour.
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> exoPlayer.pause()
-                Lifecycle.Event.ON_START -> if (!userPausedState.value) {
-                    exoPlayer.play()
-                    if (!mini) ui.showBanner()
+                Lifecycle.Event.ON_STOP ->
+                    if (userPausedState.value || Pip.inPip.value || Pip.entering.value) exoPlayer.pause()
+                    else {
+                        exoPlayer.stop()
+                        background.stopped = true
+                    }
+                Lifecycle.Event.ON_START -> {
+                    // The load effect re-runs on the trigger (fresh URL) and keeps Settings-on-top silent.
+                    if (background.stopped) { background.stopped = false; streamRefreshTrigger++ }
+                    else if (!userPausedState.value) exoPlayer.play()
+                    if (!userPausedState.value && !mini) ui.showBanner()
                 }
                 else -> {}
             }
@@ -1142,6 +1177,28 @@ fun TvPlayerScreen(
         retryCount.intValue = 0
         isBuffering = true
         streamRefreshTrigger++
+    }
+
+    // MediaSession while the player is up: Google Assistant ("pause"), headset / Bluetooth media keys and
+    // the Android TV "now playing" card. Media keys the player's own key handling consumes never reach it;
+    // D-pad / OK aren't media keys. Play / pause go through setPaused, so they count as a user pause.
+    val sessionCalls = rememberUpdatedState(object {
+        fun paused(p: Boolean) = setPaused(p)
+        fun retry() = doRetry()
+    })
+    DisposableEffect(exoPlayer) {
+        val player = object : androidx.media3.common.ForwardingPlayer(exoPlayer) {
+            override fun play() = sessionCalls.value.paused(false)
+            override fun pause() = sessionCalls.value.paused(true)
+            override fun setPlayWhenReady(playWhenReady: Boolean) = sessionCalls.value.paused(!playWhenReady)
+            override fun stop() = sessionCalls.value.paused(true)
+            // Play from idle (stopped / error): load a fresh URL and token, never the stale source.
+            override fun prepare() = sessionCalls.value.retry()
+        }
+        val session = androidx.media3.session.MediaSession.Builder(context, player)
+            .setId("jtv-player-${System.identityHashCode(exoPlayer)}")
+            .build()
+        onDispose { session.release() }
     }
 
     fun openBrowse() {
@@ -1784,7 +1841,8 @@ fun TvPlayerScreen(
         ) {
             // The ONE video surface: always the first child, in every mode (full, portrait page, mini),
             // so it is never recreated; only its box changes (layout phase). Everything else draws over it.
-            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode).pipSourceRect(activity, enabled = !isTv && !inPip), currentChannel)
+            VideoSurface(exoPlayer, resizeMode, Modifier.videoBox(videoMode).pipSourceRect(activity, enabled = !isTv && !inPip), currentChannel,
+                keepScreenOn = !userPaused && playbackError == null && !replayEnded)
 
             val name = currentChannel?.name
             val buffering = isBuffering && playbackError == null
@@ -1892,7 +1950,7 @@ fun TvPlayerScreen(
 /** The video. Its own composable so overlay changes never recompose (or re-layout) the PlayerView. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier, channel: Channel? = null) {
+private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier, channel: Channel? = null, keepScreenOn: Boolean = true) {
     // Debuggable builds only: a "novideo" file in the app's external files dir replaces the picture with
     // a neutral placeholder, so UI screenshots for the README never contain channel video.
     val ctx0 = LocalContext.current
@@ -1926,7 +1984,6 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier,
                 PlayerView(ctx).apply {
                     this.player = if (noVideo) null else player
                     useController = false
-                    keepScreenOn = true
                     clipChildren = false
                     clipToPadding = false
                     setBackgroundColor(android.graphics.Color.BLACK)
@@ -1936,6 +1993,8 @@ private fun VideoSurface(player: ExoPlayer, resizeMode: Int, modifier: Modifier,
             },
             update = { view ->
                 playerViewRef = view
+                // Let the TV sleep / screensaver run on a user pause, an error or the replay-ended prompt.
+                view.keepScreenOn = keepScreenOn
                 if (!noVideo && view.player !== player) {
                     view.player = player
                 }

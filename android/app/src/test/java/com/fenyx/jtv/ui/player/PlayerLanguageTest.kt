@@ -52,6 +52,20 @@ class PlayerLanguageTest {
         assertEquals(listOf("a:hi" to "Hindi", "a:en" to "English", "c:2" to "Tamil"), r.options)
     }
 
+    @Test fun unsuffixedFeedUsesItsLanguageNotDefault() {
+        // History TV18 HD (146, English) + its Hindi feed (578) whose stream carries en/hi/ta/te.
+        val variants = listOf(
+            ChannelLanguage.Variant(null, Channel("146", "History TV18 HD", "", "Infotainment", "", language = "English")),
+            ChannelLanguage.Variant("hi", Channel("578", "History TV18 HD Hindi", "", "Infotainment", "", language = "Hindi")),
+        )
+        val tracks = listOf("en", "hi", "ta", "te").mapIndexed { i, l -> StreamAudio(i, l, null, l == "hi") }
+        val r = buildLanguageChoices(tracks, variants, "578", "hi", "Hindi")
+        assertEquals(listOf("en", "hi", "ta", "te"), r.options.map { it.first.removePrefix("a:") })
+        // Playing 146 itself: the English feed, siblings named by language, no "Default".
+        val r2 = buildLanguageChoices(listOf(StreamAudio(0, "en", null, true)), variants, "146", null, "English")
+        assertEquals(listOf("a:en" to "English", "c:578" to "Hindi"), r2.options)
+    }
+
     @Test fun unnamedTrackOfLanguageFeedTakesItsLanguage() {
         val variants = listOf(ChannelLanguage.Variant("hi", ch("1")), ChannelLanguage.Variant("ta", ch("2")))
         val r = buildLanguageChoices(listOf(StreamAudio(0, null, null, true)), variants, "1", "hi", "Hindi")

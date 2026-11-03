@@ -5,10 +5,10 @@ import { Readable } from "node:stream";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { getChannels, type Channel } from "../jio/channels";
 import { getNativeEpg } from "../jio/epg";
-import { getPlaybackInfo, proxyUpstream, rewriteManifest } from "../proxy/streamProxy";
+import { getPlaybackInfo, proxyUpstream, proxyLicense, rewriteManifest, rewriteMpdForPlayer, manifestDir } from "../proxy/streamProxy";
 import { isExtraChannel, getExtraChannelSync, getExtraChannel } from "../jio/extraChannels";
 import { getFavorites, hasCode, getDrmOnlyChannelIds } from "../store/db";
-import { filterPlaylistChannels } from "./playlistFilter";
+import { filterPlaylistChannels, needsWidevine } from "./playlistFilter";
 import { isAuthEnabled, envServerToken, getEpgConfig } from "../store/settings";
 import { baseUrl } from "../util/baseUrl";
 
@@ -16,14 +16,19 @@ import { baseUrl } from "../util/baseUrl";
  * Public (access-code authenticated) endpoints for external IPTV players — VLC, TiviMate, OTT
  * Navigator, Kodi. Unlike the browser player (cookie/admin session) these are reachable with a `?code=`
  * query param so a TV app or player with no cookie jar can use them. When server auth is disabled the
- * code is not required. Only the non-DRM (HLS) channels are servable here — DRM/Widevine channels can't
- * be decrypted by generic players, so `/live` returns 415 for them.
+ * code is not required. DRM/Widevine channels are served only to the `drm=1` playlist (Kodi-style
+ * KODIPROP entries: `/live/:id.mpd` + `/dash/...` segments + `/license/:id`); a plain `.m3u8` request
+ * for one gets a 415.
  */
 
 /** True when the request carries a valid access code (or auth is disabled entirely). */
 function codeOk(req: FastifyRequest): boolean {
+  return codeValid(String((req.query as Record<string, unknown>).code ?? ""));
+}
+
+function codeValid(raw: string): boolean {
   if (!isAuthEnabled()) return true;
-  const code = String((req.query as Record<string, unknown>).code ?? "").trim();
+  const code = raw.trim();
   const env = envServerToken();
   return (!!env && code === env) || hasCode(code) || hasCode(code.toUpperCase());
 }
@@ -59,14 +64,15 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     const includeEpg = q.epg === "1" || q.epg === "true";
     const enableCatchup = q.catchup === "1" || q.catchup === "true";
     const hideDrm = q.drm === "hide" || q.drm === "0" || q.drm === "false";
+    // `drm=1`: Widevine channels become Kodi-style DASH entries (KODIPROP license lines). Opt-in, so
+    // players without Widevine (VLC, most phones) keep getting the plain list.
+    const withDrm = q.drm === "1" || q.drm === "true" || q.drm === "widevine";
     const quality = String(q.quality ?? "auto").toLowerCase();
 
     const all = await getChannels();
     const favs = onlyFav ? new Set(getFavorites()) : null;
-    const channels = filterPlaylistChannels(all, {
-      langs, groups, favs, hideDrm,
-      drmOnlyIds: hideDrm ? getDrmOnlyChannelIds() : new Set(),
-    });
+    const drmOnlyIds = hideDrm || withDrm ? getDrmOnlyChannelIds() : new Set<string>();
+    const channels = filterPlaylistChannels(all, { langs, groups, favs, hideDrm, drmOnlyIds });
 
     const base = baseUrl(req);
     const codeQ = code ? `&code=${encodeURIComponent(code)}` : "";
@@ -81,7 +87,8 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     for (const c of channels) {
       const extra = isExtraChannel(c.id) ? getExtraChannelSync(c.id) : undefined;
       const isMpd = extra ? extra.isMpd : false;
-      const streamExt = isMpd ? "mpd" : "m3u8";
+      const widevine = withDrm && !extra && needsWidevine(c, drmOnlyIds);
+      const streamExt = isMpd || widevine ? "mpd" : "m3u8";
       const streamUrl = `${base}/live/${encodeURIComponent(c.id)}.${streamExt}?ts=1${codeQ}${qualityQ}`;
       // Only channels Jio actually keeps a catch-up archive for get the catch-up attributes.
       const catchupAttr = enableCatchup && c.isCatchup
@@ -93,6 +100,16 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
         lines.push("#KODIPROP:inputstream.adaptive.manifest_type=mpd");
         lines.push("#KODIPROP:inputstream.adaptive.license_type=clearkey");
         lines.push(`#KODIPROP:inputstream.adaptive.license_key=${extra.licenseKey}`);
+      } else if (widevine) {
+        // Kodi license_key = url|headers|body|response: raw challenge (R{SSM}) in, raw license out.
+        // The URL is our license proxy; Jio's tokens never appear in the playlist.
+        lines.push("#KODIPROP:inputstream=inputstream.adaptive");
+        lines.push("#KODIPROP:inputstream.adaptive.manifest_type=mpd");
+        lines.push("#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha");
+        lines.push(
+          `#KODIPROP:inputstream.adaptive.license_key=${base}/license/${encodeURIComponent(c.id)}` +
+            `${code ? `?code=${encodeURIComponent(code)}` : ""}|Content-Type=application/octet-stream|R{SSM}|`
+        );
       }
       lines.push(
         `#EXTINF:-1 tvg-id="${attr(c.id)}" tvg-name="${attr(c.name)}" ${chnoAttr}tvg-logo="${attr(c.logoUrl)}" ` +
@@ -165,9 +182,19 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     try {
       const info = await getPlaybackInfo(key);
       if (info.isMpd) {
-        return reply
-          .code(415)
-          .send("# This channel is DRM (Widevine) and cannot be played in external players. Use the web player or the TV app.");
+        // Only the `drm=1` playlist asks for `.mpd`, together with the KODIPROP license lines.
+        if (!/\.mpd$/i.test(req.params.id)) {
+          return reply
+            .code(415)
+            .send("# This channel is DRM (Widevine). Use the playlist with drm=1 in a Widevine player (Kodi, TiviMate, OTT Navigator), the web player or the TV app.");
+        }
+        const upstream = await proxyUpstream(key, info.manifestUrl);
+        if (!upstream.ok) return reply.code(502).send(`# Upstream manifest failed (HTTP ${upstream.status})`);
+        const proxyDir = `${baseUrl(req)}/dash/${code ? encodeURIComponent(code) : "-"}/${encodeURIComponent(key)}/`;
+        reply.header("content-type", "application/dash+xml");
+        reply.header("x-content-type-options", "nosniff");
+        reply.header("content-security-policy", "sandbox");
+        return reply.send(rewriteMpdForPlayer(await upstream.text(), info.manifestUrl, proxyDir));
       }
       const upstream = await proxyUpstream(key, info.manifestUrl);
       const ct = upstream.headers.get("content-type") ?? "application/vnd.apple.mpegurl";
@@ -210,17 +237,56 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
         return reply.send(rewritten ?? text);
       }
 
-      reply.code(upstream.status);
-      for (const h of ["content-type", "content-length", "accept-ranges", "content-range"]) {
-        const v = upstream.headers.get(h);
-        if (v) reply.header(h, v);
-      }
-      if (!upstream.body) return reply.send();
-      return reply.send(Readable.fromWeb(upstream.body as any));
+      return pipeUpstream(reply, upstream);
     } catch (err) {
       return reply.code(502).send({ error: (err as Error).message });
     }
   });
+
+  // ── DASH segments for the `drm=1` entries ──
+  // The rewritten MPD's BaseURL points here. The code sits in the PATH because players resolve the
+  // relative segment names against the BaseURL, which would drop a query string. The path after the
+  // key is resolved against the channel's real manifest directory; proxyUpstream keeps it on Jio hosts.
+  app.get<{ Params: { code: string; key: string } }>("/dash/:code/:key/*", { logLevel: "warn" }, async (req, reply) => {
+    if (!codeValid(decodeURIComponent(req.params.code))) {
+      return reply.code(401).send({ error: "Invalid or missing access code" });
+    }
+    const key = req.params.key;
+    if (isExtraChannel(key)) return reply.code(404).send({ error: "Not a Jio DRM channel" });
+    try {
+      const info = await getPlaybackInfo(key);
+      // Raw path + query after `/dash/<code>/<key>/`, exactly as the player built it.
+      const rest = req.url.split("/").slice(4).join("/");
+      const target = new URL(rest, manifestDir(info.manifestUrl)).toString();
+      const upstream = await proxyUpstream(key, target, req.headers["range"] as string | undefined);
+      reply.header("x-content-type-options", "nosniff");
+      reply.header("content-security-policy", "sandbox");
+      return pipeUpstream(reply, upstream);
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+
+  // ── Widevine license proxy for the `drm=1` entries (Kodi `license_key`, raw challenge in/out) ──
+  app.post<{ Params: { key: string } }>(
+    "/license/:key",
+    // A player asks once per channel start (plus key rotations): 60/min per client is plenty, and
+    // keeps a leaked code from hammering Jio's license server with this account.
+    { config: { rateLimit: { max: 60, timeWindow: "1 minute" } }, bodyLimit: 64 * 1024, preHandler: requireCode },
+    async (req, reply) => {
+      const challenge = req.body;
+      if (!Buffer.isBuffer(challenge) || challenge.length === 0) {
+        return reply.code(400).send({ error: "Send the raw Widevine challenge as the request body" });
+      }
+      if (isExtraChannel(req.params.key)) return reply.code(404).send({ error: "Not a Jio DRM channel" });
+      try {
+        reply.header("content-type", "application/octet-stream");
+        return reply.send(await proxyLicense(req.params.key, challenge));
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    }
+  );
 
   // ── XMLTV guide for external players ──
   app.get("/epg.xml", { preHandler: requireCode }, async (req, reply) => {
@@ -269,6 +335,17 @@ export function acceptsGzip(header: string | string[] | undefined): boolean {
     if (!q || Number(q.slice(2)) > 0) return true;
   }
   return false;
+}
+
+/** Streams an upstream media response through with its status and range headers. */
+function pipeUpstream(reply: FastifyReply, upstream: Response) {
+  reply.code(upstream.status);
+  for (const h of ["content-type", "content-length", "accept-ranges", "content-range"]) {
+    const v = upstream.headers.get(h);
+    if (v) reply.header(h, v);
+  }
+  if (!upstream.body) return reply.send();
+  return reply.send(Readable.fromWeb(upstream.body as any));
 }
 
 /** Streams a file with its length. Opened first, so a rebuild renaming a new file over it mid-send

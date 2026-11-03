@@ -91,6 +91,8 @@
     <!-- Channels -->
     <string name="settings_group_languages">एक चैनल की सभी भाषाएँ साथ रखें</string>
     <string name="settings_group_languages_desc">हर चैनल एक बार दिखेगा; देखते समय भाषा चुनें</string>
+    <string name="settings_hide_not_in_plan">जो चैनल मेरे प्लान में नहीं हैं, उन्हें छिपाएँ</string>
+    <string name="settings_hide_not_in_plan_desc">पैसे वाले ऐड-ऑन चैनल और वे चैनल छिपाता है जिन्हें Jio ने आपके प्लान से बाहर बताया</string>
 
     <!-- Favourites backup -->
     <string name="settings_backup_save">फ़ेवरेट का बैकअप लें</string>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_speak">Speak</string>
+    <string name="search_speak_prompt">Say a channel or show name</string>
+    <string name="search_shows">Shows</string>
+    <!-- Show search row: "Channel name, on till 9:00 PM" (now) / "Channel name, starts 9:00 PM" (next). -->
+    <string name="search_show_now">%1$s, on till %2$s</string>
+    <string name="search_show_next">%1$s, starts %2$s</string>
+    <string name="search_key_search">Search key</string>
+    <string name="search_hint_speak">speak</string>
+</resources>

@@ -91,6 +91,8 @@
     <!-- Channels -->
     <string name="settings_group_languages">Group languages together</string>
     <string name="settings_group_languages_desc">One entry per channel; pick the language while watching</string>
+    <string name="settings_hide_not_in_plan">Hide channels not in my plan</string>
+    <string name="settings_hide_not_in_plan_desc">Hides paid add-on channels and channels Jio said are not in your plan</string>
 
     <!-- Favourites backup -->
     <string name="settings_backup_save">Back up favourites</string>

@@ -92,6 +92,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val channelGrid by settingsManager.channelGridFlow.collectAsState(initial = false)
     val browserPanel by settingsManager.playerBrowserPanelFlow.collectAsState(initial = true)
     val groupLanguageVariants by settingsManager.groupLanguageVariantsFlow.collectAsState(initial = true)
+    val hideNotInPlan by settingsManager.hideNotInPlanFlow.collectAsState(initial = false)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
     val serverUrl by settingsManager.serverUrlFlow.collectAsState(initial = "")
     val themeMode by settingsManager.themeModeFlow.collectAsState(initial = null)
@@ -280,6 +281,10 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         add(SRow.Item("variants", stringResource(R.string.settings_group_languages), value = onOff(groupLanguageVariants),
             description = stringResource(R.string.settings_group_languages_desc)) {
             scope.launch { settingsManager.setGroupLanguageVariants(!groupLanguageVariants) }
+        })
+        add(SRow.Item("notInPlan", stringResource(R.string.settings_hide_not_in_plan), value = onOff(hideNotInPlan),
+            description = stringResource(R.string.settings_hide_not_in_plan_desc)) {
+            scope.launch { settingsManager.setHideNotInPlan(!hideNotInPlan) }
         })
 
         add(SRow.Section(stringResource(R.string.settings_section_backup)))

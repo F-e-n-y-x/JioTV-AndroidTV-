@@ -16,7 +16,7 @@ Android TV app — and a full JioTV experience in any browser.
 | Stream type | Web player | External players (M3U) | Notes |
 |---|---|---|---|
 | **Non-DRM HLS** (most channels) | ✅ over **plain HTTP** | ✅ | Played with **hls.js** (software AES-128), so no HTTPS/Web-Crypto needed. The AES key is fetched with the license headers the key host expects. |
-| **DRM DASH / Widevine** (some premium) | ✅ over **HTTPS** only | ❌ | Browser Widevine needs a secure context — use the HTTPS URL. Generic players can't decrypt Widevine. |
+| **DRM DASH / Widevine** (some premium) | ✅ over **HTTPS** only | ✅ with `drm=1`, Widevine players only | Browser Widevine needs a secure context — use the HTTPS URL. External: Kodi (inputstream.adaptive), TiviMate, OTT Navigator. VLC can't decrypt Widevine. |
 
 The web player uses **hls.js** for non-DRM HLS (works on `http://<lan-ip>`) and **Shaka Player** for
 DRM DASH. Every manifest/segment/key is proxied through the server so the browser never talks to the
@@ -136,8 +136,9 @@ proxies sit; direct internet clients can't spoof them. It also accepts `true` (t
 or a list of proxy IPs/CIDRs.
 
 Rate limits (per client IP): admin login / setup / OTP verify / `/api/credentials` 10 per minute,
-OTP send 5/min, `/api/refresh` and `/api/admin/refresh` 10/min, `/playlist.m3u` 30/min. Streaming
-(`/live`, `/seg`, `/api/proxy`) is not limited. Access codes are masked (`code=[redacted]`) in logs,
+OTP send 5/min, `/api/refresh` and `/api/admin/refresh` 10/min, `/playlist.m3u` 30/min, `/license` 60/min. Streaming
+(`/live`, `/seg`, `/dash`, `/api/proxy`) is not limited. Access codes are masked (`code=[redacted]`,
+`/dash/[redacted]/…`) in logs,
 and Docker logs rotate at 3 × 10 MB.
 
 New TV access codes must be **6–12** characters; older 4–5 character codes keep working.
@@ -162,8 +163,9 @@ quality, favourites-only, EPG guide and catch-up**, then paste it into your play
 http://<host>:29180/playlist.m3u?code=<accesscode>&lang=Hindi,English&group=News&quality=720&epg=1&catchup=1
 ```
 
-Only **non-DRM** channels are servable to external players (DRM/Widevine can't be decrypted by
-generic apps). EPG works best with an **XMLTV** source selected.
+By default only **non-DRM** channels play in external players. Add `drm=1` for Widevine players
+(Kodi with inputstream.adaptive, TiviMate, OTT Navigator); see *Playlist options* below. EPG works best
+with an **XMLTV** source selected.
 
 ## Local dev (Node 22+)
 
@@ -202,7 +204,10 @@ Machine/player endpoints use a **TV access code** (bearer header or `?code=`).
 | GET  | `/api/credentials` | **code** | **TVs pull the shared AuthData here** |
 | GET  | `/playlist.m3u` | **code** | M3U playlist for external players |
 | GET  | `/live/:id.m3u8` | **code** | Resolve + proxy a channel (HLS, quality/catch-up) |
+| GET  | `/live/:id.mpd` | **code** | Rewritten Widevine DASH manifest (`drm=1` entries) |
 | GET  | `/seg` | **code** | Segment/key proxy for external players |
+| GET  | `/dash/:code/:id/*` | **code (in path)** | DASH segment proxy for `drm=1` entries |
+| POST | `/license/:id` | **code** | Widevine license proxy for external players (raw challenge in/out, 60/min) |
 | GET  | `/epg.xml` · `/epg.xml.gz` | **code** | XMLTV guide for external players (native guide streamed from `DATA_DIR/epg.xml.gz`) |
 | POST | `/api/reports` | **code** | TV app uploads a crash / ANR report (redacted again on receipt) |
 | GET/DELETE | `/api/admin/reports…` | cookie | Last 50 problem reports (also shown on the Account page) |
@@ -214,6 +219,24 @@ Machine/player endpoints use a **TV access code** (bearer header or `?code=`).
   proxy checks whether Jio's non-DRM HLS works; if only the DASH does, it stores mode `drm` in the
   `stream_modes` SQLite table (`hls` otherwise). `drm=hide` hides the `drm` ones. A channel nobody has
   played yet is still listed; once a player gets the 415 from `/live` it is hidden from the next refresh.
+- `drm=1` (opt-in; off by default so VLC and other non-Widevine players keep the plain list) turns the
+  same learned Widevine channels into Kodi-style DASH entries instead of hiding them:
+
+  ```
+  #KODIPROP:inputstream=inputstream.adaptive
+  #KODIPROP:inputstream.adaptive.manifest_type=mpd
+  #KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha
+  #KODIPROP:inputstream.adaptive.license_key=http://<host>:29180/license/<id>?code=<code>|Content-Type=application/octet-stream|R{SSM}|
+  #EXTINF:-1 tvg-id="<id>" … ,<name>
+  http://<host>:29180/live/<id>.mpd?ts=1&code=<code>
+  ```
+
+  The playlist never contains Jio tokens. `/live/<id>.mpd` returns Jio's manifest with its BaseURL
+  pointed at `/dash/<code>/<id>/` (the code is in the path because players drop a BaseURL's query when
+  resolving segment names); the server adds the `__hdnea__` cookie on the way to Jio's CDN.
+  `/license/<id>` forwards the raw challenge to Jio's license server with the account headers, only to
+  Jio hosts. A DRM channel that hasn't been learned yet stays a plain `.m3u8` entry until its first
+  play (which answers 415 and learns it); refresh the playlist after that.
 - The native XMLTV guide is built lazily on the first `/epg.xml` request, written through gzip straight
   to `DATA_DIR/epg.xml.gz` (never held in memory), reused after a restart and rebuilt every 6 h while
   players keep asking. `/epg.xml` is sent with `Content-Encoding: gzip` when the client accepts it.

@@ -22,8 +22,8 @@ android {
         applicationId = "com.fenyx.jtv"
         minSdk = 24          // Android 7.0 — comfortably covers the user's Android 10 TV
         targetSdk = 36       // Android 16 (latest)
-        versionCode = 231   // v2 track (2.0-beta.x = 200..); stable 1.5.x stays below
-        versionName = "2.0-beta.31"
+        versionCode = 232   // v2 track (2.0-beta.x = 200..); stable 1.5.x stays below
+        versionName = "2.0-beta.32"
     }
 
     signingConfigs {
@@ -136,6 +136,8 @@ dependencies {
   // androidx.compose.foundation 1.7+, which we use directly (LazyColumn/LazyVerticalGrid +
   // Modifier.focusRestorer). Only androidx.tv.material3 is needed for TV-tuned components.
   implementation(libs.androidx.tv.material)
+  // "Continue watching" on the Android TV home screen (data/WatchNext.kt).
+  implementation(libs.androidx.tvprovider)
 
   // Media3 ExoPlayer
   implementation(libs.androidx.media3.exoplayer)
@@ -146,6 +148,7 @@ dependencies {
   implementation(libs.androidx.media3.datasource.okhttp)
   implementation(libs.okhttp)
   implementation(libs.androidx.media3.ui)
+  implementation(libs.androidx.media3.session)
 
   // DataStore
   implementation(libs.androidx.datastore.preferences)

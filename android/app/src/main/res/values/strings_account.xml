@@ -21,6 +21,7 @@
     <string name="setup_connect">Connect</string>
     <string name="setup_connecting">Connecting…</string>
     <string name="setup_error_enter_url">Enter the server address.</string>
+    <string name="setup_error_invalid_url">That address is not valid. Example: 192.168.1.10:29180</string>
     <string name="setup_error_enter_code">Enter your access code.</string>
     <string name="setup_error_connection_failed">Could not connect. Try again.</string>
     <string name="setup_servers_nearby">Servers on your network</string>
@@ -39,6 +40,7 @@
     <string name="error_server_http">The server sent an error (%d).</string>
     <string name="error_server_no_login">The server is not signed in yet. Sign in on the server first.</string>
     <string name="error_server_unreachable">Could not reach the server. Check the address and your internet.</string>
+    <string name="error_not_in_plan">This channel isn\'t in your Jio plan.</string>
 
     <!-- Sign in with Jio number (ui/login/LoginScreen.kt) -->
     <string name="login_title_number">Sign in with your Jio number</string>

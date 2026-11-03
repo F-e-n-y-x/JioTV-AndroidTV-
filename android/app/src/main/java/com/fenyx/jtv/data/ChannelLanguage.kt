@@ -52,6 +52,9 @@ object ChannelLanguage {
      * ("Star Sports 1 Hindi HD") is preserved on the base so HD and SD feeds never merge.
      * Returns langCode = null (and base = full name) when no trailing language token is present.
      */
+    /** Code for a language name as Jio writes it ("English" -> "en"), or null. */
+    fun codeFor(languageName: String?): String? = languageName?.trim()?.lowercase()?.let { LANG_TOKENS[it] }
+
     fun detect(name: String): LangInfo {
         val parts = name.trim().split(Regex("\\s+")).toMutableList()
         if (parts.size < 2) return LangInfo(name.trim(), null)

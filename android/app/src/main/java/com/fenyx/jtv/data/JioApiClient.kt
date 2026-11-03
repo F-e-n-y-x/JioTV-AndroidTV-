@@ -79,7 +79,8 @@ object JioApiClient {
     private const val PROACTIVE_RETRY_GAP_MS = 10 * 60 * 1000L
 
     /** Refresh the 12 h access token once it has less than this left, while it's still valid. */
-    private const val ACCESS_TOKEN_REFRESH_LEAD_SEC = 2 * 60 * 60L
+    // Must exceed TokenRefreshScheduler's 3 h interval, or the token can expire between two checks.
+    private const val ACCESS_TOKEN_REFRESH_LEAD_SEC = 4 * 60 * 60L
 
     /** `exp` claim (epoch seconds) of a JWT, or 0 when it can't be read. */
     fun jwtExpirySec(token: String): Long = try {
@@ -91,7 +92,15 @@ object JioApiClient {
     }
 
     /** Jio refused this one channel (geturl 403 even with fresh credentials). Not a login problem. */
-    class ChannelBlockedException(message: String) : Exception(message)
+    open class ChannelBlockedException(message: String) : Exception(message)
+
+    /** geturl 403 with Jio code 3012 "No eligible plans found": the account's plan doesn't include this channel. */
+    class ChannelNotInPlanException(val ui: com.fenyx.jtv.i18n.UiText) :
+        ChannelBlockedException("This channel isn't in your Jio plan.")
+
+    /** A geturl 403 body saying the channel isn't in the user's plan (code 3012). */
+    internal fun isNotInPlanBody(body: String): Boolean =
+        body.contains("No eligible plans", ignoreCase = true) || Regex("\"code\"\\s*:\\s*\"?3012\\b").containsMatchIn(body)
 
     /**
      * Jio refused several different channels in a row, even after a credential refresh: the account or
@@ -596,6 +605,7 @@ object JioApiClient {
                     stbNumber = obj.optInt("stbNumber", 0),
                     isPremium = obj.optBoolean("isPremium", false),
                     planType = obj.optString("planType", ""),
+                    businessType = obj.optString("businessType", ""),
                     aspectRatio = obj.optString("aspectRatio", "")
                 ))
             }
@@ -636,8 +646,11 @@ object JioApiClient {
         return cacheFile.exists() && System.currentTimeMillis() - cacheFile.lastModified() < CHANNEL_CACHE_TTL_MS
     }
 
-    /** Jio's v3.1 list came back empty: an outage, never something to cache as the channel list. */
-    internal fun useStaleCache(v31Count: Int): Boolean = v31Count == 0
+    /**
+     * Jio's v3.1 list came back empty, or it or the category dictionary failed part-way: an outage,
+     * never something to cache as the channel list.
+     */
+    internal fun useStaleCache(v31Count: Int, complete: Boolean = true): Boolean = v31Count == 0 || !complete
 
     /**
      * @param forceNetwork when true, skip the fresh-cache shortcut and always fetch from the network
@@ -655,6 +668,7 @@ object JioApiClient {
 
             // Fetch dictionary
             var categoryMap = mapOf<String, String>()
+            var dictOk = false
             try {
                 val dictUrl = URL("https://jiotvapi.cdn.jio.com/apis/v1.3/dictionary/dictionary?langId=6")
                 val dictConn = dictUrl.openConnection() as HttpURLConnection
@@ -680,6 +694,7 @@ object JioApiClient {
                     reader.endObject()
                     reader.close()
                     categoryMap = map
+                    dictOk = true
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch dictionary", e)
@@ -687,7 +702,8 @@ object JioApiClient {
 
             val finalChannelsMap = mutableMapOf<Int, Channel>()
 
-            fun parseChannels(urlStr: String, into: MutableMap<Int, Channel>) {
+            /** False when the download or parse failed, possibly after [into] got part of the list. */
+            fun parseChannels(urlStr: String, into: MutableMap<Int, Channel>): Boolean {
                 try {
                     val conn = URL(urlStr).openConnection() as HttpURLConnection
                     conn.connectTimeout = 10000; conn.readTimeout = 15000
@@ -711,6 +727,7 @@ object JioApiClient {
                                     var stb = 0
                                     var isPremium = false
                                     var planType = ""
+                                    var businessType = ""
                                     var aspectRatio = ""
                                     while (reader.hasNext()) {
                                         when (reader.nextName()) {
@@ -724,6 +741,7 @@ object JioApiClient {
                                             "stbChannelNumber" -> stb = try { reader.nextInt() } catch(e: Exception) { reader.nextString().toIntOrNull() ?: 0 }
                                             "is_premium" -> isPremium = try { reader.nextBoolean() } catch(e: Exception) { reader.nextString().toBoolean() }
                                             "plan_type" -> planType = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
+                                            "business_type" -> businessType = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
                                             "aspectRatio" -> aspectRatio = try { reader.nextString() } catch(e: Exception) { reader.skipValue(); "" }
                                             else -> reader.skipValue()
                                         }
@@ -743,6 +761,7 @@ object JioApiClient {
                                             stbNumber = stb.coerceAtLeast(0),
                                             isPremium = isPremium,
                                             planType = planType,
+                                            businessType = businessType,
                                             aspectRatio = aspectRatio
                                         )
                                     }
@@ -754,10 +773,12 @@ object JioApiClient {
                         }
                         reader.endObject()
                         reader.close()
+                        return true
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to fetch channels from $urlStr", e)
                 }
+                return false
             }
 
             // Jio's current list is v3.1; v1.4 only contributes the few allow-listed ids that still play
@@ -765,9 +786,11 @@ object JioApiClient {
             val v14 = mutableMapOf<Int, Channel>()
             val v31 = mutableMapOf<Int, Channel>()
             val zee = mutableListOf<Channel>()
+            var v31Ok = false
+            var v14Ok = false
             kotlinx.coroutines.coroutineScope {
-                launch(Dispatchers.IO) { parseChannels(ChannelSources.V31_URL, v31) }
-                launch(Dispatchers.IO) { parseChannels(ChannelSources.V14_URL, v14) }
+                launch(Dispatchers.IO) { v31Ok = parseChannels(ChannelSources.V31_URL, v31) }
+                launch(Dispatchers.IO) { v14Ok = parseChannels(ChannelSources.V14_URL, v14) }
                 launch(Dispatchers.IO) {
                     // A third-party failure must never cancel the Jio list loading next to it.
                     try {
@@ -782,12 +805,12 @@ object JioApiClient {
             // A third-party stream replaces Jio's entry for live, but the channel still has Jio catch-up.
             zee.forEach { zc -> finalChannelsMap[zc.channelNumber] = zc.copy(isCatchup = finalChannelsMap[zc.channelNumber]?.isCatchup ?: zc.isCatchup) }
 
-            if (useStaleCache(v31.size)) {
+            if (useStaleCache(v31.size, complete = dictOk && v31Ok)) {
                 // Jio's list failed (the third-party channels alone would still fill the map, and were
                 // once cached as a fresh 24 h list). Serve whatever is on disk, even if stale, and leave
                 // the cache file untouched so the next start tries Jio again.
                 readChannelCache(context)?.let {
-                    Log.w(TAG, "Channel fetch empty; serving stale cache (${it.size} channels)")
+                    Log.w(TAG, "Channel fetch incomplete (v3.1=${v31.size} ok=$v31Ok dict=$dictOk); serving stale cache (${it.size} channels)")
                     return@withContext Result.success(it)
                 }
                 // No cache either: show what did load (third-party / v1.4), but don't save it.
@@ -796,6 +819,12 @@ object JioApiClient {
             }
 
             val finalChannels = finalChannelsMap.values.sortedBy { it.channelNumber }
+            if (!v14Ok) {
+                // v1.4 only adds a few allow-listed ids: serve the fresh list, but uncached, so a dead
+                // v1.4 feed neither freezes the list on an old cache nor drops those ids for 24 h.
+                Log.w(TAG, "v1.4 channel feed failed; serving the list uncached")
+                return@withContext Result.success(finalChannels)
+            }
 
             // Save to cache
             try {
@@ -814,6 +843,7 @@ object JioApiClient {
                     if (ch.stbNumber > 0) obj.put("stbNumber", ch.stbNumber)
                     if (ch.isPremium) obj.put("isPremium", true)
                     if (ch.planType.isNotEmpty()) obj.put("planType", ch.planType)
+                    if (ch.businessType.isNotEmpty()) obj.put("businessType", ch.businessType)
                     if (ch.aspectRatio.isNotEmpty()) obj.put("aspectRatio", ch.aspectRatio)
                     ch.licenseUrl?.let { obj.put("licenseUrl", it) }
                     jsonArray.put(obj)
@@ -982,12 +1012,19 @@ object JioApiClient {
             // 403 from geturl is per channel: Jio refuses this one (e.g. most Zee Entertainment
             // channels since Jio dropped them). No refresh or retry can fix it.
             if (responseCode == 403) {
+                val body403 = runCatching { readResponseBody(connection, isError = true) }.getOrDefault("")
                 // Sony-backed channels (Sony Yay, Vizha...) key a replay by its srno: Jio answers the
                 // showId with "Sony Srno data is not mapped". Retry once with programId = srno.
                 if (catchup != null && catchup.programId != catchup.srno &&
-                    readResponseBody(connection, isError = true).contains("Srno data is not mapped", ignoreCase = true)) {
+                    body403.contains("Srno data is not mapped", ignoreCase = true)) {
                     return@withContext getStreamUrl(context, channelId, authData, allowRefreshRetry = false,
                         catchup = catchup.copy(programId = catchup.srno), useCache = false)
+                }
+                // Not in the user's plan: a plan answer, not a refusal, so it never counts toward "all refused".
+                if (isNotInPlanBody(body403)) {
+                    if (catchup == null) SettingsManager(context).addNotInPlanChannel(channelId)
+                    return@withContext Result.failure(ChannelNotInPlanException(
+                        com.fenyx.jtv.i18n.UiText.of(com.fenyx.jtv.R.string.error_not_in_plan)))
                 }
                 if (catchup == null) refusedInARow.add(channelId)
                 if (catchup == null && refusedInARow.size >= REFUSED_CHANNELS_LIMIT) {

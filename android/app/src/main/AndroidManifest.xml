@@ -16,6 +16,8 @@
     <!-- Storage permissions are intentionally omitted: the app only reads/writes app-scoped storage
          (getExternalFilesDir / cacheDir), which needs no permission and avoids a confusing runtime
          prompt on a TV remote. -->
+    <!-- Android TV home screen "Watch Next" entry (data/WatchNext.kt); unused on boxes without a TV provider. -->
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
     <!-- Android TV features -->
     <uses-feature
         android:name="android.software.leanback"
@@ -26,6 +28,13 @@
 
     <!-- Android 7–9 only: saving the favourites backup to the public Downloads folder. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
+    <!-- Android 11+: lets Search see whether a speech recogniser is installed (hides "Speak" if not). -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
 
     <application
         android:name=".JioTvApplication"

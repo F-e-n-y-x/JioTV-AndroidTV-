@@ -21,7 +21,11 @@ import java.net.URL
 class UserFacingException(val ui: UiText, englishMessage: String) : Exception(englishMessage)
 
 /** The translated text for [e] when it has one, else [fallback]. */
-fun Throwable?.userText(fallback: UiText): UiText = (this as? UserFacingException)?.ui ?: fallback
+fun Throwable?.userText(fallback: UiText): UiText = when (this) {
+    is UserFacingException -> ui
+    is JioApiClient.ChannelNotInPlanException -> ui
+    else -> fallback
+}
 
 object ServerClient {
     private const val TAG = "ServerClient"
@@ -38,8 +42,15 @@ object ServerClient {
         "https://jtv.ayushsoni.eu.org"
     )
 
-    /** Trims whitespace and any trailing slash so we can safely append paths. */
-    fun normalizeBaseUrl(raw: String): String = raw.trim().trimEnd('/')
+    /** Trims whitespace and any trailing slash so we can safely append paths; adds `http://` to a bare `host:port`. */
+    fun normalizeBaseUrl(raw: String): String {
+        val s = raw.trim()
+        return (if (s.isEmpty() || s.contains("://")) s else "http://$s").trimEnd('/')
+    }
+
+    /** True when [raw], normalized, names a host. URI, not URL: URL() accepts "http://:8080" and "http://a b". */
+    fun hasHost(raw: String): Boolean =
+        !runCatching { java.net.URI(normalizeBaseUrl(raw)).host }.getOrNull().isNullOrBlank()
 
     /** Base URLs to try for the current sign-in mode: the hardcoded JTV list for "jtv", the user's
      *  saved URL for a self-hosted "server", empty for phone/none. "jtv" first tries servers the last LAN scan found. */

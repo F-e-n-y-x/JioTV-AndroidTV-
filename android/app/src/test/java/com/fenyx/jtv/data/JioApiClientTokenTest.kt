@@ -64,5 +64,7 @@ class JioApiClientTokenTest {
     fun emptyV31List_servesStaleCacheInsteadOfCaching() {
         org.junit.Assert.assertTrue(JioApiClient.useStaleCache(0))
         org.junit.Assert.assertFalse(JioApiClient.useStaleCache(1200))
+        // A list that failed part-way (or without category names) is never cached as fresh.
+        org.junit.Assert.assertTrue(JioApiClient.useStaleCache(1200, complete = false))
     }
 }
