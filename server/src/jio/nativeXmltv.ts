@@ -86,31 +86,30 @@ export async function writeXmltvGz(
   const gzip = createGzip();
   const file = fs.createWriteStream(outPath);
   gzip.pipe(file);
+  let failed = false;
   const fileDone = new Promise<void>((resolve, reject) => {
     file.on("finish", resolve);
     file.on("error", reject);
     gzip.on("error", reject);
   });
+  // A write error (ENOSPC/EACCES) is surfaced through the writes below; mark it handled here so it can
+  // never become an unhandled rejection (which would kill the process) before anyone awaits it.
+  fileDone.catch(() => { failed = true; });
 
   // Every write goes through one chain so blocks never interleave, and waits for 'drain' when needed.
+  // Racing fileDone means a dead output rejects the write instead of waiting for a 'drain' that never comes.
   let chain: Promise<void> = Promise.resolve();
   const write = (s: string) => {
     chain = chain.then(async () => {
-      if (!gzip.write(s)) await once(gzip, "drain");
+      if (!gzip.write(s)) await Promise.race([once(gzip, "drain"), fileDone]);
     });
     return chain;
   };
 
-  await write('<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="JTV Server">\n');
-  // XMLTV wants every <channel> before the first <programme>.
-  for (const c of channels) {
-    await write(`<channel id="${xmlEscape(c.id)}"><display-name>${xmlEscape(c.name)}</display-name><icon src="${xmlEscape(c.logoUrl)}"/></channel>\n`);
-  }
-
   let count = 0;
   let next = 0;
   async function worker() {
-    while (next < channels.length) {
+    while (!failed && next < channels.length) {
       const c = channels[next++];
       const progs = await fetchProgrammes(c.id);
       if (!progs.length) continue;
@@ -119,6 +118,11 @@ export async function writeXmltvGz(
     }
   }
   try {
+    await write('<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="JTV Server">\n');
+    // XMLTV wants every <channel> before the first <programme>.
+    for (const c of channels) {
+      await write(`<channel id="${xmlEscape(c.id)}"><display-name>${xmlEscape(c.name)}</display-name><icon src="${xmlEscape(c.logoUrl)}"/></channel>\n`);
+    }
     await Promise.all(Array.from({ length: Math.max(1, concurrency) }, worker));
     await write("</tv>\n");
     gzip.end();

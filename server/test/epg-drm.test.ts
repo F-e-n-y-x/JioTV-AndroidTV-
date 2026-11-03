@@ -67,6 +67,26 @@ test("writeXmltvGz streams a gzip file that gunzips to valid XMLTV", async () =>
   assert.ok(!xml.includes("\u0001"));
 });
 
+test("writeXmltvGz rejects promptly (no hang, no unhandled rejection) when the output can't be written", async () => {
+  const { writeXmltvGz } = await import("../src/jio/nativeXmltv");
+  const channels = Array.from({ length: 300 }, (_, i) => ch(String(1000 + i), `Ch ${i}`));
+  let fetched = 0;
+  // Incompressible text so gzip's buffers fill and writes have to wait for 'drain'.
+  const fetchProgrammes = async (): Promise<EpgProgram[]> => {
+    fetched++;
+    return Array.from({ length: 50 }, (_, k) => ({ title: crypto.randomUUID().repeat(20), description: "", startMs: k, stopMs: k + 1 }));
+  };
+  const out = path.join(tmpDir, "no-such-dir", "epg.xml.gz"); // ENOENT on open
+  await assert.rejects(
+    Promise.race([
+      writeXmltvGz(channels, fetchProgrammes, out, 4),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("hung")), 5000).unref()),
+    ]),
+    /ENOENT/
+  );
+  assert.ok(fetched < channels.length, "workers stop after the write error");
+});
+
 test("drm=hide hides channels the proxy learned are Widevine-only", async () => {
   const { filterPlaylistChannels } = await import("../src/api/playlistFilter");
   const db = await import("../src/store/db");
