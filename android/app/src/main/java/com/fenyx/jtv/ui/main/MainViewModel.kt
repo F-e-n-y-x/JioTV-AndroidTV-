@@ -22,6 +22,10 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
 
+/** True when a channel's all-past guide may be refetched: never tried, or last tried an hour or more ago. */
+internal fun pastGuideRefetchDue(lastMs: Long?, nowMs: Long): Boolean =
+    lastMs == null || nowMs - lastMs >= 60 * 60_000L
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** A user-visible message in the app language (the application resources follow it; see AppLocale). */
@@ -444,8 +448,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val currentData = _epgData.value[channelId]
         // Only earlier catch-up days loaded (no programme reaching now) still counts as missing.
         val nowMs = System.currentTimeMillis()
+        // An all-past guide (a TV left on overnight) refetches, at most once an hour per channel.
         val missing = currentData.isNullOrEmpty() ||
-            (channelId !in pastOnlyChecked && currentData.none { it.stopMs > nowMs }).also { if (it) pastOnlyChecked.add(channelId) }
+            (currentData.none { it.stopMs > nowMs } && pastGuideRefetchDue(pastOnlyChecked[channelId], nowMs))
+                .also { if (it) pastOnlyChecked[channelId] = nowMs }
         if (missing && !fetchingEpgChannels.contains(channelId)) {
             fetchingEpgChannels.add(channelId)
             viewModelScope.launch {
@@ -471,8 +477,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** "channelId:offset" pairs already fetched (or in flight) for past days. */
     private val pastEpgFetched = HashSet<String>()
-    /** Channels whose guide held only earlier days once; today's guide was then fetched for them. */
-    private val pastOnlyChecked = HashSet<String>()
+    /** Channel id → when its all-past guide was last refetched. */
+    private val pastOnlyChecked = HashMap<String, Long>()
 
     /**
      * Fetches Jio's guide for an earlier day ([offset] -1 … -6) of a catch-up channel and merges it
