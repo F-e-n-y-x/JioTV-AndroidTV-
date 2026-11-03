@@ -136,6 +136,8 @@ dependencies {
   // androidx.compose.foundation 1.7+, which we use directly (LazyColumn/LazyVerticalGrid +
   // Modifier.focusRestorer). Only androidx.tv.material3 is needed for TV-tuned components.
   implementation(libs.androidx.tv.material)
+  // "Continue watching" on the Android TV home screen (data/WatchNext.kt).
+  implementation(libs.androidx.tvprovider)
 
   // Media3 ExoPlayer
   implementation(libs.androidx.media3.exoplayer)

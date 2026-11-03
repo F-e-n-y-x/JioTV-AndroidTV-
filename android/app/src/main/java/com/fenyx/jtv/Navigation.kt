@@ -48,6 +48,9 @@ import com.fenyx.jtv.ui.main.MainViewModel
 import com.fenyx.jtv.ui.main.PhoneTab
 import com.fenyx.jtv.ui.settings.SettingsScreen
 import com.fenyx.jtv.ui.player.TvPlayerScreen
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
 // Sentinel for "the persisted setup mode hasn't loaded yet" so we don't flash the chooser on launch.
@@ -142,6 +145,7 @@ fun MainNavigation() {
     val authData by settingsManager.authDataFlow.collectAsState(initial = null)
 
     val backStack = rememberNavBackStack(Main)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val mainViewModel: MainViewModel = viewModel()
     // Phone tabs replace each other on top of Live TV (Back from a tab returns to Live TV).
     val onTab: (PhoneTab) -> Unit = { tab ->
@@ -179,6 +183,12 @@ fun MainNavigation() {
         } else {
             val prev = session.value
             session.value = PlayerSession(index, group, mini = false, token = (prev?.token ?: 0) + 1, catchup = catchup)
+        }
+        // TV home screen "Watch Next": the live channel just opened (zaps follow via lastChannelId below).
+        if (catchup == null) {
+            val list = if (group == MainViewModel.GROUP_FAVORITES || group == MainViewModel.GROUP_ALL_GLOBAL)
+                mainViewModel.getChannelsByGroup(group) else mainViewModel.displayChannels.value
+            list.getOrNull(index)?.let { ch -> scope.launch { com.fenyx.jtv.data.WatchNext.publish(context, ch) } }
         }
     }
 
@@ -244,11 +254,55 @@ fun MainNavigation() {
         }
     }
 
-    // Signing out ends any player session (it must not reappear after the next sign-in).
+    // ── TV home screen "Watch Next" ──
+    // Each later tune (zaps inside the player too) refreshes the entry. The first value is the channel
+    // saved before this start, already published then; openPlayer covers re-opening that same channel.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        settingsManager.lastChannelIdFlow.drop(1).filterNotNull().collectLatest { id ->
+            val ch = mainViewModel.allChannels.value.firstOrNull { it.id == id }
+                ?: mainViewModel.displayChannels.value.firstOrNull { it.id == id }
+            if (ch != null) com.fenyx.jtv.data.WatchNext.publish(context, ch)
+        }
+    }
+    // Opening that entry launches MainActivity with WatchNext.ACTION_PLAY (cold start: the activity's
+    // intent; already running: onNewIntent). Played once signed in, channels are loaded and autoplay is done.
+    val deepLinkId = remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.DisposableEffect(context) {
+        val activity = context as? androidx.activity.ComponentActivity
+        fun take(i: android.content.Intent?) {
+            if (i?.action != com.fenyx.jtv.data.WatchNext.ACTION_PLAY) return
+            deepLinkId.value = i.getStringExtra(com.fenyx.jtv.data.WatchNext.EXTRA_CHANNEL_ID)
+            i.action = null // consumed: an activity re-creation must not replay it
+        }
+        take(activity?.intent)
+        val listener = androidx.core.util.Consumer<android.content.Intent> { take(it) }
+        activity?.addOnNewIntentListener(listener)
+        onDispose { activity?.removeOnNewIntentListener(listener) }
+    }
+    androidx.compose.runtime.LaunchedEffect(deepLinkId.value, allChannels, hasAutoPlayed.value, authData != null) {
+        val id = deepLinkId.value ?: return@LaunchedEffect
+        if (authData == null || !hasAutoPlayed.value || allChannels.isEmpty()) return@LaunchedEffect
+        deepLinkId.value = null
+        // Autoplay already opened this very channel: keep it, don't retune.
+        if (id == lastChannelId && (session.value != null || backStack.any { it is Player })) return@LaunchedEffect
+        val idx = allChannels.indexOfFirst { it.id == id }
+        if (idx >= 0) openPlayer(idx, null)
+        else {
+            // Hidden by the language filter: play it from the full list, as Search does.
+            val g = mainViewModel.getChannelsByGroup(MainViewModel.GROUP_ALL_GLOBAL).indexOfFirst { it.id == id }
+            if (g >= 0) openPlayer(g, MainViewModel.GROUP_ALL_GLOBAL)
+        }
+    }
+
+    // Signing out ends any player session (it must not reappear after the next sign-in) and removes
+    // the Watch Next entry.
     val hadAuth = remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(authData) {
         if (authData != null) hadAuth.value = true
-        else if (hadAuth.value) { session.value = null; hadAuth.value = false }
+        else if (hadAuth.value) {
+            session.value = null; hadAuth.value = false
+            com.fenyx.jtv.data.WatchNext.clear(context)
+        }
     }
 
     // Onboarding router. When not logged in, pick the setup flow from the chosen method:
@@ -256,7 +310,6 @@ fun MainNavigation() {
     //  - "phone" -> OTP LoginScreen (with a way back to the chooser)
     //  - "server" -> ServerSetupScreen (pull shared credentials)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = SETUP_LOADING)
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     if (authData == null) {
         when (setupMode) {
