@@ -27,6 +27,13 @@
     <!-- Android 7–9 only: saving the favourites backup to the public Downloads folder. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
+    <!-- Android 11+: lets Search see whether a speech recogniser is installed (hides "Speak" if not). -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <application
         android:name=".JioTvApplication"
         android:allowBackup="true"
