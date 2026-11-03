@@ -271,9 +271,10 @@ fun TvPlayerScreen(
 
     // Stream auto-recovery: Jio live URLs carry a short-lived Akamai cookie (__hdnea__) that expires
     // after a while, which surfaces as a sudden black screen. On error we re-fetch the stream URL
-    // (which regenerates the cookie). The counter resets every time playback recovers (STATE_READY),
+    // (which regenerates the cookie). The counter resets after a minute of steady playback (STATE_READY),
     // so a long session can recover indefinitely instead of dying after a fixed number of errors.
     val retryCount = remember { mutableIntStateOf(0) }
+    val retryReset = remember { object { var job: kotlinx.coroutines.Job? = null } }
     var streamRefreshTrigger by remember { mutableIntStateOf(0) }
     // Bumping this re-attaches the audio effect (see the buffering watchdog + AudioEnhancer) to kick a
     // stalled AudioTrack alive without touching the stream.
@@ -478,10 +479,16 @@ fun TvPlayerScreen(
                     streamRefreshTrigger++
                 }
                 isBuffering = state == Player.STATE_BUFFERING
+                // Any non-READY state (incl. a stall) means this READY spell wasn't steady.
+                retryReset.job?.cancel()
                 if (state == Player.STATE_READY) {
-                    // Playback recovered -> clear any error and reset the recovery budget so the
-                    // next expiry (minutes/hours later) gets a fresh set of retries.
-                    retryCount.intValue = 0
+                    // Playback recovered -> clear any error. Reset the recovery budget only after a minute
+                    // of steady playback: resetting on every READY let a play-freeze-reload loop run forever
+                    // without ever showing the error.
+                    retryReset.job = scope.launch {
+                        delay(60_000)
+                        retryCount.intValue = 0
+                    }
                     playbackError = null
                 }
             }
