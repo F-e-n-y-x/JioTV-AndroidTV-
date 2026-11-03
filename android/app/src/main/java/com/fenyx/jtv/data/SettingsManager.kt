@@ -33,7 +33,8 @@ class SettingsManager(private val context: Context) {
         private val PLAYER_RESIZE_MODE = intPreferencesKey("player_resize_mode")
         
         // Collapse per-language duplicate channels (e.g. "Star Sports 1 Hindi/Tamil/Telugu") into one.
-        private val GROUP_LANGUAGE_VARIANTS = booleanPreferencesKey("group_language_variants")
+        // _v2: switch grouping back on once for everyone (it was easy to turn off by a stray tap).
+        private val GROUP_LANGUAGE_VARIANTS = booleanPreferencesKey("group_language_variants_v2")
         // Settings → "Hide channels not in my plan", and the ids Jio answered "not in your plan" (3012) for.
         private val HIDE_NOT_IN_PLAN = booleanPreferencesKey("hide_not_in_plan")
         private val NOT_IN_PLAN_IDS = stringPreferencesKey("not_in_plan_ids")
