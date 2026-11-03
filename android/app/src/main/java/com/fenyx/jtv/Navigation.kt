@@ -186,6 +186,8 @@ fun MainNavigation() {
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
     val lastChannelGroup by settingsManager.lastChannelGroupFlow.collectAsState(initial = null)
     val hasAutoPlayed = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Autoplay asks for the channel load once; a load that ends empty then falls through to home.
+    val autoplayFetchRequested = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     // Use the COLLAPSED (display) list the player actually navigates, and wait for it to be populated
     // before autoplaying — otherwise autoplay fired against the raw list (wrong index) or before the
     // collapse ran (0 channels), which is what caused the black "0 channels / Loading…" screen on boot.
@@ -201,7 +203,10 @@ fun MainNavigation() {
                     // just show the home screen.
                     lastChannelId == null -> hasAutoPlayed.value = true
                     // Kick off the channel load (served from cache when fresh, so this is fast).
-                    allChannels.isEmpty() && !isLoading -> mainViewModel.fetchChannels()
+                    allChannels.isEmpty() && !isLoading && !autoplayFetchRequested.value -> {
+                        autoplayFetchRequested.value = true
+                        mainViewModel.fetchChannels()
+                    }
                     allChannels.isNotEmpty() -> {
                         hasAutoPlayed.value = true
                         val inGroup = lastChannelId?.let { id ->
