@@ -2,7 +2,9 @@ package com.fenyx.jtv.data
 
 import android.util.Base64
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
@@ -388,13 +390,16 @@ object JioApiClient {
                 val newAuthToken = json.optString("authToken", "")
                 val newRefreshToken = json.optString("refreshToken", "")
                 if (newSsoToken.isNotEmpty() || newAuthToken.isNotEmpty()) {
-                    settingsManager.saveAuthData(
-                        authData.copy(
-                            ssoToken = newSsoToken.ifEmpty { authData.ssoToken },
-                            authToken = newAuthToken.ifEmpty { authData.authToken },
-                            refreshToken = newRefreshToken.ifEmpty { authData.refreshToken }
+                    // Jio has already rotated the tokens: a cancelled caller must not lose them.
+                    withContext(NonCancellable) {
+                        settingsManager.saveAuthData(
+                            authData.copy(
+                                ssoToken = newSsoToken.ifEmpty { authData.ssoToken },
+                                authToken = newAuthToken.ifEmpty { authData.authToken },
+                                refreshToken = newRefreshToken.ifEmpty { authData.refreshToken }
+                            )
                         )
-                    )
+                    }
                     Log.d(TAG, "Token refreshed successfully")
                     return@withContext Result.success(true)
                 }
@@ -405,6 +410,8 @@ object JioApiClient {
             val jioMessage = runCatching { JSONObject(errText).optString("message") }.getOrNull().orEmpty()
             if (code in 400..499) Result.failure(RefreshRejectedException("Refresh rejected ($code): $jioMessage"))
             else Result.failure(Exception("Refresh failed with code $code"))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Exception in refreshToken", e)
             Result.failure(e)
@@ -435,7 +442,7 @@ object JioApiClient {
             val tok = settingsManager.serverTokenFlow.first()
             if (urls.all { it.isBlank() }) return Result.failure(Exception("No server configured"))
             ServerClient.refreshCredentials(urls, tok).fold(
-                onSuccess = { auth -> settingsManager.saveAuthData(auth); Result.success(true) },
+                onSuccess = { auth -> withContext(NonCancellable) { settingsManager.saveAuthData(auth) }; Result.success(true) },
                 onFailure = { Result.failure(it) }
             )
         } else {
@@ -448,9 +455,12 @@ object JioApiClient {
                 // The refresh token is gone. Rebuild the session from the SSO token instead of making
                 // the user sign in again; only if that fails too is the session really over.
                 val mobile = settingsManager.authMobileFlow.first()
-                val recovered = withContext(Dispatchers.IO) { recoverSession(current, mobile) }
+                // NonCancellable: exchangetoken issues a new pair; a cancel here (withContext's return
+                // included) would drop it and the old pair is already dead.
+                val recovered = withContext(Dispatchers.IO + NonCancellable) {
+                    recoverSession(current, mobile)?.also { settingsManager.saveAuthData(it) }
+                }
                 if (recovered != null) {
-                    settingsManager.saveAuthData(recovered)
                     Log.i(TAG, "Session recovered without a new sign-in")
                     return@withLock Result.success(true)
                 }

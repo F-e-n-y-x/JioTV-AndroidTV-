@@ -223,7 +223,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val flags = getApplication<Application>().getSharedPreferences("server_sync", android.content.Context.MODE_PRIVATE)
         if (flags.getString("creds_404_for", null) == serverKey) return
         com.fenyx.jtv.data.ServerClient.fetchCredentials(urls, tok)
-            .onSuccess { settingsManager.saveAuthData(it) }
+            .onSuccess { kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { settingsManager.saveAuthData(it) } }
             .onFailure { e ->
                 if (e.message?.contains("404") == true) flags.edit().putString("creds_404_for", serverKey).apply()
             }
@@ -244,7 +244,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val tok = settingsManager.serverTokenFlow.first()
             com.fenyx.jtv.data.ServerClient.refreshCredentials(urls, tok)
                 .onSuccess { auth ->
-                    settingsManager.saveAuthData(auth)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { settingsManager.saveAuthData(auth) }
                     // Also force a fresh channel-list pull from the network.
                     val app = getApplication<Application>()
                     val result = JioApiClient.getMobileChannelList(app, forceNetwork = true)
