@@ -282,12 +282,12 @@ export async function proxyUpstream(
 export async function proxyLicense(channelId: string, challenge: Buffer): Promise<Buffer> {
   const c = await getStream(channelId);
   if (!c.data.licenseUrl) throw new Error("Channel has no DRM license URL");
-  const res = await fetch(c.data.licenseUrl, {
+  // The license headers carry ssoToken/Accesstoken: only ever to a Jio host, every redirect checked.
+  const res = await fetchJio(c.data.licenseUrl, {
     method: "POST",
     headers: c.data.licenseHeaders,
     body: new Uint8Array(challenge),
-    signal: AbortSignal.timeout(API_TIMEOUT_MS),
-  });
+  }, true);
   if (!res.ok) throw new Error(`License request failed (HTTP ${res.status})`);
   return Buffer.from(await res.arrayBuffer());
 }
@@ -389,6 +389,34 @@ export function rewriteManifest(
   }
 
   return null;
+}
+
+/** Directory of a manifest URL without its query: what relative DASH segment paths resolve against. */
+export function manifestDir(url: string): string {
+  const u = new URL(url);
+  u.search = "";
+  u.hash = "";
+  return u.href.slice(0, u.href.lastIndexOf("/") + 1);
+}
+
+/**
+ * Rewrites a Jio DASH manifest for an external player (Kodi / TiviMate / OTT Navigator), which can't
+ * send the account's `__hdnea__` cookie: every BaseURL under the manifest's directory (or a top-level
+ * one when there is none) is pointed at `proxyDir` (the code-authed `/dash/...` route), and `<Location>`
+ * is dropped so live manifest refreshes don't go to Jio directly.
+ * shortcut: each BaseURL is resolved against the manifest URL, which is right for top-level and single
+ * BaseURLs (what Jio sends); a relative BaseURL nested under another one, or an absolute one outside
+ * the manifest's directory, would need a real XML walk.
+ */
+export function rewriteMpdForPlayer(body: string, manifestUrl: string, proxyDir: string): string {
+  const dir = manifestDir(manifestUrl);
+  const out = body.replace(/<Location>[\s\S]*?<\/Location>\s*/gi, "");
+  if (!/<BaseURL\b/i.test(out)) return out.replace(/(<MPD\b[^>]*>)/i, `$1<BaseURL>${proxyDir}</BaseURL>`);
+  return out.replace(/<BaseURL>([^<]*)<\/BaseURL>/gi, (m, raw: string) => {
+    let abs: string;
+    try { abs = new URL(raw.trim().replace(/&amp;/g, "&"), dir).href; } catch { return m; }
+    return abs.startsWith(dir) ? `<BaseURL>${(proxyDir + abs.slice(dir.length)).replace(/&/g, "&amp;")}</BaseURL>` : m;
+  });
 }
 
 /** The real manifest URL + DRM flags the web player needs to configure Shaka. `key` is the cid. */
