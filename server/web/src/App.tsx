@@ -438,6 +438,7 @@ function M3uCard() {
   const [onlyFav, setOnlyFav] = useState(false);
   const [epg, setEpg] = useState(true);
   const [catchup, setCatchup] = useState(true);
+  const [hd, setHd] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -461,8 +462,9 @@ function M3uCard() {
     if (onlyFav) p.set("fav", "1");
     if (epg) p.set("epg", "1");
     if (catchup) p.set("catchup", "1");
+    if (hd) p.set("hd", "1");
     return `${location.origin}/playlist.m3u?${p.toString()}`;
-  }, [code, langs, cats, quality, onlyFav, epg, catchup]);
+  }, [code, langs, cats, quality, onlyFav, epg, catchup, hd]);
 
   const copy = async () => { try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} };
 
@@ -496,6 +498,7 @@ function M3uCard() {
             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={onlyFav} onChange={(e) => setOnlyFav(e.target.checked)} /> Favourites only</label>
             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={epg} onChange={(e) => setEpg(e.target.checked)} /> Include EPG guide (<code>url-tvg</code>)</label>
             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={catchup} onChange={(e) => setCatchup(e.target.checked)} /> Enable catch-up (TiviMate)</label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={hd} onChange={(e) => setHd(e.target.checked)} /> Full HD (Kodi, TiviMate, OTT Navigator; off for VLC)</label>
           </div>
         </div>
 

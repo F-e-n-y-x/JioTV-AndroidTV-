@@ -79,6 +79,29 @@ test("drm=1 playlist: Widevine entry has KODIPROP lines, proxied URLs, no Jio to
   }
 });
 
+test("hd=1 playlist: every channel is an hd.<id> Widevine entry", async () => {
+  const restore = mockJio();
+  const app = await makeApp();
+  try {
+    const res = await app.inject({ url: `/playlist.m3u?code=${CODE}&hd=1`, headers: { host: "tv.lan:29180" } });
+    for (const id of ["1", "2"]) {
+      const lines = res.body.split("\n");
+      const i = lines.findIndex((l) => l.includes(`tvg-id="${id}"`));
+      assert.equal(lines[i - 1], `#KODIPROP:inputstream.adaptive.license_key=http://tv.lan:29180/license/hd.${id}?code=${CODE}|Content-Type=application/octet-stream|R{SSM}|`);
+      assert.equal(lines[i + 1], `http://tv.lan:29180/live/hd.${id}.mpd?ts=1&code=${CODE}`);
+    }
+    // drm=plain wins: VLC keeps the plain list.
+    const plain = await app.inject({ url: `/playlist.m3u?code=${CODE}&hd=1&drm=plain`, headers: { host: "tv.lan:29180" } });
+    assert.doesNotMatch(plain.body, /hd\.|widevine/);
+    const { isValidStreamKey } = await import("../src/proxy/streamProxy");
+    assert.ok(isValidStreamKey("hd.144"));
+    assert.ok(!isValidStreamKey("hd.abc"));
+  } finally {
+    restore();
+    await app.close();
+  }
+});
+
 test("DRM player routes need the access code", async () => {
   const restore = mockJio();
   const app = await makeApp();

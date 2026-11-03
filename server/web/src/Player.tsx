@@ -238,6 +238,9 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
   const [position, setPosition] = useState(0);
   const [behind, setBehind] = useState(0);       // live: seconds behind the live edge (Jio keeps ~60 s)
   const isCatchup = cid.startsWith("cu.");
+  // Live channels try Jio's Widevine version first where the browser can decrypt it: the plain stream
+  // of many HD channels stops at 360p. If it fails, this channel drops back to the plain stream.
+  const [hdFailed, setHdFailed] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,12 +248,17 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
     setAudioLangs([]); setCurLang(""); setQualities([]); setCurQuality("auto");
     setDuration(0); setPosition(0);
 
-    const proxied = (u: string) => `/api/proxy?cid=${encodeURIComponent(cid)}&u=${encodeURIComponent(u)}`;
+    let key = cid;
+    const proxied = (u: string) => `/api/proxy?cid=${encodeURIComponent(key)}&u=${encodeURIComponent(u)}`;
 
     async function start() {
       const video = videoRef.current; if (!video) return;
       let info;
-      try { info = await api.playInfo(cid); } catch (e: any) { if (!cancelled) { setError(e?.message ?? "Failed to start playback"); setLoading(false); } return; }
+      if (/^\d+$/.test(cid) && hdFailed !== cid && (await widevineOk())) key = `hd.${cid}`;
+      if (cancelled) return;
+      const hdTry = key !== cid;
+      const dropHd = () => { if (!cancelled) setHdFailed(cid); };
+      try { info = await api.playInfo(key); } catch (e: any) { if (!cancelled) { setError(e?.message ?? "Failed to start playback"); setLoading(false); } return; }
       if (cancelled) return;
       // Jio handed back a paywall fallback — the account isn't subscribed to this channel.
       if (!info.entitled) { setNotEntitled(true); setError("Not in your JioTV subscription"); setLoading(false); return; }
@@ -312,13 +320,16 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
         const player: any = new shaka.Player();
         engineRef.current = { kind: "shaka", inst: player };
         await player.attach(video);
-        if (info.hasDrm) player.configure({ drm: { servers: { "com.widevine.alpha": `/api/play/${encodeURIComponent(cid)}/license` } } });
+        if (info.hasDrm) player.configure({ drm: { servers: { "com.widevine.alpha": `/api/play/${encodeURIComponent(key)}/license` } } });
         player.getNetworkingEngine().registerRequestFilter((type: any, request: any) => {
           if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) return;
           request.uris = request.uris.map((u: string) =>
             u.startsWith("/api/proxy") || !/^https?:\/\//i.test(u) ? u : proxied(u));
         });
-        player.addEventListener("error", (e: any) => setError(drmMessage(e?.detail)));
+        player.addEventListener("error", (e: any) => {
+          if (e?.detail?.severity !== shaka.util.Error.Severity.CRITICAL) return; // Shaka retries the rest itself
+          hdTry ? dropHd() : setError(drmMessage(e?.detail));
+        });
         await player.load(info.manifestUrl);
         if (cancelled) return;
         setLoading(false);
@@ -331,7 +342,7 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
           const target = prefTargetHeight(heights, readPrefQuality());
           if (target != null) { player.configure({ abr: { enabled: false } }); const t = player.getVariantTracks().find((v: any) => v.height === target); if (t) { player.selectVariantTrack(t, true); setCurQuality(target); } }
         } catch {}
-      } catch (e: any) { if (!cancelled) { setError(drmMessage(e) || e?.message || "Failed to start playback"); setLoading(false); } }
+      } catch (e: any) { if (hdTry) dropHd(); else if (!cancelled) { setError(drmMessage(e) || e?.message || "Failed to start playback"); setLoading(false); } }
     }
     start();
     return () => {
@@ -341,7 +352,7 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
       else if (eng?.kind === "native" && videoRef.current) { videoRef.current.removeAttribute("src"); videoRef.current.load(); }
       engineRef.current = null;
     };
-  }, [cid]);
+  }, [cid, hdFailed]);
 
   useEffect(() => {
     const v = videoRef.current; if (!v) return;
@@ -497,6 +508,15 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
       </div>
     </div>
   );
+}
+
+let widevine: Promise<boolean> | null = null;
+/** Can this page decrypt Widevine? Needs a secure context (https or localhost); asked once per page load. */
+function widevineOk(): Promise<boolean> {
+  widevine ??= !window.isSecureContext || !navigator.requestMediaKeySystemAccess ? Promise.resolve(false)
+    : navigator.requestMediaKeySystemAccess("com.widevine.alpha", [{ initDataTypes: ["cenc"], videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }] }])
+        .then(() => true, () => false);
+  return widevine;
 }
 
 function fmtDur(s: number): string {

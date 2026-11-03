@@ -68,6 +68,9 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     // their plain HLS is dead anyway. `drm=plain` keeps the old list (VLC can't decrypt Widevine).
     const withDrm = !hideDrm && q.drm !== "plain";
     const quality = String(q.quality ?? "auto").toLowerCase();
+    // `hd=1`: every Jio channel as a Widevine entry. Jio's plain HLS of many HD channels stops at 360p;
+    // the Widevine DASH goes to 1080p (falls back to the plain stream where the DASH is dead).
+    const hd = withDrm && (q.hd === "1" || q.hd === "true");
 
     const all = await getChannels();
     const favs = onlyFav ? new Set(getFavorites()) : null;
@@ -87,9 +90,10 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     for (const c of channels) {
       const extra = isExtraChannel(c.id) ? getExtraChannelSync(c.id) : undefined;
       const isMpd = extra ? extra.isMpd : false;
-      const widevine = withDrm && !extra && needsWidevine(c, drmOnlyIds);
+      const widevine = withDrm && !extra && (hd || needsWidevine(c, drmOnlyIds));
+      const key = hd && !extra ? `hd.${c.id}` : c.id;
       const streamExt = isMpd || widevine ? "mpd" : "m3u8";
-      const streamUrl = `${base}/live/${encodeURIComponent(c.id)}.${streamExt}?ts=1${codeQ}${qualityQ}`;
+      const streamUrl = `${base}/live/${encodeURIComponent(key)}.${streamExt}?ts=1${codeQ}${qualityQ}`;
       // Only channels Jio actually keeps a catch-up archive for get the catch-up attributes.
       const catchupAttr = enableCatchup && c.isCatchup
         ? `catchup="default" catchup-days="7" catchup-source="${base}/live/${encodeURIComponent(c.id)}.m3u8?utc={utc}&lutc={lutc}${codeQ}${qualityQ}" `
@@ -107,7 +111,7 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
         lines.push("#KODIPROP:inputstream.adaptive.manifest_type=mpd");
         lines.push("#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha");
         lines.push(
-          `#KODIPROP:inputstream.adaptive.license_key=${base}/license/${encodeURIComponent(c.id)}` +
+          `#KODIPROP:inputstream.adaptive.license_key=${base}/license/${encodeURIComponent(key)}` +
             `${code ? `?code=${encodeURIComponent(code)}` : ""}|Content-Type=application/octet-stream|R{SSM}|`
         );
       }
@@ -125,13 +129,15 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
 
   // ── Resolve one channel to a playable (proxied) HLS manifest for external players ──
   app.get<{ Params: { id: string } }>("/live/:id", { preHandler: requireCode }, async (req, reply) => {
-    const rawId = req.params.id.replace(/\.(m3u8|mpd|ts)$/i, "");
+    const isHdMpd = /^hd\.\d+\.mpd$/i.test(req.params.id);
+    // `hd.<id>` only means something for the `.mpd` entry; anything else plays the plain channel.
+    const rawId = req.params.id.replace(/\.(m3u8|mpd|ts)$/i, "").replace(/^hd\./i, "");
     const q = req.query as Record<string, unknown>;
     const code = String(q.code ?? "").trim();
     const maxHeight = qualityToHeight(String(q.q ?? ""));
     const utcRaw = String(q.utc ?? q.lutc ?? "").trim();
 
-    let key = rawId;
+    let key = isHdMpd && !utcRaw ? `hd.${rawId}` : rawId;
 
     if (isExtraChannel(rawId)) {
       try {

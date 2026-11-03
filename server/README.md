@@ -215,6 +215,10 @@ Machine/player endpoints use a **TV access code** (bearer header or `?code=`).
 
 ### Playlist options worth knowing
 
+- `hd=1` lists **every** Jio channel as a Widevine entry (`/live/hd.<id>.mpd`). Jio's plain stream of many
+  HD channels (Colors HD and others) stops at 360p; the Widevine version goes up to 1080p. Where a
+  channel's Widevine stream is dead it falls back to the plain one. Ignored with `drm=plain`/`drm=hide`.
+  The web player does the same on its own when the page is https and the browser has Widevine.
 - `drm=hide` leaves out channels that need Widevine (external players can't decrypt them). Jio's
   channel list has no reliable DRM flag, so the server learns it: on a channel's first live play the
   proxy checks whether Jio's non-DRM HLS works; if only the DASH does, it stores mode `drm` in the

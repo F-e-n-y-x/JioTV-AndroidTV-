@@ -26,11 +26,13 @@ const API_TIMEOUT_MS = 15_000;
 const SEGMENT_TIMEOUT_MS = 20_000;
 
 /**
- * A playback key is either "channelId" (live) or "cu.<base64url-json>" (catch-up), where the JSON is
+ * A playback key is "channelId" (live), "hd.channelId" (live, Widevine DASH first: Jio's plain HLS of
+ * many HD channels stops at 360p, the DASH goes to 1080p) or "cu.<base64url-json>" (catch-up), where the JSON is
  * `{c:channelId, s:srno, p:programId, b:beginMs, e:endMs, t:showtime}` — everything getStreamData needs
  * to re-resolve a past show's VOD stream on demand (e.g. after a token refresh).
  */
-function parseKey(key: string): { channelId: string; catchup?: CatchupParams } {
+function parseKey(key: string): { channelId: string; catchup?: CatchupParams; hd?: boolean } {
+  if (/^hd\.\d{1,7}$/.test(key)) return { channelId: key.slice(3), hd: true };
   if (key.startsWith("cu.")) {
     try {
       const b64 = key.slice(3).replace(/-/g, "+").replace(/_/g, "/");
@@ -90,11 +92,11 @@ async function resolveOnce(key: string): Promise<CachedStream> {
     throw dead.error;
   }
 
-  const { channelId, catchup } = parseKey(key);
+  const { channelId, catchup, hd } = parseKey(key);
   const creds = getStoredCredentials();
   if (!creds) throw new Error("No active login on the server — sign in on the Account page first.");
   const cachedMode = catchup ? undefined : streamMode.get(channelId);
-  const opts = catchup ? { catchup } : { preferDrm: cachedMode === "drm" };
+  const opts = catchup ? { catchup } : { preferDrm: hd || cachedMode === "drm" };
 
   const markDead = (err: Error) => {
     deadCache.set(key, { error: err, expiresAtMs: Date.now() + DEAD_CACHE_TTL_MS });
@@ -135,7 +137,14 @@ async function resolveOnce(key: string): Promise<CachedStream> {
   // First live play of a channel: verify the URL Jio gave us actually resolves. Some channels hand back
   // a token-signed URL whose CDN path 404s. If the non-DRM HLS is dead, try the DRM DASH; if BOTH are
   // dead the channel is simply down on Jio's side, so say so plainly instead of failing to parse a 404.
-  if (!catchup && cachedMode === undefined && data.streamUrl) {
+  if (hd) {
+    // HD key: the DASH if it's alive, else whatever the plain key plays (learned there, not here).
+    if (!data.isMpd || !(await masterAlive(data.streamUrl, data.streamHeaders))) {
+      const plain = await getStream(channelId);
+      cache.set(key, { ...plain, key });
+      return cache.get(key)!;
+    }
+  } else if (!catchup && cachedMode === undefined && data.streamUrl) {
     const down = () =>
       markDead(new Error("This channel is temporarily unavailable on Jio's servers (its stream URL returns 404). It's a Jio-side outage for this channel, not a login/plan issue — try again later or pick another channel."));
     if (!data.isMpd) {
@@ -225,7 +234,7 @@ export function isJioUpstream(raw: string): boolean {
 
 /** A live channel id ("154") or a catch-up key ("cu.<base64url>"); anything else is rejected. */
 export function isValidStreamKey(key: string): boolean {
-  return /^\d{1,7}$/.test(key) || /^cu\.[A-Za-z0-9_-]{1,2048}$/.test(key) || /^zee_[A-Za-z0-9_.-]+$/i.test(key) || isExtraChannel(key);
+  return /^(hd\.)?\d{1,7}$/.test(key) || /^cu\.[A-Za-z0-9_-]{1,2048}$/.test(key) || /^zee_[A-Za-z0-9_.-]+$/i.test(key) || isExtraChannel(key);
 }
 
 /** fetch() that follows redirects only while they stay on allowed hosts (credentials ride along).
