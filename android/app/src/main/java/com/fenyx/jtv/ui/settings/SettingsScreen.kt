@@ -96,6 +96,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = null)
     val serverUrl by settingsManager.serverUrlFlow.collectAsState(initial = "")
     val themeMode by settingsManager.themeModeFlow.collectAsState(initial = null)
+    val simple = settingsManager.uiModeFlow.collectAsState(initial = null).value == SettingsManager.UI_SIMPLE
     val serverRefreshing by mainViewModel.serverRefreshing.collectAsState()
     val serverRefreshMsg by mainViewModel.serverRefreshMsg.collectAsState()
 
@@ -215,6 +216,10 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val backup = rememberFavoritesBackup { id -> mainViewModel.getAllChannels().firstOrNull { it.id == id }?.name }
     val rows: List<SRow> = buildList {
         add(SRow.Section(stringResource(R.string.settings_section_general)))
+        add(SRow.Item("uiMode", stringResource(R.string.settings_mode), value = stringResource(if (simple) R.string.mode_simple else R.string.mode_advanced),
+            description = stringResource(R.string.settings_mode_desc)) {
+            scope.launch { settingsManager.setUiMode(if (simple) SettingsManager.UI_ADVANCED else SettingsManager.UI_SIMPLE) }
+        })
         add(SRow.Item("theme", stringResource(R.string.settings_appearance), value = themes.first { it.first == themeValue }.second) { sheet = Sheet.Theme })
         add(SRow.Item("deviceType", stringResource(R.string.settings_device_type),
             value = deviceTypes.first { it.first == deviceTypeValue }.second,
@@ -363,6 +368,11 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                 }
             }
         })
+    }.let { all ->
+        if (!simple) all
+        // Simple mode: the everyday rows only; a section left with no rows is dropped.
+        else all.filter { it is SRow.Section || it.key in SIMPLE_ROWS }
+            .let { l -> l.filterIndexed { i, r -> r !is SRow.Section || l.getOrNull(i + 1) is SRow.Item } }
     }
 
     val now = rememberMinuteClock()
@@ -586,6 +596,12 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
 }
+
+/** Rows Simple mode keeps: looks, language, picture, backup, account and updates. */
+private val SIMPLE_ROWS = setOf(
+    "uiMode", "theme", "appLanguage", "start", "quality", "language", "resize",
+    "favSave", "favRestore", "method", "refresh", "signout", "version", "update",
+)
 
 private sealed interface SRow {
     val key: String

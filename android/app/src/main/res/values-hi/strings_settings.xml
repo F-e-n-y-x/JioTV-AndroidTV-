@@ -5,7 +5,7 @@
     <string name="settings_section_picture_sound">पिक्चर और आवाज़</string>
     <string name="settings_section_guide">प्रोग्राम गाइड</string>
     <string name="settings_section_channels">चैनल</string>
-    <string name="settings_section_backup">फ़ेवरेट का बैकअप</string>
+    <string name="settings_section_backup">बैकअप</string>
     <string name="settings_section_devices">डिवाइस</string>
     <string name="settings_section_problems">अगर पिक्चर में दिक्कत हो</string>
     <string name="settings_section_account">अकाउंट</string>
@@ -95,11 +95,11 @@
     <string name="settings_hide_not_in_plan_desc">पैसे वाले ऐड-ऑन चैनल और वे चैनल छिपाता है जिन्हें Jio ने आपके प्लान से बाहर बताया</string>
 
     <!-- Favourites backup -->
-    <string name="settings_backup_save">फ़ेवरेट का बैकअप लें</string>
+    <string name="settings_backup_save">सेटिंग्स और फ़ेवरेट का बैकअप लें</string>
     <string name="settings_backup_save_desc">Downloads में सेव होता है, ऐप दोबारा डालने के बाद वापस लाने के लिए</string>
-    <string name="settings_backup_restore">फ़ेवरेट वापस लाएँ</string>
+    <string name="settings_backup_restore">बैकअप वापस लाएँ</string>
     <string name="settings_backup_restore_value">वापस लाएँ</string>
-    <string name="settings_backup_restore_desc">बैकअप फ़ाइल से फ़ेवरेट जोड़ता है</string>
+    <string name="settings_backup_restore_desc">आपकी सेटिंग्स वापस लाता है और फ़ेवरेट जोड़ता है</string>
 
     <!-- Devices -->
     <string name="settings_device_name">इस डिवाइस का नाम</string>
@@ -172,21 +172,15 @@
     <string name="accent_teal">फ़िरोज़ी</string>
 
     <!-- ───── Favourites backup (toasts) ───── -->
-    <string name="backup_none">अभी बैकअप के लिए कोई फ़ेवरेट नहीं है।</string>
-    <plurals name="backup_saved">
-        <item quantity="one">%1$d फ़ेवरेट %2$s में सेव हुआ</item>
-        <item quantity="other">%1$d फ़ेवरेट %2$s में सेव हुए</item>
-    </plurals>
     <string name="backup_save_failed">बैकअप सेव नहीं हो सका: %s</string>
     <string name="backup_storage_error">स्टोरेज की दिक्कत</string>
     <string name="backup_need_storage">Downloads में बैकअप सेव करने के लिए JTV को स्टोरेज की अनुमति चाहिए।</string>
-    <string name="backup_empty">इस बैकअप में कोई फ़ेवरेट नहीं है।</string>
     <plurals name="backup_restored">
         <item quantity="one">%d फ़ेवरेट वापस आया।</item>
         <item quantity="other">%d फ़ेवरेट वापस आए।</item>
     </plurals>
     <string name="backup_already_match">आपके फ़ेवरेट पहले से बैकअप जैसे ही हैं।</string>
-    <string name="backup_not_a_backup">यह फ़ाइल JTV फ़ेवरेट का बैकअप नहीं है।</string>
+    <string name="backup_not_a_backup">यह फ़ाइल JTV का बैकअप नहीं है।</string>
     <string name="backup_open_with">वापस लाने के लिए फ़ाइल मैनेजर में Downloads/%s को JTV से खोलें।</string>
 
     <!-- ───── Devices (LAN sync) ───── -->
@@ -371,4 +365,18 @@
     <string name="settings_browser_style_desc">देखते समय बाएँ दबाने पर खुलने वाली सूची</string>
     <string name="settings_browser_panel">दो हिस्सों में</string>
     <string name="settings_browser_strip">पट्टी</string>
+
+    <!-- Backup of settings + favourites -->
+    <string name="backup_saved_all">आपकी सेटिंग्स और फ़ेवरेट %s में सेव हो गए</string>
+    <string name="backup_restored_all">%1$d सेटिंग्स और %2$d नए फ़ेवरेट वापस आ गए।</string>
+
+    <!-- Simple / Advanced mode -->
+    <string name="settings_mode">मोड</string>
+    <string name="settings_mode_desc">आसान मोड में आपके फ़ेवरेट एक ही लिस्ट में, कम बटन और सेटिंग्स के साथ</string>
+    <string name="mode_title">आप कैसे देखना पसंद करते हैं?</string>
+    <string name="mode_subtitle">इसे बाद में सेटिंग्स में बदल सकते हैं।</string>
+    <string name="mode_simple">आसान</string>
+    <string name="mode_simple_desc">आपके फ़ेवरेट चैनल एक ही लिस्ट में, कम बटन और सेटिंग्स के साथ</string>
+    <string name="mode_advanced">एडवांस्ड</string>
+    <string name="mode_advanced_desc">सभी चैनल और कैटेगरी, और हर सेटिंग</string>
 </resources>

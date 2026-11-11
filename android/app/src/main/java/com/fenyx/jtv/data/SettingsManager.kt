@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 // A corrupt settings file (power cut mid-write on a TV box) resets to defaults instead of crashing every launch.
@@ -82,6 +83,16 @@ class SettingsManager(private val context: Context) {
         // Recently watched channel ids, newest first (comma-joined, capped).
         private val RECENT_CHANNELS = stringPreferencesKey("recent_channels")
         private const val RECENT_MAX = 12
+        // "simple" | "advanced"; absent = not chosen yet (setup asks; existing installs act as advanced).
+        private val UI_MODE = stringPreferencesKey("ui_mode")
+        const val UI_SIMPLE = "simple"
+        const val UI_ADVANCED = "advanced"
+    }
+
+    val uiModeFlow: Flow<String?> = context.dataStore.data.map { it[UI_MODE] }.distinctUntilChanged()
+
+    suspend fun setUiMode(mode: String) {
+        context.dataStore.edit { it[UI_MODE] = mode }
     }
 
     val recentChannelsFlow: Flow<List<String>> = context.dataStore.data.map { p ->
@@ -502,5 +513,40 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setPipOnLeave(enabled: Boolean) {
         context.dataStore.edit { it[pipKey] = enabled }
+    }
+
+    // ── Settings backup ──
+    // Allow-list: a new setting is backed up only once it is added here. Never sign-in, server, pairing
+    // or plan data (the file sits in public Downloads), and not device-only choices (open on start).
+    private val backupStrings = listOf(
+        DEFAULT_LANGUAGE, DEFAULT_QUALITY, LAST_SELECTED_CATEGORY, PLAYER_BROWSER_STYLE, EPG_URL,
+        CATEGORY_ORDER, CATEGORY_HIDDEN, HIDDEN_CHANNEL_LANGUAGES, THEME_MODE, ACCENT, RECENT_CHANNELS,
+        LAST_CHANNEL_ID, LAST_CHANNEL_GROUP, remoteKeysKey, UI_MODE,
+    )
+    private val backupBooleans = listOf(
+        HARDWARE_DECODER, TUNNELING, AUDIO_NORMALIZE, GROUP_LANGUAGE_VARIANTS, HIDE_NOT_IN_PLAN, EPG_MODE,
+        CHANNEL_GRID, AUTOPLAY_LAST_CHANNEL, UP_IS_NEXT_CHANNEL, pipKey,
+    )
+    private val backupInts = listOf(PLAYBACK_BUFFER_SEC, VOICE_BOOST, PLAYER_RESIZE_MODE)
+
+    /** The settings the user changed (absent = default, so it isn't written), as plain JSON values. */
+    suspend fun exportSettings(): org.json.JSONObject {
+        val p = context.dataStore.data.first()
+        return org.json.JSONObject().apply {
+            backupStrings.forEach { k -> p[k]?.let { put(k.name, it) } }
+            backupBooleans.forEach { k -> p[k]?.let { put(k.name, it) } }
+            backupInts.forEach { k -> p[k]?.let { put(k.name, it) } }
+        }
+    }
+
+    /** Applies a backup's settings; a value of the wrong type (an edited file) is skipped. Returns how many. */
+    suspend fun importSettings(json: org.json.JSONObject): Int {
+        var n = 0
+        context.dataStore.edit { p ->
+            backupStrings.forEach { k -> (json.opt(k.name) as? String)?.let { p[k] = it; n++ } }
+            backupBooleans.forEach { k -> (json.opt(k.name) as? Boolean)?.let { p[k] = it; n++ } }
+            backupInts.forEach { k -> (json.opt(k.name) as? Int)?.let { p[k] = it; n++ } }
+        }
+        return n
     }
 }

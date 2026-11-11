@@ -68,12 +68,7 @@
     <string name="login_hint_go_back">go back</string>
 
     <!-- "Open with JTV" on a favourites backup file (MainActivity.kt) -->
-    <plurals name="backup_restore_restored">
-        <item quantity="one">Restored %d favourite.</item>
-        <item quantity="other">Restored %d favourites.</item>
-    </plurals>
-    <string name="backup_restore_already_match">Your favourites already match the backup.</string>
-    <string name="backup_restore_not_backup">That file isn\'t a JTV favourites backup.</string>
+    <string name="backup_restore_not_backup">That file isn\'t a JTV backup.</string>
 
     <!-- Device sync (sync/LanSync.kt) -->
     <string name="sync_a_device">a device</string>

@@ -313,11 +313,18 @@ fun MainNavigation() {
     //  - "phone" -> OTP LoginScreen (with a way back to the chooser)
     //  - "server" -> ServerSetupScreen (pull shared credentials)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = SETUP_LOADING)
+    // Simple / Advanced, asked once before the sign-in chooser (installs signed in before it act as Advanced).
+    val uiMode by settingsManager.uiModeFlow.collectAsState(initial = SETUP_LOADING)
 
     if (authData == null) {
         when (setupMode) {
             SETUP_LOADING -> LoadingScreen()
-            null -> com.fenyx.jtv.ui.setup.SetupScreen(
+            null -> if (uiMode == SETUP_LOADING) LoadingScreen()
+            else if (uiMode == null) com.fenyx.jtv.ui.setup.ModeScreen(
+                onChoose = { simple -> scope.launch { settingsManager.setUiMode(if (simple) SettingsManager.UI_SIMPLE else SettingsManager.UI_ADVANCED) } },
+                modifier = Modifier.safeDrawingPadding()
+            )
+            else com.fenyx.jtv.ui.setup.SetupScreen(
                 onChoosePhone = { scope.launch { settingsManager.setSetupMode("phone") } },
                 onChooseServer = { scope.launch { settingsManager.setSetupMode("server") } },
                 onChooseJtv = { scope.launch { settingsManager.setSetupMode("jtv") } },

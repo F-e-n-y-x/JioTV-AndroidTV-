@@ -163,6 +163,10 @@ fun MainScreen(
             catPrefs.arrange(list.map { it.key }, MainViewModel.GROUP_ALL).mapNotNull { byKey[it] }
         }
     }
+    // Simple mode: one list, the favourites (all channels until there are some), no categories.
+    val simple = settingsManager.uiModeFlow.collectAsState(initial = null).value == SettingsManager.UI_SIMPLE
+    val simpleGroup = if (favoritesList.isNotEmpty()) MainViewModel.GROUP_FAVORITES else MainViewModel.GROUP_ALL
+    LaunchedEffect(simple, simpleGroup) { if (simple && group != simpleGroup) viewModel.setSelectedGroup(simpleGroup) }
     val indexById = remember(displayChannels) { displayChannels.withIndex().associate { (i, ch) -> ch.id to i } }
 
     // ── Favourites reorder (issue #1): arrows move the lifted channel, OK saves, Back cancels ──
@@ -434,7 +438,7 @@ fun MainScreen(
             val wide = Jtv.isTv || maxWidth >= 840.dp
             if (wide) {
                 WideHome(
-                    categories = categories, selected = group, count = displayChannels.size,
+                    categories = categories, selected = group, count = displayChannels.size, simple = simple,
                     onSelect = { viewModel.setSelectedGroup(it) }, selectOnFocus = Jtv.isTv && movingId == null,
                     onSearch = onSearchClick, onGuide = onGuideClick, onSettings = onSettingsClick,
                     movingName = movingId?.let { id -> shown.firstOrNull { it.id == id }?.name },
@@ -480,7 +484,7 @@ fun MainScreen(
                 )
             } else {
                 PhoneHome(
-                    categories = categories, selected = group, count = displayChannels.size,
+                    categories = categories, selected = group, count = displayChannels.size, simple = simple,
                     onSelect = { viewModel.setSelectedGroup(it) },
                     onSearch = onSearchClick, onGuide = onGuideClick, onSettings = onSettingsClick,
                     grid = grid, onViewSelect = onViewSelect,
@@ -516,6 +520,7 @@ private fun WideHome(
     categories: List<Category>,
     selected: String,
     count: Int,
+    simple: Boolean,
     onSelect: (String) -> Unit,
     selectOnFocus: Boolean,
     onSearch: () -> Unit,
@@ -550,7 +555,7 @@ private fun WideHome(
                 )
             }
             // Up from the channels reaches this (and the tabs next to it).
-            ViewToggle(grid, onViewSelect, Modifier.padding(end = 20.dp, top = 2.dp))
+            if (!simple) ViewToggle(grid, onViewSelect, Modifier.padding(end = 20.dp, top = 2.dp))
             // TV: section tabs (Up from the list). Tablet: the left navigation rail does this job.
             if (tv) TvTabs(PhoneTab.Live, { t ->
                 when (t) { PhoneTab.Guide -> onGuide(); PhoneTab.Search -> onSearch(); PhoneTab.Settings -> onSettings(); else -> {} }
@@ -569,6 +574,7 @@ private fun WideHome(
             }
         }
         Row(Modifier.weight(1f)) {
+          if (!simple) {
             LazyColumn(
                 state = catState,
                 modifier = Modifier.width(if (tv) 190.dp else 210.dp).fillMaxHeight().focusRestorer().focusGroup(),
@@ -583,6 +589,7 @@ private fun WideHome(
                 }
             }
             Spacer(Modifier.width(20.dp))
+          }
             if (grid) {
                 // Grid: the whole width for cards, the focused channel's details on a strip underneath.
                 Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -607,7 +614,9 @@ private fun WideHome(
                 else listOf(
                     stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_watch),
                     stringResource(R.string.nav_key_hold_ok) to stringResource(R.string.nav_hint_options),
+                ).let { if (simple) it else it + listOf(
                     stringResource(R.string.nav_key_left) to stringResource(R.string.nav_hint_categories),
+                ) } + listOf(
                     stringResource(R.string.nav_key_digits) to stringResource(R.string.nav_hint_channel_number),
                 )
             )
@@ -620,6 +629,7 @@ private fun PhoneHome(
     categories: List<Category>,
     selected: String,
     count: Int,
+    simple: Boolean,
     onSelect: (String) -> Unit,
     onSearch: () -> Unit,
     onGuide: () -> Unit,
@@ -641,9 +651,9 @@ private fun PhoneHome(
             Spacer(Modifier.width(10.dp))
             Text(pluralStringResource(R.plurals.common_channel_count, count, count), style = textStyle(14.sp), color = c.t3, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            ViewToggle(grid, onViewSelect)
+            if (!simple) ViewToggle(grid, onViewSelect)
         }
-        LazyRow(
+        if (!simple) LazyRow(
             state = chipState,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
