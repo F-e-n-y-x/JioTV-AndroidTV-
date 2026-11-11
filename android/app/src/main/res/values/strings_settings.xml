@@ -373,10 +373,6 @@
     <!-- Simple / Advanced mode -->
     <string name="settings_mode">Mode</string>
     <string name="settings_mode_desc">Simple shows your favourites in one list, with fewer buttons and settings</string>
-    <string name="mode_title">How do you like to watch?</string>
-    <string name="mode_subtitle">You can change this later in Settings.</string>
     <string name="mode_simple">Simple</string>
-    <string name="mode_simple_desc">Your favourite channels in one list, with fewer buttons and settings</string>
     <string name="mode_advanced">Advanced</string>
-    <string name="mode_advanced_desc">All channels and categories, and every setting</string>
 </resources>

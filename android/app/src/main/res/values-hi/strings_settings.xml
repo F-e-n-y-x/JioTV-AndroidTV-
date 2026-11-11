@@ -373,10 +373,6 @@
     <!-- Simple / Advanced mode -->
     <string name="settings_mode">मोड</string>
     <string name="settings_mode_desc">आसान मोड में आपके फ़ेवरेट एक ही लिस्ट में, कम बटन और सेटिंग्स के साथ</string>
-    <string name="mode_title">आप कैसे देखना पसंद करते हैं?</string>
-    <string name="mode_subtitle">इसे बाद में सेटिंग्स में बदल सकते हैं।</string>
     <string name="mode_simple">आसान</string>
-    <string name="mode_simple_desc">आपके फ़ेवरेट चैनल एक ही लिस्ट में, कम बटन और सेटिंग्स के साथ</string>
     <string name="mode_advanced">एडवांस्ड</string>
-    <string name="mode_advanced_desc">सभी चैनल और कैटेगरी, और हर सेटिंग</string>
 </resources>

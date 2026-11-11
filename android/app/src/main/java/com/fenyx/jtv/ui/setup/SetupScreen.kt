@@ -6,8 +6,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.runtime.*
@@ -43,35 +41,17 @@ fun SetupScreen(
     onChooseJtv: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    ChoiceScreen(stringResource(R.string.setup_welcome), stringResource(R.string.setup_how_sign_in), listOf(
-        Triple(stringResource(R.string.setup_code_title), stringResource(R.string.setup_code_card_subtitle), Icons.Default.Lock) to onChooseJtv,
-        Triple(stringResource(R.string.setup_phone_title), stringResource(R.string.setup_phone_card_subtitle), Icons.Default.Phone) to onChoosePhone,
-        Triple(stringResource(R.string.setup_own_server_title), stringResource(R.string.setup_server_subtitle), Icons.Default.Build) to onChooseServer,
-    ), modifier)
-}
-
-/** First setup, before sign-in: Simple (favourites, fewer buttons and settings) or Advanced. */
-@Composable
-fun ModeScreen(onChoose: (simple: Boolean) -> Unit, modifier: Modifier = Modifier) {
-    ChoiceScreen(stringResource(R.string.setup_welcome), stringResource(R.string.mode_title), listOf(
-        Triple(stringResource(R.string.mode_simple), stringResource(R.string.mode_simple_desc), Icons.Default.Favorite) to { onChoose(true) },
-        Triple(stringResource(R.string.mode_advanced), stringResource(R.string.mode_advanced_desc), Icons.Default.Settings) to { onChoose(false) },
-    ), modifier, footnote = stringResource(R.string.mode_subtitle))
-}
-
-@Composable
-private fun ChoiceScreen(
-    title: String,
-    subtitle: String,
-    options: List<Pair<Triple<String, String, ImageVector>, () -> Unit>>,
-    modifier: Modifier,
-    footnote: String? = null,
-) {
     val c = Jtv.colors
     val isTv = Jtv.isTv
     val isPhone = Jtv.form == FormFactor.Phone
     val firstCard = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstCard.requestFocus() } }
+
+    val options = listOf(
+        Triple(stringResource(R.string.setup_code_title), stringResource(R.string.setup_code_card_subtitle), Icons.Default.Lock) to onChooseJtv,
+        Triple(stringResource(R.string.setup_phone_title), stringResource(R.string.setup_phone_card_subtitle), Icons.Default.Phone) to onChoosePhone,
+        Triple(stringResource(R.string.setup_own_server_title), stringResource(R.string.setup_server_subtitle), Icons.Default.Build) to onChooseServer,
+    )
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         Column(
@@ -82,9 +62,9 @@ private fun ChoiceScreen(
             horizontalAlignment = if (isPhone) Alignment.Start else Alignment.CenterHorizontally,
             verticalArrangement = if (isPhone) Arrangement.Top else Arrangement.Center
         ) {
-            Text(title, style = textStyle(if (isPhone) 30.sp else 36.sp, FontWeight.Bold), color = c.tx)
+            Text(stringResource(R.string.setup_welcome), style = textStyle(if (isPhone) 30.sp else 36.sp, FontWeight.Bold), color = c.tx)
             Spacer(Modifier.height(8.dp))
-            Text(subtitle, style = textStyle(20.sp), color = c.t2)
+            Text(stringResource(R.string.setup_how_sign_in), style = textStyle(20.sp), color = c.t2)
             Spacer(Modifier.height(if (isPhone) 24.dp else 32.dp))
 
             if (isPhone) {
@@ -103,10 +83,6 @@ private fun ChoiceScreen(
                             Modifier.weight(1f).then(if (i == 0) Modifier.focusRequester(firstCard) else Modifier), compact = false)
                     }
                 }
-            }
-            if (footnote != null) {
-                Spacer(Modifier.height(16.dp))
-                Text(footnote, style = textStyle(16.sp), color = c.t3)
             }
             if (isTv) {
                 Spacer(Modifier.height(32.dp))

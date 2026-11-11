@@ -83,7 +83,7 @@ class SettingsManager(private val context: Context) {
         // Recently watched channel ids, newest first (comma-joined, capped).
         private val RECENT_CHANNELS = stringPreferencesKey("recent_channels")
         private const val RECENT_MAX = 12
-        // "simple" | "advanced"; absent = not chosen yet (setup asks; existing installs act as advanced).
+        // Settings → Mode: "simple" | "advanced"; absent = advanced.
         private val UI_MODE = stringPreferencesKey("ui_mode")
         const val UI_SIMPLE = "simple"
         const val UI_ADVANCED = "advanced"
