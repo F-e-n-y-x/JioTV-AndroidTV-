@@ -936,12 +936,12 @@ object JioApiClient {
                     channelId = channelId,
                     forceRefresh = false
                 )
-                if (streamData != null) {
-                    if (isStreamTokenExpired(streamData.streamUrl)) {
-                        return@withContext Result.failure(ChannelUnavailableException(STREAM_EXPIRED_MESSAGE))
-                    }
+                // An expired third-party token falls through to Jio's own geturl: Jio carries many of
+                // these channels itself (Zee 24 Taas, issue #15), and the third-party tokens often die.
+                if (streamData != null && !isStreamTokenExpired(streamData.streamUrl)) {
                     return@withContext Result.success(streamData)
                 }
+                Log.i(TAG, "Third-party stream for $channelId unusable, trying Jio's own")
             }
             ensureStreamModesLoaded(context)
             val url = URL("https://jiotvapi.media.jio.com/playback/apis/v1.1/geturl")
