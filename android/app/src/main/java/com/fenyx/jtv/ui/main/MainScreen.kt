@@ -125,7 +125,10 @@ fun MainScreen(
     val epgData by viewModel.epgData.collectAsState()
     // List or grid (null until the saved choice has loaded, so nothing flashes in the wrong view).
     val gridPref by settingsManager.channelGridFlow.collectAsState(initial = null)
-    val grid = gridPref == true
+    // Simple mode: no categories, just Favourites | All channels (All alone until there are favourites),
+    // and always the grid (big tiles).
+    val simple = settingsManager.uiModeFlow.collectAsState(initial = null).value == SettingsManager.UI_SIMPLE
+    val grid = simple || gridPref == true
     val scope = rememberCoroutineScope()
     com.fenyx.jtv.ui.settings.UpdatePrompt(viewModel)
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
@@ -163,8 +166,6 @@ fun MainScreen(
             catPrefs.arrange(list.map { it.key }, MainViewModel.GROUP_ALL).mapNotNull { byKey[it] }
         }
     }
-    // Simple mode: no categories, just Favourites | All channels (All alone until there are favourites).
-    val simple = settingsManager.uiModeFlow.collectAsState(initial = null).value == SettingsManager.UI_SIMPLE
     val noFavourites = favoritesList.isEmpty() && allChannels.isNotEmpty()
     LaunchedEffect(simple, group, noFavourites) {
         val ok = group == MainViewModel.GROUP_ALL || (group == MainViewModel.GROUP_FAVORITES && !noFavourites)
