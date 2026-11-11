@@ -237,6 +237,11 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
   const [duration, setDuration] = useState(0);   // >0 only for catch-up VOD (seekable)
   const [position, setPosition] = useState(0);
   const [behind, setBehind] = useState(0);       // live: seconds behind the live edge (Jio keeps ~60 s)
+  // How far behind the edge the player sits on its own (hls.js keeps ~3 segments back); only time
+  // beyond this counts as "behind live". Learned while playing, reset per stream.
+  const edgeGap = useRef(Infinity);
+  const lag = Math.max(0, behind - (Number.isFinite(edgeGap.current) ? edgeGap.current : behind));
+  const atLive = lag < 8;
   const isCatchup = cid.startsWith("cu.");
   // Live channels try Jio's Widevine version first where the browser can decrypt it: the plain stream
   // of many HD channels stops at 360p. If it fails, this channel drops back to the plain stream.
@@ -246,7 +251,7 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
     let cancelled = false;
     setError(null); setNotEntitled(false); setLoading(true);
     setAudioLangs([]); setCurLang(""); setQualities([]); setCurQuality("auto");
-    setDuration(0); setPosition(0);
+    setDuration(0); setPosition(0); setBehind(0); edgeGap.current = Infinity;
 
     let key = cid;
     const proxied = (u: string) => `/api/proxy?cid=${encodeURIComponent(key)}&u=${encodeURIComponent(u)}`;
@@ -363,7 +368,10 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
     const onTime = () => {
       setPosition(v.currentTime);
       const s = v.seekable;
-      setBehind(s.length && !Number.isFinite(v.duration) ? Math.max(0, s.end(s.length - 1) - v.currentTime) : 0);
+      // hls.js reports a finite, growing duration for live, so don't key on duration here.
+      const b = s.length ? Math.max(0, s.end(s.length - 1) - v.currentTime) : 0;
+      if (!v.paused && v.readyState >= 3) edgeGap.current = Math.min(edgeGap.current, b);
+      setBehind(b);
     };
     v.addEventListener("play", onPlay); v.addEventListener("pause", onPause); v.addEventListener("volumechange", onVol);
     v.addEventListener("durationchange", onDur); v.addEventListener("timeupdate", onTime);
@@ -386,9 +394,12 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
   // ←/→: 10 s inside what the stream keeps (the whole show for catch-up, ~60 s for live).
   const seekBy = (d: number) => {
     const v = videoRef.current; if (!v || !v.seekable.length) return;
-    v.currentTime = Math.min(v.seekable.end(v.seekable.length - 1), Math.max(v.seekable.start(0), v.currentTime + d)); nudge();
+    // Live: never past the player's own gap behind the edge, or it stalls waiting for segments.
+    const end = v.seekable.end(v.seekable.length - 1) - (isCatchup ? 0 : liveGap());
+    v.currentTime = Math.min(end, Math.max(v.seekable.start(0), v.currentTime + d)); nudge();
   };
-  const goLiveEdge = () => { const v = videoRef.current; if (v?.seekable.length) { v.currentTime = v.seekable.end(v.seekable.length - 1) - 3; v.play().catch(() => {}); } };
+  const liveGap = () => (Number.isFinite(edgeGap.current) ? edgeGap.current : 3);
+  const goLiveEdge = () => { const v = videoRef.current; if (v?.seekable.length) { v.currentTime = v.seekable.end(v.seekable.length - 1) - liveGap(); v.play().catch(() => {}); } };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Space on a focused button presses that button instead.
@@ -473,10 +484,10 @@ function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: 
         </button>
         <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(e) => onVolInput(Number(e.target.value))} className="w-20 accent-white" title="Volume" />
         {!isCatchup && !loading && !error && (
-          <button onClick={goLiveEdge} title="Back to live" disabled={behind < 8}
-            className={`ml-1 px-2 h-6 rounded text-[11px] font-semibold tracking-wide ${behind < 8 ? "text-white cursor-default" : "bg-white/20 text-white hover:bg-white/30"}`}>
-            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle ${behind < 8 ? "bg-red-500" : "bg-white/60"}`} />
-            {behind < 8 ? "LIVE" : `−${Math.round(behind)}s · Go live`}
+          <button onClick={goLiveEdge} title="Back to live" disabled={atLive}
+            className={`ml-1 px-2 h-6 rounded text-[11px] font-semibold tracking-wide ${atLive ? "text-white cursor-default" : "bg-white/20 text-white hover:bg-white/30"}`}>
+            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle ${atLive ? "bg-red-500" : "bg-white/60"}`} />
+            {atLive ? "LIVE" : `−${Math.round(lag)}s · Go live`}
           </button>
         )}
         <div className="ml-auto flex items-center gap-1">

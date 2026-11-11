@@ -138,8 +138,11 @@ async function resolveOnce(key: string): Promise<CachedStream> {
   // a token-signed URL whose CDN path 404s. If the non-DRM HLS is dead, try the DRM DASH; if BOTH are
   // dead the channel is simply down on Jio's side, so say so plainly instead of failing to parse a 404.
   if (hd) {
-    // HD key: the DASH if it's alive, else whatever the plain key plays (learned there, not here).
-    if (!data.isMpd || !(await masterAlive(data.streamUrl, data.streamHeaders))) {
+    // HD key: the DASH if it's alive, else whatever the plain key plays. Remembered as mode "hls" under
+    // the key "hd.<id>", so the hd=1 playlist lists that channel as a plain entry from the next refresh.
+    const dashOk = data.isMpd && (await masterAlive(data.streamUrl, data.streamHeaders));
+    try { saveStreamMode(key, dashOk ? "drm" : "hls", Date.now()); } catch { /* best effort */ }
+    if (!dashOk) {
       const plain = await getStream(channelId);
       cache.set(key, { ...plain, key });
       return cache.get(key)!;

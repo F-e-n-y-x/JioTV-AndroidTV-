@@ -90,6 +90,12 @@ test("hd=1 playlist: every channel is an hd.<id> Widevine entry", async () => {
       assert.equal(lines[i - 1], `#KODIPROP:inputstream.adaptive.license_key=http://tv.lan:29180/license/hd.${id}?code=${CODE}|Content-Type=application/octet-stream|R{SSM}|`);
       assert.equal(lines[i + 1], `http://tv.lan:29180/live/hd.${id}.mpd?ts=1&code=${CODE}`);
     }
+    // A channel whose Widevine stream was seen dead stays a plain entry.
+    (await import("../src/store/db")).saveStreamMode("hd.1", "hls", Date.now());
+    const learned = (await app.inject({ url: `/playlist.m3u?code=${CODE}&hd=1`, headers: { host: "tv.lan:29180" } })).body.split("\n");
+    const j = learned.findIndex((l) => l.includes('tvg-id="1"'));
+    assert.ok(!learned[j - 1].startsWith("#KODIPROP"));
+    assert.equal(learned[j + 1], `http://tv.lan:29180/live/1.m3u8?ts=1&code=${CODE}`);
     // drm=plain wins: VLC keeps the plain list.
     const plain = await app.inject({ url: `/playlist.m3u?code=${CODE}&hd=1&drm=plain`, headers: { host: "tv.lan:29180" } });
     assert.doesNotMatch(plain.body, /hd\.|widevine/);

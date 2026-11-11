@@ -7,7 +7,7 @@ import { getChannels, type Channel } from "../jio/channels";
 import { getNativeEpg } from "../jio/epg";
 import { getPlaybackInfo, proxyUpstream, proxyLicense, rewriteManifest, rewriteMpdForPlayer, manifestDir } from "../proxy/streamProxy";
 import { isExtraChannel, getExtraChannelSync, getExtraChannel } from "../jio/extraChannels";
-import { getFavorites, hasCode, getDrmOnlyChannelIds } from "../store/db";
+import { getFavorites, hasCode, getDrmOnlyChannelIds, getStreamMode } from "../store/db";
 import { filterPlaylistChannels, needsWidevine } from "./playlistFilter";
 import { isAuthEnabled, envServerToken, getEpgConfig } from "../store/settings";
 import { baseUrl } from "../util/baseUrl";
@@ -90,8 +90,10 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     for (const c of channels) {
       const extra = isExtraChannel(c.id) ? getExtraChannelSync(c.id) : undefined;
       const isMpd = extra ? extra.isMpd : false;
-      const widevine = withDrm && !extra && (hd || needsWidevine(c, drmOnlyIds));
-      const key = hd && !extra ? `hd.${c.id}` : c.id;
+      // A channel whose Widevine stream was seen dead (Zee TV HD, ...) stays a plain entry.
+      const hdEntry = hd && !extra && getStreamMode(`hd.${c.id}`) !== "hls";
+      const widevine = withDrm && !extra && (hdEntry || needsWidevine(c, drmOnlyIds));
+      const key = hdEntry ? `hd.${c.id}` : c.id;
       const streamExt = isMpd || widevine ? "mpd" : "m3u8";
       const streamUrl = `${base}/live/${encodeURIComponent(key)}.${streamExt}?ts=1${codeQ}${qualityQ}`;
       // Only channels Jio actually keeps a catch-up archive for get the catch-up attributes.
