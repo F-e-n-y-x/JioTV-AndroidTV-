@@ -349,7 +349,7 @@ fun MainNavigation() {
         // Show blank loading screen while evaluating autoplay
         LoadingScreen()
     } else Box(Modifier.fillMaxSize()) {
-      androidx.compose.runtime.CompositionLocalProvider(LocalMiniBarInset provides miniBarInset) {
+      androidx.compose.runtime.CompositionLocalProvider(LocalMiniBarInset provides miniBarInset, com.fenyx.jtv.ui.main.LocalSimpleMode provides (uiMode == SettingsManager.UI_SIMPLE)) {
         NavDisplay(
             backStack = backStack,
             onBack = pop,

@@ -158,16 +158,21 @@ fun ChannelCard(
  * the s2 fill and the amber underline (like the section tabs); focus is the usual inverted fill.
  */
 @Composable
-fun ViewToggle(grid: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun ViewToggle(grid: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier = Modifier) =
+    SegmentToggle(listOf(false to stringResource(R.string.home_view_list), true to stringResource(R.string.home_view_grid)), grid, onSelect, modifier)
+
+/** A small two-or-more option switch (List | Grid, Favourites | All channels). */
+@Composable
+fun <T> SegmentToggle(options: List<Pair<T, String>>, current: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
     val c = Jtv.colors
     Row(
         modifier.focusGroup().clip(RoundedCornerShape(8.dp)).background(c.s1).padding(2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        listOf(false to R.string.home_view_list, true to R.string.home_view_grid).forEach { (isGrid, label) ->
-            val sel = grid == isGrid
+        options.forEach { (value, label) ->
+            val sel = current == value
             JtvClickable(
-                onClick = { if (!sel) onSelect(isGrid) },
+                onClick = { if (!sel) onSelect(value) },
                 modifier = Modifier.height(if (Jtv.isTv) 36.dp else 40.dp)
                     .semantics { selected = sel; role = Role.RadioButton }
                     .then(
@@ -180,7 +185,7 @@ fun ViewToggle(grid: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier = 
                 container = if (sel) c.s2 else Color.Transparent,
             ) { focused ->
                 Text(
-                    stringResource(label), style = textStyle(16.sp, if (sel) FontWeight.Bold else FontWeight.SemiBold),
+                    label, style = textStyle(16.sp, if (sel) FontWeight.Bold else FontWeight.SemiBold),
                     color = if (focused) c.invTx else if (sel) c.tx else c.t2, maxLines = 1,
                     modifier = Modifier.align(Alignment.Center).padding(horizontal = 14.dp),
                 )

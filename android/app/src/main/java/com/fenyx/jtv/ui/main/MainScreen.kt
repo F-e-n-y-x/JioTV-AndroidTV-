@@ -163,10 +163,13 @@ fun MainScreen(
             catPrefs.arrange(list.map { it.key }, MainViewModel.GROUP_ALL).mapNotNull { byKey[it] }
         }
     }
-    // Simple mode: one list, the favourites (all channels until there are some), no categories.
+    // Simple mode: no categories, just Favourites | All channels (All alone until there are favourites).
     val simple = settingsManager.uiModeFlow.collectAsState(initial = null).value == SettingsManager.UI_SIMPLE
-    val simpleGroup = if (favoritesList.isNotEmpty()) MainViewModel.GROUP_FAVORITES else MainViewModel.GROUP_ALL
-    LaunchedEffect(simple, simpleGroup) { if (simple && group != simpleGroup) viewModel.setSelectedGroup(simpleGroup) }
+    val noFavourites = favoritesList.isEmpty() && allChannels.isNotEmpty()
+    LaunchedEffect(simple, group, noFavourites) {
+        val ok = group == MainViewModel.GROUP_ALL || (group == MainViewModel.GROUP_FAVORITES && !noFavourites)
+        if (simple && !ok) viewModel.setSelectedGroup(if (noFavourites) MainViewModel.GROUP_ALL else MainViewModel.GROUP_FAVORITES)
+    }
     val indexById = remember(displayChannels) { displayChannels.withIndex().associate { (i, ch) -> ch.id to i } }
 
     // ── Favourites reorder (issue #1): arrows move the lifted channel, OK saves, Back cancels ──
@@ -556,6 +559,7 @@ private fun WideHome(
             }
             // Up from the channels reaches this (and the tabs next to it).
             if (!simple) ViewToggle(grid, onViewSelect, Modifier.padding(end = 20.dp, top = 2.dp))
+            else SimpleToggle(categories, selected, onSelect, Modifier.padding(end = 20.dp, top = 2.dp))
             // TV: section tabs (Up from the list). Tablet: the left navigation rail does this job.
             if (tv) TvTabs(PhoneTab.Live, { t ->
                 when (t) { PhoneTab.Guide -> onGuide(); PhoneTab.Search -> onSearch(); PhoneTab.Settings -> onSettings(); else -> {} }
@@ -651,7 +655,7 @@ private fun PhoneHome(
             Spacer(Modifier.width(10.dp))
             Text(pluralStringResource(R.plurals.common_channel_count, count, count), style = textStyle(14.sp), color = c.t3, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            if (!simple) ViewToggle(grid, onViewSelect)
+            if (!simple) ViewToggle(grid, onViewSelect) else SimpleToggle(categories, selected, onSelect)
         }
         if (!simple) LazyRow(
             state = chipState,
@@ -770,4 +774,12 @@ private fun PreviewPane(
             if (miniShowing) Spacer(Modifier.height(com.fenyx.jtv.ui.player.MiniCardWidth * 9f / 16f + com.fenyx.jtv.ui.player.MiniBarHeight + 16.dp))
         }
     }
+}
+
+/** Simple mode's only switch: Favourites | All channels (nothing until there are favourites). */
+@Composable
+private fun SimpleToggle(categories: List<Category>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+    val opts = categories.filter { it.key == MainViewModel.GROUP_FAVORITES || it.key == MainViewModel.GROUP_ALL }
+    if (opts.size < 2) return
+    SegmentToggle(opts.map { it.key to it.label }, selected, onSelect, modifier)
 }
