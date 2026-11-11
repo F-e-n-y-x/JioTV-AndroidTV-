@@ -87,9 +87,17 @@ class SettingsManager(private val context: Context) {
         private val UI_MODE = stringPreferencesKey("ui_mode")
         const val UI_SIMPLE = "simple"
         const val UI_ADVANCED = "advanced"
+        // Simple mode's own list/grid choice (Settings → Channel view); absent = grid.
+        private val SIMPLE_GRID = booleanPreferencesKey("simple_channel_grid")
     }
 
     val uiModeFlow: Flow<String?> = context.dataStore.data.map { it[UI_MODE] }.distinctUntilChanged()
+
+    val simpleGridFlow: Flow<Boolean> = context.dataStore.data.map { it[SIMPLE_GRID] ?: true }.distinctUntilChanged()
+
+    suspend fun setSimpleGrid(grid: Boolean) {
+        context.dataStore.edit { it[SIMPLE_GRID] = grid }
+    }
 
     suspend fun setUiMode(mode: String) {
         context.dataStore.edit { it[UI_MODE] = mode }
@@ -525,7 +533,7 @@ class SettingsManager(private val context: Context) {
     )
     private val backupBooleans = listOf(
         HARDWARE_DECODER, TUNNELING, AUDIO_NORMALIZE, GROUP_LANGUAGE_VARIANTS, HIDE_NOT_IN_PLAN, EPG_MODE,
-        CHANNEL_GRID, AUTOPLAY_LAST_CHANNEL, UP_IS_NEXT_CHANNEL, pipKey,
+        CHANNEL_GRID, SIMPLE_GRID, AUTOPLAY_LAST_CHANNEL, UP_IS_NEXT_CHANNEL, pipKey,
     )
     private val backupInts = listOf(PLAYBACK_BUFFER_SEC, VOICE_BOOST, PLAYER_RESIZE_MODE)
 

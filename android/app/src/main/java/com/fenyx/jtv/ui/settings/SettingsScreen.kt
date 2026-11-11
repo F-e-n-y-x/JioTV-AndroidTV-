@@ -89,7 +89,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
         canAutoOpen = com.fenyx.jtv.AutoStart.allowed(context)
         onPauseOrDispose { }
     }
-    val channelGrid by settingsManager.channelGridFlow.collectAsState(initial = false)
+    val advancedGrid by settingsManager.channelGridFlow.collectAsState(initial = false)
+    val simpleGrid by settingsManager.simpleGridFlow.collectAsState(initial = true)
     val browserPanel by settingsManager.playerBrowserPanelFlow.collectAsState(initial = true)
     val groupLanguageVariants by settingsManager.groupLanguageVariantsFlow.collectAsState(initial = true)
     val hideNotInPlan by settingsManager.hideNotInPlanFlow.collectAsState(initial = false)
@@ -97,6 +98,8 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
     val serverUrl by settingsManager.serverUrlFlow.collectAsState(initial = "")
     val themeMode by settingsManager.themeModeFlow.collectAsState(initial = null)
     val simple = settingsManager.uiModeFlow.collectAsState(initial = null).value == SettingsManager.UI_SIMPLE
+    // Each mode keeps its own list/grid choice (Advanced also has the switch on the home screen).
+    val channelGrid = if (simple) simpleGrid else advancedGrid
     val serverRefreshing by mainViewModel.serverRefreshing.collectAsState()
     val serverRefreshMsg by mainViewModel.serverRefreshMsg.collectAsState()
 
@@ -488,7 +491,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, mainViewModel: MainViewModel, 
                 onDismiss = { sheet = Sheet.None })
             Sheet.ChannelView -> PickerDialog(stringResource(R.string.settings_channel_view),
                 listOf("list" to stringResource(R.string.home_view_list), "grid" to stringResource(R.string.home_view_grid)), if (channelGrid) "grid" else "list",
-                onSelect = { v -> scope.launch { settingsManager.setChannelGrid(v == "grid") }; sheet = Sheet.None },
+                onSelect = { v -> scope.launch { if (simple) settingsManager.setSimpleGrid(v == "grid") else settingsManager.setChannelGrid(v == "grid") }; sheet = Sheet.None },
                 onDismiss = { sheet = Sheet.None })
             Sheet.BrowserStyle -> PickerDialog(stringResource(R.string.settings_browser_style),
                 listOf("panel" to stringResource(R.string.settings_browser_panel), "strip" to stringResource(R.string.settings_browser_strip)),
@@ -599,7 +602,7 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
 
 /** Rows Simple mode keeps: looks, language, picture, backup, account and updates. */
 private val SIMPLE_ROWS = setOf(
-    "uiMode", "theme", "appLanguage", "start", "quality", "language", "resize",
+    "uiMode", "theme", "appLanguage", "channelView", "start", "quality", "language", "resize",
     "favSave", "favRestore", "method", "refresh", "signout", "version", "update",
 )
 

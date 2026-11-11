@@ -126,9 +126,10 @@ fun MainScreen(
     // List or grid (null until the saved choice has loaded, so nothing flashes in the wrong view).
     val gridPref by settingsManager.channelGridFlow.collectAsState(initial = null)
     // Simple mode: no categories, just Favourites | All channels (All alone until there are favourites),
-    // and always the grid (big tiles).
+    // and its own list/grid choice in Settings (grid unless changed; no switch on the home screen).
     val simple = settingsManager.uiModeFlow.collectAsState(initial = null).value == SettingsManager.UI_SIMPLE
-    val grid = simple || gridPref == true
+    val simpleGrid by settingsManager.simpleGridFlow.collectAsState(initial = true)
+    val grid = if (simple) simpleGrid else gridPref == true
     val scope = rememberCoroutineScope()
     com.fenyx.jtv.ui.settings.UpdatePrompt(viewModel)
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
