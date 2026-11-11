@@ -1,8 +1,21 @@
-# JTV 2.0 beta 32
+# JTV 2.0 beta 33
 
-> **Latest release.** The 1.5.x app offers this as an update. Install `JTV-v2.0-beta.32.apk` over your current version, and your login and favourites are kept. Earlier betas are listed below.
+> **Latest release.** The 1.5.x app offers this as an update. Install `JTV-v2.0-beta.33.apk` over your current version, and your login and favourites are kept. Earlier betas are listed below.
 
-## New in beta 32
+## New in beta 33
+- **Zee 24 Taas plays again (#15),** and so do other Zee channels Jio carries itself. The app used a backup Zee source first; when its link had expired, the channel failed. It now falls back to Jio's own stream.
+- **No crash when pressing Back twice quickly.** On slower TV boxes, a fast double Back could close the app with a crash. Fixed.
+
+### Server (Docker) — update your stack to get these
+- **Full HD in the web player and in TiviMate / Kodi.** Jio's plain stream of many HD channels (Colors HD and others) stops at 360p. On the server's https address the web player now uses the Widevine stream, up to 1080p. In the playlist builder, tick **Full HD** (`&hd=1`) for TiviMate, Kodi and OTT Navigator.
+- **DRM channels are in the playlist by default.** Kodi, TiviMate and OTT Navigator play them without adding `drm=1`. For VLC use `&drm=plain`.
+- **A web player more like the app:** channel list next to the video, ↑/↓ and number keys to change channel, language switch for channels like History TV18 HD, Recent channels, channel numbers, Restart show, a Live button, picture-in-picture, and an accent colour picker (Account → Appearance). The web UI also has the app's logo.
+
+---
+
+## Earlier betas
+
+### Beta 32
 - **Languages are together again.** "Group languages together" is switched back on for everyone, so channels like History TV18 HD, Discovery and Animal Planet show once, and you pick Hindi, Tamil, Telugu or English in the player. The language list no longer shows "Default" next to English.
 - **Speak to search.** Press **Speak** on the Search screen (or the remote's search key) and say a channel name. With the programme guide on, Search also finds shows, not only channels.
 - **Continue watching on the Android TV home screen.** The last channel appears in the "Play next" row; press it to go straight back.
@@ -14,10 +27,6 @@
 - **Fewer sign-in prompts.** The sign-in is renewed earlier, before it can expire between checks.
 - **Safer updates.** The in-app update rejects a half-downloaded file.
 - **Server: DRM channels in TiviMate / Kodi.** Add `&drm=1` to your playlist link to include Widevine channels. See the server README.
-
----
-
-## Earlier betas
 
 ### Beta 31
 - **Typing a channel number plays that channel.** After switching to a channel in another category (by number, from the channel browser or with "previous channel"), the player sometimes jumped straight back to the old channel. Fixed.
@@ -32,14 +41,10 @@
 
 ---
 
-## Earlier betas
-
 ### Beta 30
 - **HD channels fill the screen again (#11).** Some HD channels, such as Sony Vizha, showed smaller with black bars on the sides in **Fit**. Fixed: the picture now keeps its real shape, while SD channels like Kalaignar TV still get the 4:3 fix.
 
 ---
-
-## Earlier betas
 
 ### Beta 29
 - **A much better Voice Boost.** Voice Boost now listens for speech and lifts voices only while someone is talking, turning the background down a little at the same time. Music between lines is left alone, so it no longer "pumps", and switching it on no longer makes the sound quieter. It works on the many channels that are close to mono, where the old Voice Boost made little difference. Try **Medium** first; **Max** gives the most voice lift.
