@@ -62,13 +62,7 @@
     <string name="login_hint_type">लिखें</string>
     <string name="login_hint_press_key">बटन दबाएँ</string>
     <string name="login_hint_go_back">वापस जाएँ</string>
-
-    <plurals name="backup_restore_restored">
-        <item quantity="one">%d फ़ेवरेट वापस आ गया।</item>
-        <item quantity="other">%d फ़ेवरेट वापस आ गए।</item>
-    </plurals>
-    <string name="backup_restore_already_match">आपके फ़ेवरेट पहले से बैकअप जैसे ही हैं।</string>
-    <string name="backup_restore_not_backup">यह फ़ाइल JTV फ़ेवरेट का बैकअप नहीं है।</string>
+    <string name="backup_restore_not_backup">यह फ़ाइल JTV का बैकअप नहीं है।</string>
 
     <string name="sync_a_device">एक डिवाइस</string>
     <string name="sync_the_tv">TV</string>

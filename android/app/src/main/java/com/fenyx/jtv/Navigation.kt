@@ -313,6 +313,8 @@ fun MainNavigation() {
     //  - "phone" -> OTP LoginScreen (with a way back to the chooser)
     //  - "server" -> ServerSetupScreen (pull shared credentials)
     val setupMode by settingsManager.setupModeFlow.collectAsState(initial = SETUP_LOADING)
+    // Simple / Advanced (Settings → Mode); not chosen = Advanced.
+    val uiMode by settingsManager.uiModeFlow.collectAsState(initial = null)
 
     if (authData == null) {
         when (setupMode) {
@@ -342,7 +344,7 @@ fun MainNavigation() {
         // Show blank loading screen while evaluating autoplay
         LoadingScreen()
     } else Box(Modifier.fillMaxSize()) {
-      androidx.compose.runtime.CompositionLocalProvider(LocalMiniBarInset provides miniBarInset) {
+      androidx.compose.runtime.CompositionLocalProvider(LocalMiniBarInset provides miniBarInset, com.fenyx.jtv.ui.main.LocalSimpleMode provides (uiMode == SettingsManager.UI_SIMPLE)) {
         NavDisplay(
             backStack = backStack,
             onBack = pop,

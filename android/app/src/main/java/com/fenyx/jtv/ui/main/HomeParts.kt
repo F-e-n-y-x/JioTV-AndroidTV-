@@ -239,11 +239,14 @@ fun BottomNavItem(
 /** Phone tabs. Shown under every top-level screen (Live TV, Guide, Search, Settings), never in the player. */
 enum class PhoneTab { Live, Guide, Search, Settings }
 
+/** Simple mode (Settings → Mode): the tab bars leave out Guide. */
+val LocalSimpleMode = androidx.compose.runtime.compositionLocalOf { false }
+
 @Composable
 fun PhoneBottomBar(selected: PhoneTab, onSelect: (PhoneTab) -> Unit) {
     Row(Modifier.fillMaxWidth().background(Jtv.colors.s1)) {
         BottomNavItem(stringResource(R.string.nav_live_tv), Icons.Filled.Home, selected == PhoneTab.Live, { onSelect(PhoneTab.Live) }, Modifier.weight(1f))
-        BottomNavItem(stringResource(R.string.nav_guide), Icons.Filled.DateRange, selected == PhoneTab.Guide, { onSelect(PhoneTab.Guide) }, Modifier.weight(1f))
+        if (!LocalSimpleMode.current) BottomNavItem(stringResource(R.string.nav_guide), Icons.Filled.DateRange, selected == PhoneTab.Guide, { onSelect(PhoneTab.Guide) }, Modifier.weight(1f))
         BottomNavItem(stringResource(R.string.nav_search), Icons.Filled.Search, selected == PhoneTab.Search, { onSelect(PhoneTab.Search) }, Modifier.weight(1f))
         BottomNavItem(stringResource(R.string.nav_settings), Icons.Filled.Settings, selected == PhoneTab.Settings, { onSelect(PhoneTab.Settings) }, Modifier.weight(1f))
     }
@@ -262,7 +265,7 @@ fun TvTabs(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Modifier 
             Triple(PhoneTab.Guide, stringResource(R.string.nav_guide), Icons.Filled.DateRange),
             Triple(PhoneTab.Search, stringResource(R.string.nav_search), Icons.Filled.Search),
             Triple(PhoneTab.Settings, stringResource(R.string.nav_settings), Icons.Filled.Settings),
-        ).forEach { (tab, label, icon) ->
+        ).filter { !LocalSimpleMode.current || it.first != PhoneTab.Guide }.forEach { (tab, label, icon) ->
             val sel = tab == selected
             JtvClickable(
                 onClick = { if (!sel) onSelect(tab) },
@@ -303,7 +306,7 @@ fun TabletNavRail(selected: PhoneTab, onSelect: (PhoneTab) -> Unit, modifier: Mo
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             RailItem(stringResource(R.string.nav_live_tv), Icons.Filled.Home, selected == PhoneTab.Live) { onSelect(PhoneTab.Live) }
-            RailItem(stringResource(R.string.nav_guide), Icons.Filled.DateRange, selected == PhoneTab.Guide) { onSelect(PhoneTab.Guide) }
+            if (!LocalSimpleMode.current) RailItem(stringResource(R.string.nav_guide), Icons.Filled.DateRange, selected == PhoneTab.Guide) { onSelect(PhoneTab.Guide) }
             RailItem(stringResource(R.string.nav_search), Icons.Filled.Search, selected == PhoneTab.Search) { onSelect(PhoneTab.Search) }
             RailItem(stringResource(R.string.nav_settings), Icons.Filled.Settings, selected == PhoneTab.Settings) { onSelect(PhoneTab.Settings) }
         }

@@ -1,19 +1,22 @@
-# JTV 2.0 beta 33
+# JTV 2.0 beta 34
 
-> **Latest release.** The 1.5.x app offers this as an update. Install `JTV-v2.0-beta.33.apk` over your current version, and your login and favourites are kept. Earlier betas are listed below.
+> **Latest release.** The 1.5.x app offers this as an update. Install `JTV-v2.0-beta.34.apk` over your current version, and your login and favourites are kept. Earlier betas are listed below.
 
-## New in beta 33
-- **Zee 24 Taas plays again (#15),** and so do other Zee channels Jio carries itself. The app used a backup Zee source first; when its link had expired, the channel failed. It now falls back to Jio's own stream.
-- **No crash when pressing Back twice quickly.** On slower TV boxes, a fast double Back could close the app with a crash. Fixed.
-
-### Server (Docker) — update your stack to get these
-- **Full HD in the web player and in TiviMate / Kodi.** Jio's plain stream of many HD channels (Colors HD and others) stops at 360p. On the server's https address the web player now uses the Widevine stream, up to 1080p. In the playlist builder, tick **Full HD** (`&hd=1`) for TiviMate, Kodi and OTT Navigator.
-- **DRM channels are in the playlist by default.** Kodi, TiviMate and OTT Navigator play them without adding `drm=1`. For VLC use `&drm=plain`.
-- **A web player more like the app:** channel list next to the video, ↑/↓ and number keys to change channel, language switch for channels like History TV18 HD, Recent channels, channel numbers, Restart show, a Live button, picture-in-picture, and an accent colour picker (Account → Appearance). The web UI also has the app's logo.
+## New in beta 34
+- **Back up all your settings (#18).** Settings → Backup now saves your settings (look, languages, picture and sound, categories, remote buttons and more) together with your favourites, to `Downloads/JTV-backup.json`. Restore brings the settings back and adds the favourites. Your sign-in is never put in the file. Old favourites-only backups still restore.
+- **Simple mode (#18).** Settings → General → **Mode**. Simple shows your channels as a grid with a **Favourites | All channels** switch and no categories, hides the Guide tab, and keeps only the everyday settings. Settings → Channel view switches Simple mode between grid and list. Advanced is the app as before.
 
 ---
 
 ## Earlier betas
+
+### Beta 33
+- **Zee 24 Taas plays again (#15),** and so do other Zee channels Jio carries itself. The app used a backup Zee source first; when its link had expired, the channel failed. It now falls back to Jio's own stream.
+- **No crash when pressing Back twice quickly.** On slower TV boxes, a fast double Back could close the app with a crash. Fixed.
+- **Server (Docker) — update your stack to get these:**
+  - **Full HD in the web player and in TiviMate / Kodi.** Jio's plain stream of many HD channels (Colors HD and others) stops at 360p. On the server's https address the web player now uses the Widevine stream, up to 1080p. In the playlist builder, tick **Full HD** (`&hd=1`) for TiviMate, Kodi and OTT Navigator.
+  - **DRM channels are in the playlist by default.** Kodi, TiviMate and OTT Navigator play them without adding `drm=1`. For VLC use `&drm=plain`.
+  - **A web player more like the app:** channel list next to the video, ↑/↓ and number keys to change channel, language switch for channels like History TV18 HD, Recent channels, channel numbers, Restart show, a Live button, picture-in-picture, and an accent colour picker (Account → Appearance). The web UI also has the app's logo.
 
 ### Beta 32
 - **Languages are together again.** "Group languages together" is switched back on for everyone, so channels like History TV18 HD, Discovery and Animal Planet show once, and you pick Hindi, Tamil, Telugu or English in the player. The language list no longer shows "Default" next to English.

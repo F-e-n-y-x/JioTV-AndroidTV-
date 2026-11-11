@@ -5,7 +5,7 @@
     <string name="settings_section_picture_sound">Picture and sound</string>
     <string name="settings_section_guide">Programme guide</string>
     <string name="settings_section_channels">Channels</string>
-    <string name="settings_section_backup">Favourites backup</string>
+    <string name="settings_section_backup">Backup</string>
     <string name="settings_section_devices">Devices</string>
     <string name="settings_section_problems">If the picture has problems</string>
     <string name="settings_section_account">Account</string>
@@ -95,11 +95,11 @@
     <string name="settings_hide_not_in_plan_desc">Hides paid add-on channels and channels Jio said are not in your plan</string>
 
     <!-- Favourites backup -->
-    <string name="settings_backup_save">Back up favourites</string>
+    <string name="settings_backup_save">Back up settings and favourites</string>
     <string name="settings_backup_save_desc">Saves them to Downloads, to restore after reinstalling</string>
-    <string name="settings_backup_restore">Restore favourites</string>
+    <string name="settings_backup_restore">Restore backup</string>
     <string name="settings_backup_restore_value">Restore</string>
-    <string name="settings_backup_restore_desc">Adds the favourites from your backup file</string>
+    <string name="settings_backup_restore_desc">Brings back your settings and adds your favourites</string>
 
     <!-- Devices -->
     <string name="settings_device_name">This device\'s name</string>
@@ -172,21 +172,15 @@
     <string name="accent_teal">Teal</string>
 
     <!-- ───── Favourites backup (toasts) ───── -->
-    <string name="backup_none">You have no favourites to back up yet.</string>
-    <plurals name="backup_saved">
-        <item quantity="one">Saved %1$d favourite to %2$s</item>
-        <item quantity="other">Saved %1$d favourites to %2$s</item>
-    </plurals>
     <string name="backup_save_failed">Could not save the backup: %s</string>
     <string name="backup_storage_error">storage error</string>
     <string name="backup_need_storage">JTV needs storage access to save the backup in Downloads.</string>
-    <string name="backup_empty">That backup has no favourites.</string>
     <plurals name="backup_restored">
         <item quantity="one">Restored %d favourite.</item>
         <item quantity="other">Restored %d favourites.</item>
     </plurals>
     <string name="backup_already_match">Your favourites already match the backup.</string>
-    <string name="backup_not_a_backup">That file isn\'t a JTV favourites backup.</string>
+    <string name="backup_not_a_backup">That file isn\'t a JTV backup.</string>
     <string name="backup_open_with">Open Downloads/%s with JTV from a file manager to restore.</string>
 
     <!-- ───── Devices (LAN sync) ───── -->
@@ -371,4 +365,14 @@
     <string name="settings_browser_style_desc">The list that opens when you press Left while watching</string>
     <string name="settings_browser_panel">Two-pane</string>
     <string name="settings_browser_strip">Strip</string>
+
+    <!-- Backup of settings + favourites -->
+    <string name="backup_saved_all">Saved your settings and favourites to %s</string>
+    <string name="backup_restored_all">Restored %1$d settings and %2$d new favourites.</string>
+
+    <!-- Simple / Advanced mode -->
+    <string name="settings_mode">Mode</string>
+    <string name="settings_mode_desc">Simple shows your favourites in one list, with fewer buttons and settings</string>
+    <string name="mode_simple">Simple</string>
+    <string name="mode_advanced">Advanced</string>
 </resources>

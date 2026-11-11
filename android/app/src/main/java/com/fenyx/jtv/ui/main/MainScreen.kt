@@ -125,7 +125,11 @@ fun MainScreen(
     val epgData by viewModel.epgData.collectAsState()
     // List or grid (null until the saved choice has loaded, so nothing flashes in the wrong view).
     val gridPref by settingsManager.channelGridFlow.collectAsState(initial = null)
-    val grid = gridPref == true
+    // Simple mode: no categories, just Favourites | All channels (All alone until there are favourites),
+    // and its own list/grid choice in Settings (grid unless changed; no switch on the home screen).
+    val simple = settingsManager.uiModeFlow.collectAsState(initial = null).value == SettingsManager.UI_SIMPLE
+    val simpleGrid by settingsManager.simpleGridFlow.collectAsState(initial = true)
+    val grid = if (simple) simpleGrid else gridPref == true
     val scope = rememberCoroutineScope()
     com.fenyx.jtv.ui.settings.UpdatePrompt(viewModel)
     val lastChannelId by settingsManager.lastChannelIdFlow.collectAsState(initial = null)
@@ -162,6 +166,11 @@ fun MainScreen(
             val byKey = list.associateBy { it.key }
             catPrefs.arrange(list.map { it.key }, MainViewModel.GROUP_ALL).mapNotNull { byKey[it] }
         }
+    }
+    val noFavourites = favoritesList.isEmpty() && allChannels.isNotEmpty()
+    LaunchedEffect(simple, group, noFavourites) {
+        val ok = group == MainViewModel.GROUP_ALL || (group == MainViewModel.GROUP_FAVORITES && !noFavourites)
+        if (simple && !ok) viewModel.setSelectedGroup(if (noFavourites) MainViewModel.GROUP_ALL else MainViewModel.GROUP_FAVORITES)
     }
     val indexById = remember(displayChannels) { displayChannels.withIndex().associate { (i, ch) -> ch.id to i } }
 
@@ -434,7 +443,7 @@ fun MainScreen(
             val wide = Jtv.isTv || maxWidth >= 840.dp
             if (wide) {
                 WideHome(
-                    categories = categories, selected = group, count = displayChannels.size,
+                    categories = categories, selected = group, count = displayChannels.size, simple = simple,
                     onSelect = { viewModel.setSelectedGroup(it) }, selectOnFocus = Jtv.isTv && movingId == null,
                     onSearch = onSearchClick, onGuide = onGuideClick, onSettings = onSettingsClick,
                     movingName = movingId?.let { id -> shown.firstOrNull { it.id == id }?.name },
@@ -480,7 +489,7 @@ fun MainScreen(
                 )
             } else {
                 PhoneHome(
-                    categories = categories, selected = group, count = displayChannels.size,
+                    categories = categories, selected = group, count = displayChannels.size, simple = simple,
                     onSelect = { viewModel.setSelectedGroup(it) },
                     onSearch = onSearchClick, onGuide = onGuideClick, onSettings = onSettingsClick,
                     grid = grid, onViewSelect = onViewSelect,
@@ -516,6 +525,7 @@ private fun WideHome(
     categories: List<Category>,
     selected: String,
     count: Int,
+    simple: Boolean,
     onSelect: (String) -> Unit,
     selectOnFocus: Boolean,
     onSearch: () -> Unit,
@@ -550,7 +560,8 @@ private fun WideHome(
                 )
             }
             // Up from the channels reaches this (and the tabs next to it).
-            ViewToggle(grid, onViewSelect, Modifier.padding(end = 20.dp, top = 2.dp))
+            if (!simple) ViewToggle(grid, onViewSelect, Modifier.padding(end = 20.dp, top = 2.dp))
+            else SimpleToggle(categories, selected, onSelect, Modifier.padding(end = 20.dp, top = 2.dp))
             // TV: section tabs (Up from the list). Tablet: the left navigation rail does this job.
             if (tv) TvTabs(PhoneTab.Live, { t ->
                 when (t) { PhoneTab.Guide -> onGuide(); PhoneTab.Search -> onSearch(); PhoneTab.Settings -> onSettings(); else -> {} }
@@ -569,6 +580,7 @@ private fun WideHome(
             }
         }
         Row(Modifier.weight(1f)) {
+          if (!simple) {
             LazyColumn(
                 state = catState,
                 modifier = Modifier.width(if (tv) 190.dp else 210.dp).fillMaxHeight().focusRestorer().focusGroup(),
@@ -583,6 +595,7 @@ private fun WideHome(
                 }
             }
             Spacer(Modifier.width(20.dp))
+          }
             if (grid) {
                 // Grid: the whole width for cards, the focused channel's details on a strip underneath.
                 Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -607,7 +620,9 @@ private fun WideHome(
                 else listOf(
                     stringResource(R.string.nav_key_ok) to stringResource(R.string.nav_hint_watch),
                     stringResource(R.string.nav_key_hold_ok) to stringResource(R.string.nav_hint_options),
+                ).let { if (simple) it else it + listOf(
                     stringResource(R.string.nav_key_left) to stringResource(R.string.nav_hint_categories),
+                ) } + listOf(
                     stringResource(R.string.nav_key_digits) to stringResource(R.string.nav_hint_channel_number),
                 )
             )
@@ -620,6 +635,7 @@ private fun PhoneHome(
     categories: List<Category>,
     selected: String,
     count: Int,
+    simple: Boolean,
     onSelect: (String) -> Unit,
     onSearch: () -> Unit,
     onGuide: () -> Unit,
@@ -641,9 +657,9 @@ private fun PhoneHome(
             Spacer(Modifier.width(10.dp))
             Text(pluralStringResource(R.plurals.common_channel_count, count, count), style = textStyle(14.sp), color = c.t3, maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            ViewToggle(grid, onViewSelect)
+            if (!simple) ViewToggle(grid, onViewSelect) else SimpleToggle(categories, selected, onSelect)
         }
-        LazyRow(
+        if (!simple) LazyRow(
             state = chipState,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -760,4 +776,12 @@ private fun PreviewPane(
             if (miniShowing) Spacer(Modifier.height(com.fenyx.jtv.ui.player.MiniCardWidth * 9f / 16f + com.fenyx.jtv.ui.player.MiniBarHeight + 16.dp))
         }
     }
+}
+
+/** Simple mode's only switch: Favourites | All channels (nothing until there are favourites). */
+@Composable
+private fun SimpleToggle(categories: List<Category>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+    val opts = categories.filter { it.key == MainViewModel.GROUP_FAVORITES || it.key == MainViewModel.GROUP_ALL }
+    if (opts.size < 2) return
+    SegmentToggle(opts.map { it.key to it.label }, selected, onSelect, modifier)
 }

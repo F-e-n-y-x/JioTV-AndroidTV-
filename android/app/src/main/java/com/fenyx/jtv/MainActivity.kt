@@ -23,18 +23,16 @@ class MainActivity : ComponentActivity() {
         com.fenyx.jtv.i18n.AppLocale.overrideConfiguration(newBase)?.let { applyOverrideConfiguration(it) }
     }
 
-    /** "Open with JTV" on a favourites backup file: restore it (merged into the current favourites). */
+    /** "Open with JTV" on a backup file: restore it (merged into the current favourites). */
     private fun handleBackupIntent(intent: android.content.Intent?) {
         val uri = intent?.takeIf { it.action == android.content.Intent.ACTION_VIEW }?.data ?: return
         intent.data = null
         lifecycleScope.launch {
             com.fenyx.jtv.data.FavoritesBackup.readUri(this@MainActivity, uri)
-                .onSuccess { ids ->
-                    val added = com.fenyx.jtv.data.FavoritesBackup.restore(this@MainActivity, ids)
+                .onSuccess { backup ->
+                    val r = com.fenyx.jtv.data.FavoritesBackup.restore(this@MainActivity, backup, this@MainActivity)
                     android.widget.Toast.makeText(this@MainActivity,
-                        if (added > 0) resources.getQuantityString(R.plurals.backup_restore_restored, added, added)
-                        else getString(R.string.backup_restore_already_match),
-                        android.widget.Toast.LENGTH_LONG).show()
+                        com.fenyx.jtv.ui.settings.restoredMessage(this@MainActivity, r), android.widget.Toast.LENGTH_LONG).show()
                 }
                 .onFailure {
                     android.widget.Toast.makeText(this@MainActivity, getString(R.string.backup_restore_not_backup), android.widget.Toast.LENGTH_LONG).show()
