@@ -211,3 +211,20 @@
         --duration-3: 0ms;
     }
 }
+
+/* ── Accent colour (Account → Appearance; the same six as the app) ─────────
+   Set by `data-accent` on <html>. Dark uses the bright tone, light the deep one. */
+:root[data-accent] {
+    --accent: var(--acc-dark); --accent-strong: var(--acc-dark);
+    --accent-soft: color-mix(in srgb, var(--acc-dark) 16%, transparent);
+}
+:root[data-theme="light"][data-accent] {
+    --accent: var(--acc-light); --accent-strong: var(--acc-light);
+    --accent-soft: color-mix(in srgb, var(--acc-light) 11%, transparent);
+}
+:root[data-accent="amber"]  { --acc-dark: #f0a12e; --acc-light: #b45309; }
+:root[data-accent="purple"] { --acc-dark: #b48cff; --acc-light: #7c3aed; }
+:root[data-accent="blue"]   { --acc-dark: #6ca8ff; --acc-light: #2563eb; }
+:root[data-accent="green"]  { --acc-dark: #5fcb86; --acc-light: #15803d; }
+:root[data-accent="rose"]   { --acc-dark: #ff7a90; --acc-light: #e11d48; }
+:root[data-accent="teal"]   { --acc-dark: #3cc8c0; --acc-light: #0f766e; }

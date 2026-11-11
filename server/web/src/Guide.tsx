@@ -3,13 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { api, type Channel, type EpgProgram } from "./api";
 import { useLangFilter, LanguageMenu, CategoryMenu } from "./lang";
 import { IconSearch } from "./Icons";
+import { loadChannels, cardLanguages, feedFor, type Card } from "./channels";
 
 const fmt = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 /** TV guide: per-channel Now / Next across a category. Click a row to watch. */
 export function GuidePage() {
   const nav = useNavigate();
-  const [channels, setChannels] = useState<Channel[] | null>(null);
+  const [channels, setChannels] = useState<Card[] | null>(null);
   const [group, setGroup] = useState("");
   const [favs, setFavs] = useState<Set<string>>(new Set());
   const [langs, toggleLang, clearLangs] = useLangFilter();
@@ -19,7 +20,7 @@ export function GuidePage() {
   const PAGE_SIZE = 15;
 
   useEffect(() => {
-    api.channels().then((r) => setChannels(r.channels)).catch(() => setChannels([]));
+    loadChannels().then((r) => setChannels(r.cards)).catch(() => setChannels([]));
     api.favorites().then((r) => setFavs(new Set(r.ids))).catch(() => {});
   }, []);
 
@@ -31,7 +32,7 @@ export function GuidePage() {
 
   const filtered = useMemo(
     () => (channels ?? [])
-      .filter((c) => langs.size === 0 || langs.has(c.language))
+      .filter((c) => langs.size === 0 || cardLanguages(c).some((l) => langs.has(l)))
       .filter((c) => group === FAV ? favs.has(c.id) : group === "All" ? true : c.group === group)
       .filter((c) => c.name.toLowerCase().includes(q.toLowerCase())),
     [channels, group, favs, langs, q]
@@ -70,7 +71,7 @@ export function GuidePage() {
       ) : (
         <>
           <div className="grid gap-2">
-            {rows.map((c) => <GuideRow key={c.id} channel={c} onPlay={() => nav(`/watch/${c.id}`, { state: { name: c.name } })} />)}
+            {rows.map((c) => <GuideRow key={c.id} channel={c} onPlay={() => nav(`/watch/${feedFor(c)}`)} />)}
           </div>
           {pageCount > 1 && (
             <div className="flex items-center justify-center gap-4 mt-5">

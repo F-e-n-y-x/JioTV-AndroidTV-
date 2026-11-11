@@ -7,7 +7,7 @@ import { getChannels, type Channel } from "../jio/channels";
 import { getNativeEpg } from "../jio/epg";
 import { getPlaybackInfo, proxyUpstream, proxyLicense, rewriteManifest, rewriteMpdForPlayer, manifestDir } from "../proxy/streamProxy";
 import { isExtraChannel, getExtraChannelSync, getExtraChannel } from "../jio/extraChannels";
-import { getFavorites, hasCode, getDrmOnlyChannelIds } from "../store/db";
+import { getFavorites, hasCode, getDrmOnlyChannelIds, getStreamMode } from "../store/db";
 import { filterPlaylistChannels, needsWidevine } from "./playlistFilter";
 import { isAuthEnabled, envServerToken, getEpgConfig } from "../store/settings";
 import { baseUrl } from "../util/baseUrl";
@@ -16,8 +16,8 @@ import { baseUrl } from "../util/baseUrl";
  * Public (access-code authenticated) endpoints for external IPTV players — VLC, TiviMate, OTT
  * Navigator, Kodi. Unlike the browser player (cookie/admin session) these are reachable with a `?code=`
  * query param so a TV app or player with no cookie jar can use them. When server auth is disabled the
- * code is not required. DRM/Widevine channels are served only to the `drm=1` playlist (Kodi-style
- * KODIPROP entries: `/live/:id.mpd` + `/dash/...` segments + `/license/:id`); a plain `.m3u8` request
+ * code is not required. DRM/Widevine channels are served as Kodi-style
+ * KODIPROP entries by default (`drm=plain` or `drm=hide` turns that off: `/live/:id.mpd` + `/dash/...` segments + `/license/:id`)); a plain `.m3u8` request
  * for one gets a 415.
  */
 
@@ -64,10 +64,13 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     const includeEpg = q.epg === "1" || q.epg === "true";
     const enableCatchup = q.catchup === "1" || q.catchup === "true";
     const hideDrm = q.drm === "hide" || q.drm === "0" || q.drm === "false";
-    // `drm=1`: Widevine channels become Kodi-style DASH entries (KODIPROP license lines). Opt-in, so
-    // players without Widevine (VLC, most phones) keep getting the plain list.
-    const withDrm = q.drm === "1" || q.drm === "true" || q.drm === "widevine";
+    // Widevine channels become Kodi-style DASH entries (KODIPROP license lines) by default, since
+    // their plain HLS is dead anyway. `drm=plain` keeps the old list (VLC can't decrypt Widevine).
+    const withDrm = !hideDrm && q.drm !== "plain";
     const quality = String(q.quality ?? "auto").toLowerCase();
+    // `hd=1`: every Jio channel as a Widevine entry. Jio's plain HLS of many HD channels stops at 360p;
+    // the Widevine DASH goes to 1080p (falls back to the plain stream where the DASH is dead).
+    const hd = withDrm && (q.hd === "1" || q.hd === "true");
 
     const all = await getChannels();
     const favs = onlyFav ? new Set(getFavorites()) : null;
@@ -87,9 +90,12 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
     for (const c of channels) {
       const extra = isExtraChannel(c.id) ? getExtraChannelSync(c.id) : undefined;
       const isMpd = extra ? extra.isMpd : false;
-      const widevine = withDrm && !extra && needsWidevine(c, drmOnlyIds);
+      // A channel whose Widevine stream was seen dead (Zee TV HD, ...) stays a plain entry.
+      const hdEntry = hd && !extra && getStreamMode(`hd.${c.id}`) !== "hls";
+      const widevine = withDrm && !extra && (hdEntry || needsWidevine(c, drmOnlyIds));
+      const key = hdEntry ? `hd.${c.id}` : c.id;
       const streamExt = isMpd || widevine ? "mpd" : "m3u8";
-      const streamUrl = `${base}/live/${encodeURIComponent(c.id)}.${streamExt}?ts=1${codeQ}${qualityQ}`;
+      const streamUrl = `${base}/live/${encodeURIComponent(key)}.${streamExt}?ts=1${codeQ}${qualityQ}`;
       // Only channels Jio actually keeps a catch-up archive for get the catch-up attributes.
       const catchupAttr = enableCatchup && c.isCatchup
         ? `catchup="default" catchup-days="7" catchup-source="${base}/live/${encodeURIComponent(c.id)}.m3u8?utc={utc}&lutc={lutc}${codeQ}${qualityQ}" `
@@ -107,7 +113,7 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
         lines.push("#KODIPROP:inputstream.adaptive.manifest_type=mpd");
         lines.push("#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha");
         lines.push(
-          `#KODIPROP:inputstream.adaptive.license_key=${base}/license/${encodeURIComponent(c.id)}` +
+          `#KODIPROP:inputstream.adaptive.license_key=${base}/license/${encodeURIComponent(key)}` +
             `${code ? `?code=${encodeURIComponent(code)}` : ""}|Content-Type=application/octet-stream|R{SSM}|`
         );
       }
@@ -125,13 +131,15 @@ export async function registerPlaylistRoutes(app: FastifyInstance): Promise<void
 
   // ── Resolve one channel to a playable (proxied) HLS manifest for external players ──
   app.get<{ Params: { id: string } }>("/live/:id", { preHandler: requireCode }, async (req, reply) => {
-    const rawId = req.params.id.replace(/\.(m3u8|mpd|ts)$/i, "");
+    const isHdMpd = /^hd\.\d+\.mpd$/i.test(req.params.id);
+    // `hd.<id>` only means something for the `.mpd` entry; anything else plays the plain channel.
+    const rawId = req.params.id.replace(/\.(m3u8|mpd|ts)$/i, "").replace(/^hd\./i, "");
     const q = req.query as Record<string, unknown>;
     const code = String(q.code ?? "").trim();
     const maxHeight = qualityToHeight(String(q.q ?? ""));
     const utcRaw = String(q.utc ?? q.lutc ?? "").trim();
 
-    let key = rawId;
+    let key = isHdMpd && !utcRaw ? `hd.${rawId}` : rawId;
 
     if (isExtraChannel(rawId)) {
       try {

@@ -8,6 +8,7 @@ import {
   IconCopy, IconPlus, IconTrash, IconRefresh, IconCheck, IconGuide, IconDownload, IconList, categoryIcon,
 } from "./Icons";
 import { useLangFilter, LanguageMenu, usePrefQuality, QualitySelect, CategoryMenu } from "./lang";
+import { loadChannels, cardLanguages, feedFor, readRecent, type Card } from "./channels";
 
 /* ── theme ─────────────────────────────────────────────────────────────── */
 function useTheme() {
@@ -103,8 +104,7 @@ function Layout({ onLogout }: { onLogout: () => void }) {
     <div className="h-full flex flex-col">
       <header className="flex items-center gap-2 sm:gap-4 px-3 sm:px-5 h-14 border-b border-border shrink-0">
         <div className="flex items-center gap-2 shrink-0">
-          <span className="grid place-items-center w-8 h-8 rounded-lg text-white shadow-sm"
-            style={{ background: "linear-gradient(135deg, var(--accent-strong), var(--accent))" }}><IconTv size={18} /></span>
+          <img src="/favicon.svg" alt="" className="w-8 h-8" />
           <span className="font-semibold tracking-tight">JTV<span className="text-muted font-normal hidden sm:inline"> Server</span></span>
         </div>
         {/* On phones the nav sits on the right (theme/logout are hidden); on desktop it follows the logo. */}
@@ -131,15 +131,16 @@ function Layout({ onLogout }: { onLogout: () => void }) {
 /* ── channels ──────────────────────────────────────────────────────────── */
 function Channels() {
   const nav = useNavigate();
-  const [channels, setChannels] = useState<Channel[] | null>(null);
+  const [cards, setCards] = useState<Card[] | null>(null);
   const [err, setErr] = useState(""); const [group, setGroup] = useState("All");
   const [q, setQ] = useState(""); const [favs, setFavs] = useState<Set<string>>(new Set());
   const [langs, toggleLang, clearLangs] = useLangFilter();
   const [prefQ, setPrefQ] = usePrefQuality();
-  const FAV = "Favorites";
+  const FAV = "Favorites", RECENT = "Recent";
+  const recent = useMemo(readRecent, []);
 
   useEffect(() => {
-    api.channels().then((r) => setChannels(r.channels)).catch((e) => setErr(e.message));
+    loadChannels().then((r) => setCards(r.cards)).catch((e) => setErr(e.message));
     api.favorites().then((r) => { const s = new Set(r.ids); setFavs(s); if (s.size) setGroup(FAV); }).catch(() => {});
   }, []);
 
@@ -147,27 +148,32 @@ function Channels() {
     const next = new Set(favs); next.has(id) ? next.delete(id) : next.add(id); setFavs(next);
     try { await api.toggleFavorite(id); } catch { setFavs(favs); }
   };
-  const groups = useMemo(() => [FAV, "All", ...Array.from(new Set((channels ?? []).map((c) => c.group))).sort()], [channels]);
-  const languages = useMemo(() => Array.from(new Set((channels ?? []).map((c) => c.language))).sort(), [channels]);
-  const filtered = useMemo(() => (channels ?? [])
-    .filter((c) => langs.size === 0 || langs.has(c.language))
-    .filter((c) => group === FAV ? favs.has(c.id) : group === "All" || c.group === group)
-    .filter((c) => c.name.toLowerCase().includes(q.toLowerCase())), [channels, group, q, favs, langs]);
+  const groups = useMemo(() => [FAV, ...(recent.length ? [RECENT] : []), "All", ...Array.from(new Set((cards ?? []).map((c) => c.group))).sort()], [cards, recent]);
+  const languages = useMemo(() => Array.from(new Set((cards ?? []).flatMap(cardLanguages))).sort(), [cards]);
+  const filtered = useMemo(() => {
+    const ql = q.toLowerCase();
+    const inGroup = group === RECENT
+      ? recent.map((id) => (cards ?? []).find((c) => c.id === id)).filter((c): c is Card => !!c)
+      : (cards ?? []).filter((c) => group === FAV ? favs.has(c.id) : group === "All" || c.group === group);
+    return inGroup
+      .filter((c) => langs.size === 0 || cardLanguages(c).some((l) => langs.has(l)))
+      .filter((c) => c.name.toLowerCase().includes(ql) || String(c.channelNumber) === q.trim());
+  }, [cards, group, q, favs, langs, recent]);
 
   if (err) return <div className="empty-state">Couldn’t load channels: {err}</div>;
-  if (!channels) return <div className="empty-state">Loading channels…</div>;
+  if (!cards) return <div className="empty-state">Loading channels…</div>;
 
   return (
     <div className="flex h-full min-h-0">
       {/* Desktop category rail — hidden on phone/tablet where the toolbar strip takes over. */}
       <aside className="hidden md:block w-52 shrink-0 border-r border-border overflow-y-auto py-3 px-2">
         {groups.map((g) => {
-          const Ico = g === FAV ? null : categoryIcon(g);
+          const Ico = g === FAV || g === RECENT ? null : categoryIcon(g);
           const active = group === g;
           return (
             <button key={g} onClick={() => setGroup(g)}
               className={`flex items-center gap-2.5 w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors ${active ? "bg-surface-2 text-fg" : "text-muted hover:text-fg hover:bg-surface-hover"}`}>
-              {g === FAV ? <IconStar size={15} filled={active} className="shrink-0" /> : Ico && <Ico size={15} className="shrink-0 opacity-80" />}
+              {g === FAV ? <IconStar size={15} filled={active} className="shrink-0" /> : g === RECENT ? <IconRefresh size={15} className="shrink-0 opacity-80" /> : Ico && <Ico size={15} className="shrink-0 opacity-80" />}
               <span className="truncate">{g}</span>
             </button>
           );
@@ -179,7 +185,7 @@ function Channels() {
         <div className="sticky top-0 z-10 bg-bg border-b border-border px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[150px] max-w-sm">
             <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle" size={16} />
-            <input className="input pl-9" placeholder="Search channels…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input className="input pl-9" placeholder="Search name or number…" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           {/* Phone/tablet category picker — the desktop rail's replacement, as a compact dropdown. */}
           <div className="md:hidden"><CategoryMenu groups={groups} value={group} onChange={setGroup} favKey={FAV} /></div>
@@ -192,15 +198,16 @@ function Channels() {
           <div className="grid gap-3 sm:gap-4 p-4 sm:p-6" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
             {filtered.map((c) => (
               <div key={c.id} className="relative group">
-                <button onClick={() => nav(`/watch/${c.id}`, { state: { name: c.name } })}
+                <button onClick={() => nav(`/watch/${feedFor(c)}`)}
                   className="card card-hover w-full !p-4 flex flex-col items-center gap-2 aspect-[4/5] justify-center">
                   <img src={c.logoUrl} alt="" className="h-16 w-16 rounded-full object-cover bg-surface-2"
                     onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
                   <div className="text-sm text-center leading-snug line-clamp-2">{c.name}</div>
-                  <div className="text-subtle text-xs text-center line-clamp-1">{c.group}</div>
+                  <div className="text-subtle text-xs text-center line-clamp-1">{c.variants ? `${c.variants.length} languages` : c.group}</div>
                 </button>
+                {c.channelNumber > 0 && <span className="absolute top-2 left-2 text-subtle text-xs tabular-nums">{c.channelNumber}</span>}
                 <button onClick={() => toggleFav(c.id)} title="Favourite"
-                  className={`absolute top-2 right-2 ${favs.has(c.id) ? "text-accent" : "text-subtle opacity-0 group-hover:opacity-100"} transition-opacity`}>
+                  className={`absolute top-2 right-2 ${favs.has(c.id) ? "text-accent" : "text-subtle opacity-0 group-hover:opacity-100 focus-visible:opacity-100"} transition-opacity`}>
                   <IconStar size={18} filled={favs.has(c.id)} />
                 </button>
               </div>
@@ -257,6 +264,7 @@ function Account() {
               </div>
             </div>
             <HttpsCard />
+            <AppearanceCard />
           </div>
 
           {/* Column B */}
@@ -430,6 +438,7 @@ function M3uCard() {
   const [onlyFav, setOnlyFav] = useState(false);
   const [epg, setEpg] = useState(true);
   const [catchup, setCatchup] = useState(true);
+  const [hd, setHd] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -453,8 +462,9 @@ function M3uCard() {
     if (onlyFav) p.set("fav", "1");
     if (epg) p.set("epg", "1");
     if (catchup) p.set("catchup", "1");
+    if (hd) p.set("hd", "1");
     return `${location.origin}/playlist.m3u?${p.toString()}`;
-  }, [code, langs, cats, quality, onlyFav, epg, catchup]);
+  }, [code, langs, cats, quality, onlyFav, epg, catchup, hd]);
 
   const copy = async () => { try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} };
 
@@ -462,8 +472,8 @@ function M3uCard() {
     <div className="card">
       <div className="flex items-center gap-2"><IconList size={18} className="text-muted" /><h3>M3U playlist</h3></div>
       <p className="text-muted text-sm mt-1">
-        Build a playlist link for external players (VLC, TiviMate, OTT Navigator). Pick filters below — only
-        non-DRM channels play in these players; DRM channels use the web player or TV app.
+        Build a playlist link for external players (VLC, TiviMate, OTT Navigator). Pick filters below.
+        DRM (Widevine) channels play in Kodi, TiviMate and OTT Navigator; VLC plays only the others.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-4">
@@ -488,6 +498,7 @@ function M3uCard() {
             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={onlyFav} onChange={(e) => setOnlyFav(e.target.checked)} /> Favourites only</label>
             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={epg} onChange={(e) => setEpg(e.target.checked)} /> Include EPG guide (<code>url-tvg</code>)</label>
             <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={catchup} onChange={(e) => setCatchup(e.target.checked)} /> Enable catch-up (TiviMate)</label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={hd} onChange={(e) => setHd(e.target.checked)} /> Full HD (Kodi, TiviMate, OTT Navigator; off for VLC)</label>
           </div>
         </div>
 
@@ -555,6 +566,34 @@ function EpgCard() {
 }
 
 /* ── HTTPS ─────────────────────────────────────────────────────────────── */
+/* ── appearance (this browser only) ────────────────────────────────────── */
+const ACCENTS = [["amber", "#f0a12e"], ["purple", "#b48cff"], ["blue", "#6ca8ff"], ["green", "#5fcb86"], ["rose", "#ff7a90"], ["teal", "#3cc8c0"]] as const;
+function AppearanceCard() {
+  const { theme, toggle } = useTheme();
+  const [accent, setAccent] = useState(() => document.documentElement.getAttribute("data-accent") || "amber");
+  const pick = (a: string) => {
+    document.documentElement.setAttribute("data-accent", a);
+    try { localStorage.setItem("accent", a); } catch {}
+    setAccent(a);
+  };
+  return (
+    <div className="card">
+      <h3>Appearance</h3>
+      <p className="text-muted text-sm mt-1">Saved in this browser.</p>
+      <div className="flex items-center gap-2 mt-4" role="radiogroup" aria-label="Accent colour">
+        {ACCENTS.map(([name, hex]) => (
+          <button key={name} role="radio" aria-checked={accent === name} aria-label={name} title={name[0].toUpperCase() + name.slice(1)} onClick={() => pick(name)}
+            className="w-9 h-9 rounded-full grid place-items-center border-2 transition-transform hover:scale-105"
+            style={{ background: hex, borderColor: accent === name ? "var(--foreground)" : "transparent" }}>
+            {accent === name && <IconCheck size={16} className="text-black/80" />}
+          </button>
+        ))}
+      </div>
+      <button className="btn-secondary mt-4" onClick={toggle}>{theme === "dark" ? <IconSun /> : <IconMoon />} {theme === "dark" ? "Light mode" : "Dark mode"}</button>
+    </div>
+  );
+}
+
 function HttpsCard() {
   const [info, setInfo] = useState<{ httpsPort: number; hasCert: boolean } | null>(null);
   const [msg, setMsg] = useState("");

@@ -1,45 +1,88 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import shaka from "shaka-player/dist/shaka-player.compiled";
 import Hls from "hls.js";
-import { api, type EpgProgram } from "./api";
+import { api, type Channel, type EpgProgram } from "./api";
+import { loadChannels, cardFor, cardLanguages, feedFor, pushRecent, setPrefFeedLang, type Card } from "./channels";
+import { useLangFilter } from "./lang";
 import { DateTabs, daysFromPrograms, sameDay } from "./dates";
 
-/* ── watch page (player + details + catch-up) ──────────────────────────── */
+/* ── watch page (player + details + catch-up + channel list) ───────────── */
+const typing = (e: KeyboardEvent) => e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|SELECT|TEXTAREA)$/.test((e.target as HTMLElement)?.tagName ?? "");
+
 export function WatchPage() {
   const { id = "" } = useParams();
-  const location = useLocation() as { state?: { name?: string } };
   const nav = useNavigate();
-  const name = location.state?.name ?? `Channel ${id}`;
+  const [chs, setChs] = useState<{ all: Channel[]; cards: Card[] }>({ all: [], cards: [] });
+  const [langs] = useLangFilter();
+  useEffect(() => { loadChannels().then(setChs).catch(() => {}); }, []);
+  const card = useMemo(() => cardFor(chs.cards, id), [chs, id]);
+  const name = chs.all.find((c) => c.id === id)?.name ?? card?.name ?? `Channel ${id}`;
+  useEffect(() => { if (card) pushRecent(card.id); }, [card?.id]);
+  // Zapping and the side list follow the Channels page's language filter (the playing channel always stays in).
+  const list = useMemo(() => chs.cards.filter((c) => c === card || langs.size === 0 || cardLanguages(c).some((l) => langs.has(l))), [chs, langs, card]);
+  const open = useCallback((c: Card) => nav(`/watch/${feedFor(c)}`, { replace: true }), [nav]);
 
   const [programs, setPrograms] = useState<EpgProgram[]>([]);
   const [cid, setCid] = useState(id);          // live = id; catch-up = `cu.<base64>`
   const [catchTitle, setCatchTitle] = useState<string | null>(null);
   const [playingStart, setPlayingStart] = useState<number | null>(null); // null = live; else the catch-up show's startMs
 
-  useEffect(() => { setCid(id); setCatchTitle(null); setPlayingStart(null); api.epg(id).then((r) => setPrograms(r.programs)).catch(() => setPrograms([])); }, [id]);
+  useEffect(() => { setCid(id); setCatchTitle(null); setPlayingStart(null); setPrograms([]); api.epg(id).then((r) => setPrograms(r.programs)).catch(() => setPrograms([])); }, [id]);
 
   const now = Date.now();
   const current = useMemo(() => programs.find((p) => p.startMs <= now && p.stopMs > now), [programs, now]);
+  // Like the app: restart only a show that has run 2+ minutes, replayed up to a minute behind live.
+  const canRestart = !catchTitle && current && now - current.startMs >= 120_000;
 
-  const playCatchup = (p: EpgProgram) => {
+  const playCatchup = (p: EpgProgram, untilMs = p.stopMs) => {
     // Encode everything getStreamData needs for a Catchup request into the playback key.
-    const payload = { c: id, s: p.srno ?? "", p: p.showId ?? "", b: p.startMs, e: p.stopMs, t: p.showtime ?? "" };
+    const payload = { c: id, s: p.srno ?? "", p: p.showId ?? "", b: p.startMs, e: untilMs, t: p.showtime ?? "" };
     const b64 = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     setCid(`cu.${b64}`); setCatchTitle(p.title); setPlayingStart(p.startMs);
   };
   const goLive = () => { setCid(id); setCatchTitle(null); setPlayingStart(null); };
 
+  // Remote-style keys: ↑/↓ or PgUp/PgDn change channel, digits jump to a channel number.
+  const [digits, setDigits] = useState("");
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (typing(e) || !list.length) return;
+      const step = e.key === "ArrowUp" || e.key === "PageUp" ? -1 : e.key === "ArrowDown" || e.key === "PageDown" ? 1 : 0;
+      if (step) {
+        e.preventDefault();
+        const i = list.findIndex((c) => c === card);
+        open(list[(i + step + list.length) % list.length]);
+      } else if (/^[0-9]$/.test(e.key)) setDigits((d) => (d + e.key).slice(-4));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [list, card, open]);
+  useEffect(() => {
+    if (!digits) return;
+    const t = window.setTimeout(() => {
+      const n = Number(digits); setDigits("");
+      const hit = chs.cards.find((c) => c.channelNumber === n || c.variants?.some((v) => v.channel.channelNumber === n));
+      if (!hit) return;
+      const v = hit.variants?.find((x) => x.channel.channelNumber === n);
+      nav(`/watch/${v ? v.channel.id : feedFor(hit)}`, { replace: true });
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [digits, chs, nav]);
+
+  const [side, setSide] = useState<"guide" | "channels">(() => { try { return localStorage.getItem("watchSide") === "channels" ? "channels" : "guide"; } catch { return "guide"; } });
+  const pickSide = (s: "guide" | "channels") => { setSide(s); try { localStorage.setItem("watchSide", s); } catch {} };
+
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       <button className="btn-ghost btn-sm mb-4" onClick={() => nav("/channels")}>← Channels</button>
-      <div className="grid lg:grid-cols-[1fr_340px] gap-6 items-start">
+      <div className="grid lg:grid-cols-[1fr_360px] gap-6 items-start">
         <div className="min-w-0">
-          <PlayerBox cid={cid} title={catchTitle ? `${name} · ${catchTitle}` : name} />
+          <PlayerBox cid={cid} title={catchTitle ? `${name} · ${catchTitle}` : name} badge={digits} />
           <div className="card mt-4">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="truncate">{name}</h3>
+                <h3 className="truncate">{card?.channelNumber ? <span className="text-subtle tabular-nums mr-2">{card.channelNumber}</span> : null}{name}</h3>
                 {catchTitle ? (
                   <p className="text-muted text-sm mt-1"><span className="badge badge-accent mr-1">CATCH-UP</span>{catchTitle}</p>
                 ) : current ? (
@@ -49,14 +92,59 @@ export function WatchPage() {
                 )}
                 {current?.description && !catchTitle && <p className="text-subtle text-sm mt-2">{current.description}</p>}
               </div>
-              {catchTitle && <button className="btn-secondary btn-sm shrink-0" onClick={goLive}>Go live</button>}
+              <div className="flex gap-2 shrink-0">
+                {canRestart && <button className="btn-secondary btn-sm" onClick={() => playCatchup(current!, Date.now() - 60_000)}>↺ Restart show</button>}
+                {catchTitle && <button className="btn-secondary btn-sm" onClick={goLive}>Go live</button>}
+              </div>
             </div>
+            {card?.variants && (
+              <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                <span className="text-subtle text-xs mr-1">Language</span>
+                {card.variants.map((v) => (
+                  <button key={v.channel.id} onClick={() => { setPrefFeedLang(v.lang); nav(`/watch/${v.channel.id}`, { replace: true }); }}
+                    className={`badge ${v.channel.id === id ? "badge-accent" : "hover:bg-surface-hover cursor-pointer"}`}>{v.lang}</button>
+                ))}
+              </div>
+            )}
+            <p className="text-subtle text-xs mt-3 hidden md:block">Keys: ↑/↓ channel · type a number · Space pause · ←/→ 10 s · F fullscreen · M mute · P picture-in-picture</p>
           </div>
         </div>
 
-        <aside>
-          <ProgrammeGuide programs={programs} playingStart={playingStart} onCatchup={playCatchup} onLive={goLive} />
+        <aside className="min-w-0">
+          <div className="flex gap-1 mb-2">
+            {(["guide", "channels"] as const).map((s) => (
+              <button key={s} onClick={() => pickSide(s)} className={`tab ${side === s ? "active" : ""}`}>{s === "guide" ? "Programme guide" : "Channels"}</button>
+            ))}
+          </div>
+          {side === "guide"
+            ? <ProgrammeGuide programs={programs} playingStart={playingStart} onCatchup={playCatchup} onLive={goLive} />
+            : <ChannelList list={list} active={card} onPick={open} />}
         </aside>
+      </div>
+    </div>
+  );
+}
+
+/** The channel list beside the player (tablet-style): click to zap without leaving the page. */
+function ChannelList({ list, active, onPick }: { list: Card[]; active?: Card; onPick: (c: Card) => void }) {
+  const activeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { activeRef.current?.scrollIntoView({ block: "center" }); }, [active?.id]);
+  return (
+    <div className="card !p-0 overflow-hidden">
+      <div className="max-h-[66vh] overflow-y-auto">
+        {list.map((c) => {
+          const on = c === active;
+          return (
+            <button key={c.id} ref={on ? activeRef : undefined} onClick={() => onPick(c)}
+              style={on ? { background: "var(--accent-soft)" } : undefined}
+              className="w-full text-left px-3 py-2 flex items-center gap-3 border-b border-border last:border-0 hover:bg-surface-hover">
+              <span className={`w-10 shrink-0 text-xs tabular-nums ${on ? "text-accent font-medium" : "text-subtle"}`}>{c.channelNumber || ""}</span>
+              <img src={c.logoUrl} alt="" loading="lazy" className="h-8 w-8 rounded-full object-cover bg-surface-2 shrink-0"
+                onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
+              <span className="text-sm truncate">{c.name}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -128,7 +216,7 @@ function langName(code: string): string {
 /* ── embedded 16:9 player with custom controls ─────────────────────────── */
 interface QualityOpt { label: string; height: number | "auto"; }
 
-function PlayerBox({ cid, title }: { cid: string; title: string }) {
+function PlayerBox({ cid, title, badge }: { cid: string; title: string; badge?: string }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const engineRef = useRef<{ kind: "shaka" | "hls" | "native"; inst: any } | null>(null);
@@ -148,20 +236,34 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
   const [curQuality, setCurQuality] = useState<number | "auto">("auto");
   const [duration, setDuration] = useState(0);   // >0 only for catch-up VOD (seekable)
   const [position, setPosition] = useState(0);
+  const [behind, setBehind] = useState(0);       // live: seconds behind the live edge (Jio keeps ~60 s)
+  // How far behind the edge the player sits on its own (hls.js keeps ~3 segments back); only time
+  // beyond this counts as "behind live". Learned while playing, reset per stream.
+  const edgeGap = useRef(Infinity);
+  const lag = Math.max(0, behind - (Number.isFinite(edgeGap.current) ? edgeGap.current : behind));
+  const atLive = lag < 8;
   const isCatchup = cid.startsWith("cu.");
+  // Live channels try Jio's Widevine version first where the browser can decrypt it: the plain stream
+  // of many HD channels stops at 360p. If it fails, this channel drops back to the plain stream.
+  const [hdFailed, setHdFailed] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setError(null); setNotEntitled(false); setLoading(true);
     setAudioLangs([]); setCurLang(""); setQualities([]); setCurQuality("auto");
-    setDuration(0); setPosition(0);
+    setDuration(0); setPosition(0); setBehind(0); edgeGap.current = Infinity;
 
-    const proxied = (u: string) => `/api/proxy?cid=${encodeURIComponent(cid)}&u=${encodeURIComponent(u)}`;
+    let key = cid;
+    const proxied = (u: string) => `/api/proxy?cid=${encodeURIComponent(key)}&u=${encodeURIComponent(u)}`;
 
     async function start() {
       const video = videoRef.current; if (!video) return;
       let info;
-      try { info = await api.playInfo(cid); } catch (e: any) { if (!cancelled) { setError(e?.message ?? "Failed to start playback"); setLoading(false); } return; }
+      if (/^\d+$/.test(cid) && hdFailed !== cid && (await widevineOk())) key = `hd.${cid}`;
+      if (cancelled) return;
+      const hdTry = key !== cid;
+      const dropHd = () => { if (!cancelled) setHdFailed(cid); };
+      try { info = await api.playInfo(key); } catch (e: any) { if (!cancelled) { setError(e?.message ?? "Failed to start playback"); setLoading(false); } return; }
       if (cancelled) return;
       // Jio handed back a paywall fallback — the account isn't subscribed to this channel.
       if (!info.entitled) { setNotEntitled(true); setError("Not in your JioTV subscription"); setLoading(false); return; }
@@ -223,13 +325,16 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
         const player: any = new shaka.Player();
         engineRef.current = { kind: "shaka", inst: player };
         await player.attach(video);
-        if (info.hasDrm) player.configure({ drm: { servers: { "com.widevine.alpha": `/api/play/${encodeURIComponent(cid)}/license` } } });
+        if (info.hasDrm) player.configure({ drm: { servers: { "com.widevine.alpha": `/api/play/${encodeURIComponent(key)}/license` } } });
         player.getNetworkingEngine().registerRequestFilter((type: any, request: any) => {
           if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) return;
           request.uris = request.uris.map((u: string) =>
             u.startsWith("/api/proxy") || !/^https?:\/\//i.test(u) ? u : proxied(u));
         });
-        player.addEventListener("error", (e: any) => setError(drmMessage(e?.detail)));
+        player.addEventListener("error", (e: any) => {
+          if (e?.detail?.severity !== shaka.util.Error.Severity.CRITICAL) return; // Shaka retries the rest itself
+          hdTry ? dropHd() : setError(drmMessage(e?.detail));
+        });
         await player.load(info.manifestUrl);
         if (cancelled) return;
         setLoading(false);
@@ -242,7 +347,7 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
           const target = prefTargetHeight(heights, readPrefQuality());
           if (target != null) { player.configure({ abr: { enabled: false } }); const t = player.getVariantTracks().find((v: any) => v.height === target); if (t) { player.selectVariantTrack(t, true); setCurQuality(target); } }
         } catch {}
-      } catch (e: any) { if (!cancelled) { setError(drmMessage(e) || e?.message || "Failed to start playback"); setLoading(false); } }
+      } catch (e: any) { if (hdTry) dropHd(); else if (!cancelled) { setError(drmMessage(e) || e?.message || "Failed to start playback"); setLoading(false); } }
     }
     start();
     return () => {
@@ -252,7 +357,7 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
       else if (eng?.kind === "native" && videoRef.current) { videoRef.current.removeAttribute("src"); videoRef.current.load(); }
       engineRef.current = null;
     };
-  }, [cid]);
+  }, [cid, hdFailed]);
 
   useEffect(() => {
     const v = videoRef.current; if (!v) return;
@@ -260,7 +365,14 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
     const onVol = () => { setMuted(v.muted); setVolume(v.volume); };
     // Only expose a finite duration for VOD (catch-up); live streams report Infinity.
     const onDur = () => setDuration(Number.isFinite(v.duration) ? v.duration : 0);
-    const onTime = () => setPosition(v.currentTime);
+    const onTime = () => {
+      setPosition(v.currentTime);
+      const s = v.seekable;
+      // hls.js reports a finite, growing duration for live, so don't key on duration here.
+      const b = s.length ? Math.max(0, s.end(s.length - 1) - v.currentTime) : 0;
+      if (!v.paused && v.readyState >= 3) edgeGap.current = Math.min(edgeGap.current, b);
+      setBehind(b);
+    };
     v.addEventListener("play", onPlay); v.addEventListener("pause", onPause); v.addEventListener("volumechange", onVol);
     v.addEventListener("durationchange", onDur); v.addEventListener("timeupdate", onTime);
     return () => {
@@ -277,6 +389,28 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
 
   const togglePlay = () => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause(); nudge(); };
   const onVolInput = (val: number) => { const v = videoRef.current; if (!v) return; v.volume = val; v.muted = val === 0; };
+  const toggleMute = () => { const v = videoRef.current; if (v) v.muted = !v.muted; nudge(); };
+  const togglePip = () => { const v = videoRef.current; if (!v) return; document.pictureInPictureElement ? document.exitPictureInPicture() : v.requestPictureInPicture?.().catch(() => {}); };
+  // ←/→: 10 s inside what the stream keeps (the whole show for catch-up, ~60 s for live).
+  const seekBy = (d: number) => {
+    const v = videoRef.current; if (!v || !v.seekable.length) return;
+    // Live: never past the player's own gap behind the edge, or it stalls waiting for segments.
+    const end = v.seekable.end(v.seekable.length - 1) - (isCatchup ? 0 : liveGap());
+    v.currentTime = Math.min(end, Math.max(v.seekable.start(0), v.currentTime + d)); nudge();
+  };
+  const liveGap = () => (Number.isFinite(edgeGap.current) ? edgeGap.current : 3);
+  const goLiveEdge = () => { const v = videoRef.current; if (v?.seekable.length) { v.currentTime = v.seekable.end(v.seekable.length - 1) - liveGap(); v.play().catch(() => {}); } };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Space on a focused button presses that button instead.
+      if (typing(e) || (e.key === " " && (e.target as HTMLElement)?.tagName === "BUTTON")) return;
+      const k = e.key.toLowerCase();
+      const act: Record<string, () => void> = { " ": togglePlay, k: togglePlay, f: toggleFull, m: toggleMute, p: togglePip, arrowleft: () => seekBy(-10), arrowright: () => seekBy(10) };
+      if (act[k]) { e.preventDefault(); act[k](); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   const toggleFull = () => { const el = boxRef.current; if (!el) return; document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen?.(); };
   const pickLang = (l: string) => {
     const eng = engineRef.current; if (!eng) return;
@@ -303,6 +437,8 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
 
       {/* title (top) */}
       <div className={`absolute inset-x-0 top-0 p-3 bg-gradient-to-b from-black/70 to-transparent text-white text-sm font-medium truncate transition-opacity ${controls ? "opacity-100" : "opacity-0"}`}>{title}</div>
+
+      {badge && <div className="absolute top-3 right-3 px-3 py-1 rounded-md bg-black/70 text-white text-2xl font-semibold tabular-nums">{badge}<span className="animate-pulse">_</span></div>}
 
       {/* center state */}
       <div className="absolute inset-0 grid place-items-center pointer-events-none">
@@ -342,11 +478,18 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
           {paused ? <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                   : <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>}
         </button>
-        <button className="text-white w-10 h-10 md:w-8 md:h-8 grid place-items-center" onClick={() => { const v = videoRef.current; if (v) v.muted = !v.muted; }} title="Mute">
+        <button className="text-white w-10 h-10 md:w-8 md:h-8 grid place-items-center" onClick={toggleMute} title="Mute (M)">
           {muted || volume === 0 ? <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3L19 9.5 17.5 8 15 10.5 12.5 8 11 9.5 13.5 12 11 14.5 12.5 16 15 13.5 17.5 16 19 14.5z" /></svg>
                                : <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13 3a4 4 0 0 0-2-3.5v7A4 4 0 0 0 16 12z" /></svg>}
         </button>
         <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(e) => onVolInput(Number(e.target.value))} className="w-20 accent-white" title="Volume" />
+        {!isCatchup && !loading && !error && (
+          <button onClick={goLiveEdge} title="Back to live" disabled={atLive}
+            className={`ml-1 px-2 h-6 rounded text-[11px] font-semibold tracking-wide ${atLive ? "text-white cursor-default" : "bg-white/20 text-white hover:bg-white/30"}`}>
+            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle ${atLive ? "bg-red-500" : "bg-white/60"}`} />
+            {atLive ? "LIVE" : `−${Math.round(lag)}s · Go live`}
+          </button>
+        )}
         <div className="ml-auto flex items-center gap-1">
           {(audioLangs.length > 1 || qualities.length > 1) && (
             <div className="relative">
@@ -363,7 +506,12 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
               )}
             </div>
           )}
-          <button className="text-white w-10 h-10 md:w-8 md:h-8 grid place-items-center" onClick={toggleFull} title="Fullscreen">
+          {document.pictureInPictureEnabled && (
+            <button className="text-white w-10 h-10 md:w-8 md:h-8 grid place-items-center" onClick={togglePip} title="Picture-in-picture (P)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2" /><rect x="12" y="11" width="8" height="6" rx="1" fill="currentColor" /></svg>
+            </button>
+          )}
+          <button className="text-white w-10 h-10 md:w-8 md:h-8 grid place-items-center" onClick={toggleFull} title="Fullscreen (F)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
           </button>
         </div>
@@ -371,6 +519,15 @@ function PlayerBox({ cid, title }: { cid: string; title: string }) {
       </div>
     </div>
   );
+}
+
+let widevine: Promise<boolean> | null = null;
+/** Can this page decrypt Widevine? Needs a secure context (https or localhost); asked once per page load. */
+function widevineOk(): Promise<boolean> {
+  widevine ??= !window.isSecureContext || !navigator.requestMediaKeySystemAccess ? Promise.resolve(false)
+    : navigator.requestMediaKeySystemAccess("com.widevine.alpha", [{ initDataTypes: ["cenc"], videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }] }])
+        .then(() => true, () => false);
+  return widevine;
 }
 
 function fmtDur(s: number): string {

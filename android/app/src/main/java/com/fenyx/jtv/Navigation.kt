@@ -147,6 +147,9 @@ fun MainNavigation() {
     val backStack = rememberNavBackStack(Main)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val mainViewModel: MainViewModel = viewModel()
+    // Never pop the root: a double Back on a slow box (the fading-out screen still gets the key) used to
+    // empty the stack and crash with "NavDisplay backstack cannot be empty".
+    val pop: () -> Unit = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
     // Phone tabs replace each other on top of Live TV (Back from a tab returns to Live TV).
     val onTab: (PhoneTab) -> Unit = { tab ->
         while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
@@ -342,7 +345,7 @@ fun MainNavigation() {
       androidx.compose.runtime.CompositionLocalProvider(LocalMiniBarInset provides miniBarInset) {
         NavDisplay(
             backStack = backStack,
-            onBack = { backStack.removeLastOrNull() },
+            onBack = pop,
             // One short cross-fade for every screen change — forward, Back, tab switch AND the system
             // predictive-back gesture (which otherwise shrinks the page), so going home always looks the same.
             transitionSpec = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150)) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) },
@@ -396,7 +399,7 @@ fun MainNavigation() {
                     SettingsScreen(
                         modifier = m,
                         mainViewModel = mainViewModel,
-                        onBack = { backStack.removeLastOrNull() },
+                        onBack = pop,
                         onTab = onTab
                     )
                   }
@@ -421,11 +424,11 @@ fun MainNavigation() {
                         group = playerArgs.group,
                         catchup = playerArgs.catchup, // catch-up
                         mainViewModel = mainViewModel,
-                        onBack = { backStack.removeLastOrNull() },
+                        onBack = pop,
                         onSettings = { backStack.add(Settings) },
                         // Remote buttons: Guide / Search replace the player (Back then goes to Live).
                         onRemoteScreen = { a ->
-                            backStack.removeLastOrNull()
+                            pop()
                             backStack.add(if (a == com.fenyx.jtv.data.RemoteAction.Search) Search else Guide)
                         },
                         isActive = isTop,
